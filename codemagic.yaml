@@ -38,6 +38,8 @@ workflows:
           success: true
           failure: true
       app_store_connect:
-        # Credentials are automatically inherited from your Codemagic Team integrations
-        # No need to specify api_key, key_id, or issuer_id here
+        auth: integration
         submit_to_testflight: true
+        beta_groups:
+          - App Store Connect Users
+        submit_to_app_store: false
