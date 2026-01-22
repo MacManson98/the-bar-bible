@@ -8,7 +8,7 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        BUNDLE_ID: "com.yourcompany.thebarBible" # Change this to your actual bundle ID
+        BUNDLE_ID: "com.tomcon.thebarbible" # Your unique bundle ID
     scripts:
       - name: Set up code signing settings on Xcode project
         script: | 
@@ -33,13 +33,11 @@ workflows:
     publishing:
       email:
         recipients:
-          - your.email@example.com # Change this to your email
+          - connor@maclusky.com
         notify:
           success: true
           failure: true
       app_store_connect:
-        # Uncomment these when ready to publish to TestFlight
-        # api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        # key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        # issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        submit_to_testflight: false
+        # Credentials are automatically inherited from your Codemagic Team integrations
+        # No need to specify api_key, key_id, or issuer_id here
+        submit_to_testflight: true
