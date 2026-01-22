@@ -390,39 +390,6 @@ class _BuilderScreenState extends State<BuilderScreen> {
     );
   }
 
-  // Remove unused method
-  // void _showPresetDialog() was here but moved inline
-
-  Future<void> _loadPreset(String presetName) async {
-    final presetIngredients = BarPresets.getPreset(presetName);
-    final Set<int> ingredientIds = {};
-
-    for (final ingredientName in presetIngredients) {
-      final ingredient = allIngredients.firstWhere(
-        (i) => i.name.toLowerCase() == ingredientName.toLowerCase(),
-        orElse: () => allIngredients.first,
-      );
-      ingredientIds.add(ingredient.id);
-    }
-
-    setState(() {
-      selectedIngredientIds = ingredientIds;
-      currentBar = null;
-    });
-
-    await _findMatchingCocktails();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✨ Loaded $presetName preset'),
-          backgroundColor: AppTheme.accentGold,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -454,11 +421,11 @@ class _BuilderScreenState extends State<BuilderScreen> {
 
             const SizedBox(height: 12),
 
-            // Selected ingredients or empty state
+            // Selected ingredients or quick add section
             if (selectedIngredients.isNotEmpty)
               _buildSelectedIngredientsChips(selectedIngredients)
             else
-              _buildEmptyStatePresets(),
+              _buildQuickAddSection(),
 
             // Results header
             if (selectedIngredientIds.isNotEmpty)
@@ -509,26 +476,67 @@ class _BuilderScreenState extends State<BuilderScreen> {
                   ],
                 ),
               ),
-              // Save button
-              if (selectedIngredientIds.isNotEmpty && currentBar == null)
-                IconButton(
-                  icon: const Icon(Icons.save_outlined, color: AppTheme.accentGold, size: 22),
-                  onPressed: _saveCurrentBar,
-                  tooltip: 'Save Bar',
-                ),
-              // Load button
-              IconButton(
-                icon: const Icon(Icons.folder_open, color: AppTheme.accentGold, size: 22),
-                onPressed: _showLoadBarDialog,
-                tooltip: 'Load Bar',
+              // Menu button
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: AppTheme.accentGold, size: 24),
+                color: AppTheme.surfaceDark,
+                onSelected: (value) {
+                  switch (value) {
+                    case 'save':
+                      _saveCurrentBar();
+                      break;
+                    case 'load':
+                      _showLoadBarDialog();
+                      break;
+                    case 'clear':
+                      _clearAll();
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (selectedIngredientIds.isNotEmpty && currentBar == null)
+                    const PopupMenuItem(
+                      value: 'save',
+                      child: Row(
+                        children: [
+                          Icon(Icons.save, color: AppTheme.accentGold, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Save Bar Setup',
+                            style: TextStyle(color: AppTheme.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'load',
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder_open, color: AppTheme.accentGold, size: 20),
+                        SizedBox(width: 12),
+                        Text(
+                          'Load Bar Setup',
+                          style: TextStyle(color: AppTheme.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (selectedIngredientIds.isNotEmpty)
+                    const PopupMenuItem(
+                      value: 'clear',
+                      child: Row(
+                        children: [
+                          Icon(Icons.clear_all, color: AppTheme.textSecondary, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Clear All',
+                            style: TextStyle(color: AppTheme.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-              // Clear button
-              if (selectedIngredientIds.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.clear_all, color: AppTheme.textSecondary, size: 22),
-                  onPressed: _clearAll,
-                  tooltip: 'Clear',
-                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -725,51 +733,6 @@ class _BuilderScreenState extends State<BuilderScreen> {
     );
   }
 
-  Widget _buildEmptyStatePresets() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppTheme.surfaceLight, width: 1),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '💡 NOT SURE WHERE TO START?',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: BarPresets.getAllPresetNames().map((presetName) {
-              return ActionChip(
-                label: Text(presetName),
-                labelStyle: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                backgroundColor: AppTheme.surfaceDark,
-                side: const BorderSide(color: AppTheme.accentGold),
-                onPressed: () => _loadPreset(presetName),
-                avatar: const Icon(Icons.auto_awesome, color: AppTheme.accentGold, size: 16),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildResultsHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -816,27 +779,82 @@ class _BuilderScreenState extends State<BuilderScreen> {
     );
   }
 
+  Widget _buildQuickAddSection() {
+    final commonIngredientNames = [
+      'Vodka',
+      'Gin',
+      'White Rum',
+      'Tequila',
+      'Bourbon',
+      'Lime Juice',
+      'Lemon Juice',
+      'Simple Syrup',
+      'Soda Water',
+      'Tonic Water',
+      'Angostura Bitters',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppTheme.surfaceLight, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '💡 TAP TO ADD COMMON INGREDIENTS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.0,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: commonIngredientNames.map((name) {
+              final ingredient = allIngredients.where((i) => i.name == name).firstOrNull;
+              if (ingredient == null) return const SizedBox.shrink();
+              
+              return ActionChip(
+                label: Text(name),
+                labelStyle: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                backgroundColor: AppTheme.surfaceDark,
+                side: const BorderSide(color: AppTheme.accentGold),
+                onPressed: () => _toggleIngredient(ingredient.id),
+                avatar: const Icon(Icons.add_circle_outline, color: AppTheme.accentGold, size: 16),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildResultsList(List<CocktailMatch> perfectMatches, List<CocktailMatch> closeMatches) {
     if (selectedIngredientIds.isEmpty) {
+      // Empty state - just show a simple message since we have quick-add section above
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lightbulb_outline, size: 56, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+            Icon(Icons.search, size: 64, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             const Text(
-              'Add ingredients to see what you can make',
+              'Add ingredients above to see results',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Or try a preset to get started quickly',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
               ),
             ),
           ],

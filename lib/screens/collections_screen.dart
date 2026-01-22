@@ -189,22 +189,24 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
                     );
                   },
                 ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 80), // Lift above bottom nav
-        child: FloatingActionButton.extended(
-          onPressed: _createCollection,
-          backgroundColor: AppTheme.accentGold,
-          foregroundColor: AppTheme.primaryDark,
-          icon: const Icon(Icons.add),
-          label: const Text(
-            'NEW COLLECTION',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
-        ),
-      ),
+      floatingActionButton: collections.isNotEmpty
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 80), // Lift above bottom nav
+              child: FloatingActionButton.extended(
+                onPressed: _createCollection,
+                backgroundColor: AppTheme.accentGold,
+                foregroundColor: AppTheme.primaryDark,
+                icon: const Icon(Icons.add),
+                label: const Text(
+                  'NEW COLLECTION',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
