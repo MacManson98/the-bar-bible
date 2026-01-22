@@ -60,6 +60,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     final existingCollectionIds = existingCollections.map((e) => e.collectionId).toSet();
 
     showDialog(
+      // ignore: use_build_context_synchronously
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,

@@ -698,7 +698,7 @@ class _BuilderScreenState extends State<BuilderScreen> {
   Widget _buildSelectedIngredientsChips(List<Ingredient> selectedIngredients) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: AppTheme.surfaceDark,
         border: Border(
           top: BorderSide(color: AppTheme.surfaceLight, width: 1),
@@ -728,7 +728,7 @@ class _BuilderScreenState extends State<BuilderScreen> {
   Widget _buildEmptyStatePresets() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(color: AppTheme.surfaceLight, width: 1),
         ),
@@ -773,7 +773,7 @@ class _BuilderScreenState extends State<BuilderScreen> {
   Widget _buildResultsHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(color: AppTheme.surfaceLight, width: 1),
         ),

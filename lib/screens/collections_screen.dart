@@ -228,7 +228,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'Create collections to organize\nyour favorite cocktails',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -596,7 +596,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Add cocktails to this collection\nfrom the cocktail detail screen',
             textAlign: TextAlign.center,
             style: TextStyle(
