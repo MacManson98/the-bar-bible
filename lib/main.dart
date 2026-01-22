@@ -408,18 +408,18 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                         ),
                       ),
                     ),
-                    child: Column(
+                    child: const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.menu_book,
                               color: AppTheme.accentGold,
                               size: 32,
                             ),
-                            const SizedBox(width: 12),
-                            const Text(
+                            SizedBox(width: 12),
+                            Text(
                               'THE BAR BIBLE',
                               style: TextStyle(
                                 fontSize: 24,
@@ -429,8 +429,8 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        const Padding(
+                        SizedBox(height: 4),
+                        Padding(
                           padding: EdgeInsets.only(left: 44),
                           child: Text(
                             'Essential Cocktail Reference',
