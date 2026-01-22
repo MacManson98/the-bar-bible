@@ -304,16 +304,13 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                     child: InkWell(
                       onTap: () async {
                         if (isInCollection) {
-                          print('❌ Removing cocktail ${cocktail.id} from collection ${widget.collection.id}');
                           await (widget.database.delete(widget.database.collectionCocktails)
                             ..where((tbl) {
                               return tbl.collectionId.equals(widget.collection.id) &
                                   tbl.cocktailId.equals(cocktail.id);
                             })).go();
                           widget.existingCocktailIds.remove(cocktail.id);
-                          print('✅ Removed successfully');
                         } else {
-                          print('➕ Adding cocktail ${cocktail.id} (${cocktail.name}) to collection ${widget.collection.id}');
                           await widget.database.into(widget.database.collectionCocktails).insert(
                             CollectionCocktailsCompanion.insert(
                               collectionId: widget.collection.id,
@@ -321,7 +318,6 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                             ),
                           );
                           widget.existingCocktailIds.add(cocktail.id);
-                          print('✅ Added successfully');
                         }
                         setState(() {});
                       },

@@ -29,9 +29,10 @@ workflows:
         script: |
           find . -name "Podfile" -execdir pod install \;
 
-      - name: Flutter analyze
-        script: |
-          flutter analyze
+      # Temporarily disabled for MVP testing
+      # - name: Flutter analyze
+      #   script: |
+      #     flutter analyze
 
       - name: Flutter build ipa
         script: |

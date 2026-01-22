@@ -385,15 +385,6 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
   }
 
   Future<void> _loadCocktails() async {
-    print('🔍 Loading cocktails for collection ${widget.collection.id}');
-    
-    // First check what's in the junction table
-    final junctionEntries = await widget.database.select(widget.database.collectionCocktails).get();
-    print('📊 Total junction table entries: ${junctionEntries.length}');
-    for (var entry in junctionEntries) {
-      print('   - Collection ${entry.collectionId} -> Cocktail ${entry.cocktailId}');
-    }
-    
     // Join query to get cocktails in this collection
     final query = widget.database.select(widget.database.cocktails).join([
       innerJoin(
@@ -403,14 +394,11 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     ])..where(widget.database.collectionCocktails.collectionId.equals(widget.collection.id));
 
     final results = await query.get();
-    print('🍸 Found ${results.length} cocktails in this collection');
     
     setState(() {
       cocktails = results.map((row) => row.readTable(widget.database.cocktails)).toList();
       isLoading = false;
     });
-    
-    print('✅ Loaded ${cocktails.length} cocktails');
   }
 
   Future<void> _removeCocktail(int cocktailId) async {

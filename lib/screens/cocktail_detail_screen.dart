@@ -104,6 +104,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                       ),
                     );
                   }
+                  if (!context.mounted) return;
                   Navigator.pop(context);
                   _showAddToCollectionDialog(); // Refresh the dialog
                 },
