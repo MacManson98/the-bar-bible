@@ -3,33 +3,46 @@ workflows:
     name: iOS Workflow
     max_build_duration: 120
     instance_type: mac_mini_m1
+    integrations:
+      app_store_connect: CodeMagic Integration  # Match your Movie app integration name
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.tomcon.thebarbible
+      vars:
+        BUNDLE_ID: "com.tomcon.thebarbible"
+        XCODE_WORKSPACE: "Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
       flutter: stable
       xcode: latest
       cocoapods: default
-      vars:
-        BUNDLE_ID: "com.tomcon.thebarbible" # Your unique bundle ID
     scripts:
-      - name: Set up code signing settings on Xcode project
-        script: | 
+      - name: Set up code signing
+        script: |
           xcode-project use-profiles
+
       - name: Get Flutter packages
-        script: | 
+        script: |
           flutter packages pub get
+
       - name: Install pods
-        script: | 
+        script: |
           find . -name "Podfile" -execdir pod install \;
+
       - name: Flutter analyze
-        script: | 
+        script: |
           flutter analyze
+
       - name: Flutter build ipa
-        script: | 
+        script: |
           flutter build ipa --release \
             --export-options-plist=/Users/builder/export_options.plist
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
+
     publishing:
       email:
         recipients:
