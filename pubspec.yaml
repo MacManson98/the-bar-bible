@@ -51,6 +51,9 @@ dev_dependencies:
   # Database code generation
   drift_dev: ^2.14.0
   build_runner: ^2.4.7
+  
+  # App icon generation
+  flutter_launcher_icons: ^0.13.1
 
 
 flutter:
@@ -86,3 +89,13 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# App Icon Configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
+  # Adaptive icons for Android
+  adaptive_icon_background: "#1a1a1a"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
