@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SeedData {
   // Increment this version when you fix cocktail data
-  static const int seedDataVersion = 5; // Changed from 1 to force re-seed
+  static const int seedDataVersion = 6; // Added ingredient categories
   
   static Future<void> seedDatabase(AppDatabase db) async {
     // Check current seed version
@@ -30,14 +30,91 @@ class SeedData {
     // Create ingredient map to avoid duplicates
     final Map<String, int> ingredientIds = {};
     
+    // Helper to categorize ingredients
+    String categorizeIngredient(String name) {
+      final nameLower = name.toLowerCase();
+      
+      // Spirits
+      if (nameLower.contains('vodka') || nameLower.contains('gin') || 
+          nameLower.contains('rum') || nameLower.contains('tequila') ||
+          nameLower.contains('whiskey') || nameLower.contains('whisky') ||
+          nameLower.contains('bourbon') || nameLower.contains('rye') ||
+          nameLower.contains('scotch') || nameLower.contains('cognac') ||
+          nameLower.contains('brandy') || nameLower.contains('mezcal') ||
+          nameLower.contains('pisco') || nameLower.contains('cachaça')) {
+        return 'Spirits';
+      }
+      
+      // Liqueurs
+      if (nameLower.contains('liqueur') || nameLower.contains('creme') ||
+          nameLower.contains('cointreau') || nameLower.contains('triple sec') ||
+          nameLower.contains('grand marnier') || nameLower.contains('amaretto') ||
+          nameLower.contains('kahlua') || nameLower.contains('baileys') ||
+          nameLower.contains('drambuie') || nameLower.contains('chartreuse') ||
+          nameLower.contains('benedictine') || nameLower.contains('aperol') ||
+          nameLower.contains('campari') || nameLower.contains('chambord') ||
+          nameLower.contains('midori') || nameLower.contains('maraschino') ||
+          nameLower.contains('pimm') || nameLower.contains('st germain') ||
+          nameLower.contains('st-germain') || nameLower.contains('vermouth')) {
+        return 'Liqueurs';
+      }
+      
+      // Citrus juices
+      if (nameLower.contains('lemon') || nameLower.contains('lime') ||
+          nameLower.contains('orange juice') || nameLower.contains('grapefruit')) {
+        return 'Citrus';
+      }
+      
+      // Syrups
+      if (nameLower.contains('syrup') || nameLower.contains('honey') ||
+          nameLower.contains('agave') || nameLower.contains('sugar') ||
+          nameLower.contains('gomme') || nameLower.contains('grenadine') ||
+          nameLower.contains('falernum') || nameLower.contains('orgeat')) {
+        return 'Syrups';
+      }
+      
+      // Bitters
+      if (nameLower.contains('bitters') || nameLower.contains('angostura') ||
+          nameLower.contains('peychaud')) {
+        return 'Bitters';
+      }
+      
+      // Mixers
+      if (nameLower.contains('water') || nameLower.contains('tonic') ||
+          nameLower.contains('soda') || nameLower.contains('cola') ||
+          nameLower.contains('ginger ale') || nameLower.contains('ginger beer') ||
+          (nameLower.contains('juice') && !nameLower.contains('lemon') && !nameLower.contains('lime')) ||
+          nameLower.contains('cream') || nameLower.contains('milk') ||
+          nameLower.contains('coffee') || nameLower.contains('tea') ||
+          nameLower.contains('egg')) {
+        return 'Mixers';
+      }
+      
+      // Garnish
+      if (nameLower.contains('cherry') || nameLower.contains('olive') ||
+          nameLower.contains('mint') || nameLower.contains('basil') ||
+          nameLower.contains('celery') || nameLower.contains('cucumber') ||
+          nameLower.contains('nutmeg') || nameLower.contains('cinnamon') ||
+          nameLower.contains('salt') || nameLower.contains('pepper') ||
+          nameLower.contains('peel') || nameLower.contains('zest')) {
+        return 'Garnish';
+      }
+      
+      return 'Other';
+    }
+    
     // Helper to get or create ingredient
     Future<int> getIngredientId(String name) async {
       if (ingredientIds.containsKey(name)) {
         return ingredientIds[name]!;
       }
       
+      final category = categorizeIngredient(name);
       final id = await db.into(db.ingredients).insert(
-        IngredientsCompanion.insert(name: name),
+        IngredientsCompanion.insert(
+          name: name,
+          category: Value(category),
+        ),
       );
       ingredientIds[name] = id;
       return id;

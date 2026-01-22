@@ -132,14 +132,16 @@ class _BuilderScreenState extends State<BuilderScreen> {
         
         Set<int> substitutableMissing = {};
         for (final missingId in missingIngredients) {
-          final missingName = missingIngredientNames.firstWhere((i) => i.id == missingId).name;
+          final missingIngredient = missingIngredientNames.where((i) => i.id == missingId).firstOrNull;
+          if (missingIngredient == null) continue; // Skip if ingredient not found
           
           for (final selectedId in selectedIngredientIds) {
-            final selectedName = selectedIngredientNames.firstWhere((i) => i.id == selectedId).name;
+            final selectedIngredient = selectedIngredientNames.where((i) => i.id == selectedId).firstOrNull;
+            if (selectedIngredient == null) continue; // Skip if ingredient not found
             
-            if (IngredientSubstitutions.canSubstitute(selectedName, missingName)) {
+            if (IngredientSubstitutions.canSubstitute(selectedIngredient.name, missingIngredient.name)) {
               substitutableMissing.add(missingId);
-              substitutionsUsed.add('$selectedName for $missingName');
+              substitutionsUsed.add('${selectedIngredient.name} for ${missingIngredient.name}');
               matchingIngredients.add(selectedId);
               break;
             }
@@ -780,20 +782,6 @@ class _BuilderScreenState extends State<BuilderScreen> {
   }
 
   Widget _buildQuickAddSection() {
-    final commonIngredientNames = [
-      'Vodka',
-      'Gin',
-      'White Rum',
-      'Tequila',
-      'Bourbon',
-      'Lime Juice',
-      'Lemon Juice',
-      'Simple Syrup',
-      'Soda Water',
-      'Tonic Water',
-      'Angostura Bitters',
-    ];
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: const BoxDecoration(
@@ -805,7 +793,7 @@ class _BuilderScreenState extends State<BuilderScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '💡 TAP TO ADD COMMON INGREDIENTS',
+            '💡 QUICK ADD COMMON INGREDIENTS',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -814,29 +802,39 @@ class _BuilderScreenState extends State<BuilderScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: commonIngredientNames.map((name) {
-              final ingredient = allIngredients.where((i) => i.name == name).firstOrNull;
-              if (ingredient == null) return const SizedBox.shrink();
-              
-              return ActionChip(
-                label: Text(name),
-                labelStyle: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                backgroundColor: AppTheme.surfaceDark,
-                side: const BorderSide(color: AppTheme.accentGold),
-                onPressed: () => _toggleIngredient(ingredient.id),
-                avatar: const Icon(Icons.add_circle_outline, color: AppTheme.accentGold, size: 16),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              );
-            }).toList(),
+          OutlinedButton.icon(
+            onPressed: _showQuickAddDialog,
+            icon: const Icon(Icons.add_circle_outline, size: 18),
+            label: const Text('SELECT MULTIPLE INGREDIENTS'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.accentGold,
+              side: const BorderSide(color: AppTheme.accentGold, width: 1.5),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showQuickAddDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _QuickAddBottomSheet(
+        allIngredients: allIngredients,
+        selectedIngredientIds: selectedIngredientIds,
+        onIngredientsSelected: (Set<int> newSelectedIds) {
+          setState(() {
+            selectedIngredientIds = newSelectedIds;
+            currentBar = null; // Mark as custom when manually edited
+          });
+          _findMatchingCocktails();
+        },
       ),
     );
   }
@@ -1125,4 +1123,319 @@ class CocktailMatch {
     required this.substitutionsUsed,
     required this.matchPercentage,
   });
+}
+
+// Quick Add Bottom Sheet Widget
+class _QuickAddBottomSheet extends StatefulWidget {
+  final List<Ingredient> allIngredients;
+  final Set<int> selectedIngredientIds;
+  final Function(Set<int>) onIngredientsSelected;
+
+  const _QuickAddBottomSheet({
+    required this.allIngredients,
+    required this.selectedIngredientIds,
+    required this.onIngredientsSelected,
+  });
+
+  @override
+  State<_QuickAddBottomSheet> createState() => _QuickAddBottomSheetState();
+}
+
+class _QuickAddBottomSheetState extends State<_QuickAddBottomSheet> {
+  late Set<int> tempSelectedIds;
+  String searchQuery = '';
+  String selectedCategory = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    tempSelectedIds = Set.from(widget.selectedIngredientIds);
+  }
+
+  List<Ingredient> get filteredIngredients {
+    var ingredients = widget.allIngredients;
+    
+    // Filter by category
+    if (selectedCategory != 'All') {
+      ingredients = ingredients.where((i) => i.category == selectedCategory).toList();
+    }
+    
+    // Filter by search query
+    if (searchQuery.isNotEmpty) {
+      ingredients = ingredients
+          .where((i) => i.name.toLowerCase().contains(searchQuery.toLowerCase()))
+          .toList();
+    }
+    
+    return ingredients;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Group ingredients by category for the filtered list
+    final Map<String, List<Ingredient>> grouped = {};
+    for (final ingredient in filteredIngredients) {
+      final category = ingredient.category;
+      if (!grouped.containsKey(category)) {
+        grouped[category] = [];
+      }
+      grouped[category]!.add(ingredient);
+    }
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.textSecondary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SELECT INGREDIENTS',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Tap ingredients to add or remove',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '${tempSelectedIds.length} selected',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentGold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                onChanged: (value) => setState(() => searchQuery = value),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search ingredients...',
+                  hintStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.accentGold, size: 20),
+                  suffixIcon: searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: AppTheme.textSecondary, size: 18),
+                          onPressed: () => setState(() => searchQuery = ''),
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppTheme.primaryDark,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Category filter chips
+            SizedBox(
+              height: 38,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  _buildCategoryChip('All', '📋'),
+                  ...IngredientCategory.allCategories.map((category) {
+                    final icon = IngredientCategory.categoryIcons[category] ?? '📦';
+                    return _buildCategoryChip(category, icon);
+                  }),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Divider
+            const Divider(color: AppTheme.surfaceLight, height: 1),
+
+            // Ingredients list
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                children: grouped.entries.map((entry) {
+                  final category = entry.key;
+                  final ingredients = entry.value;
+                  final icon = IngredientCategory.categoryIcons[category] ?? '📦';
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: Text(
+                          '$icon ${category.toUpperCase()}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.accentGold,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                      ...ingredients.map((ingredient) {
+                        final isSelected = tempSelectedIds.contains(ingredient.id);
+                        return CheckboxListTile(
+                          value: isSelected,
+                          onChanged: (bool? value) {
+                            setState(() {
+                              if (value == true) {
+                                tempSelectedIds.add(ingredient.id);
+                              } else {
+                                tempSelectedIds.remove(ingredient.id);
+                              }
+                            });
+                          },
+                          title: Text(
+                            ingredient.name,
+                            style: TextStyle(
+                              color: isSelected ? AppTheme.accentGold : AppTheme.textPrimary,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 14,
+                            ),
+                          ),
+                          activeColor: AppTheme.accentGold,
+                          checkColor: AppTheme.primaryDark,
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                        );
+                      }),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+
+            // Bottom action buttons
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: AppTheme.primaryDark,
+                border: Border(
+                  top: BorderSide(color: AppTheme.surfaceLight, width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary,
+                        side: const BorderSide(color: AppTheme.textSecondary),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('CANCEL'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        widget.onIngredientsSelected(tempSelectedIds);
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentGold,
+                        foregroundColor: AppTheme.primaryDark,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        'ADD ${tempSelectedIds.length} INGREDIENT${tempSelectedIds.length != 1 ? 'S' : ''}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(String category, String icon) {
+    final isSelected = selectedCategory == category;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text('$icon $category'),
+        selected: isSelected,
+        onSelected: (selected) {
+          setState(() {
+            selectedCategory = selected ? category : 'All';
+          });
+        },
+        labelStyle: TextStyle(
+          color: isSelected ? AppTheme.primaryDark : AppTheme.textPrimary,
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+        backgroundColor: AppTheme.primaryDark,
+        selectedColor: AppTheme.accentGold,
+        checkmarkColor: AppTheme.primaryDark,
+        side: BorderSide(
+          color: isSelected ? AppTheme.accentGold : AppTheme.surfaceLight,
+        ),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
 }
