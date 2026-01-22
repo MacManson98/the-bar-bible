@@ -1,0 +1,45 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: "com.yourcompany.thebarBible" # Change this to your actual bundle ID
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: | 
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: | 
+          flutter packages pub get
+      - name: Install pods
+        script: | 
+          find . -name "Podfile" -execdir pod install \;
+      - name: Flutter analyze
+        script: | 
+          flutter analyze
+      - name: Flutter build ipa
+        script: | 
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - your.email@example.com # Change this to your email
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        # Uncomment these when ready to publish to TestFlight
+        # api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        # key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        # issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: false
