@@ -10,10 +10,10 @@ part 'database.g.dart';
 class Cocktails extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
-  TextColumn get description => text().nullable()();
   TextColumn get method => text()(); // shake, stir, build
   TextColumn get methodInstructions => text().nullable()(); // Full instructions
   TextColumn get history => text().nullable()(); // History/origin story
+  TextColumn get tastingNotes => text().nullable()(); // Flavor profile, tasting notes
   TextColumn get glass => text()();
   TextColumn get ice => text().nullable()();
   TextColumn get garnish => text().nullable()();
@@ -81,6 +81,15 @@ class ShoppingList extends Table {
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+ // Favorites table - simple, fast access to favorited cocktails
+class Favorites extends Table {
+  IntColumn get cocktailId => integer().references(Cocktails, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get favoritedAt => dateTime().clientDefault(() => DateTime.now())();
+  
+  @override
+  Set<Column> get primaryKey => {cocktailId}; // Cocktail ID is the primary key (one favorite per cocktail)
+}
+
 @DriftDatabase(tables: [
   Cocktails, 
   Ingredients, 
@@ -90,17 +99,18 @@ class ShoppingList extends Table {
   SavedBars,
   SavedBarIngredients,
   ShoppingList,
+  Favorites,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 6; // Add saved bars + shopping list
+  int get schemaVersion => 8; // Add tasting notes field
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
       final dbFolder = await getApplicationDocumentsDirectory();
-      final file = File(p.join(dbFolder.path, 'cocktails.sqlite'));
+      final file = File(p.join(dbFolder.path, 'cocktails.db'));
       return NativeDatabase(file);
     });
   }
@@ -130,6 +140,112 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(savedBarIngredients);
         await migrator.createTable(shoppingList);
       }
+      if (from <= 6) {
+        // Add favorites table
+        await migrator.createTable(favorites);
+      }
+      if (from <= 7) {
+        // Add tasting notes column
+        await migrator.addColumn(cocktails, cocktails.tastingNotes);
+      }
     },
   );
+  
+  // Favorites helper methods
+  Future<bool> isFavorited(int cocktailId) async {
+    final result = await (select(favorites)
+      ..where((f) => f.cocktailId.equals(cocktailId))
+    ).getSingleOrNull();
+    return result != null;
+  }
+  
+  Future<void> toggleFavorite(int cocktailId) async {
+    final existing = await (select(favorites)
+      ..where((f) => f.cocktailId.equals(cocktailId))
+    ).getSingleOrNull();
+    
+    if (existing != null) {
+      // Remove from favorites
+      await (delete(favorites)..where((f) => f.cocktailId.equals(cocktailId))).go();
+    } else {
+      // Add to favorites
+      await into(favorites).insert(
+        FavoritesCompanion(
+          cocktailId: Value(cocktailId),
+        ),
+      );
+    }
+  }
+  
+  Future<List<Cocktail>> getFavoriteCocktails() async {
+    final query = select(cocktails).join([
+      innerJoin(favorites, favorites.cocktailId.equalsExp(cocktails.id)),
+    ])
+    ..orderBy([
+      OrderingTerm.desc(favorites.favoritedAt),
+    ]);
+    
+    final results = await query.get();
+    return results.map((row) => row.readTable(cocktails)).toList();
+  }
+  
+  // Helper methods for home screen
+  
+  /// Get the ingredients for a cocktail
+  Future<List<CocktailIngredient>> getCocktailIngredients(int cocktailId) async {
+    return await (select(cocktailIngredients)
+      ..where((ci) => ci.cocktailId.equals(cocktailId))
+    ).get();
+  }
+  
+  /// Get cocktail ingredients with ingredient names
+  Future<List<Map<String, dynamic>>> getCocktailIngredientsWithNames(int cocktailId) async {
+    final query = select(cocktailIngredients).join([
+      innerJoin(ingredients, ingredients.id.equalsExp(cocktailIngredients.ingredientId)),
+    ])
+    ..where(cocktailIngredients.cocktailId.equals(cocktailId));
+    
+    final results = await query.get();
+    return results.map((row) {
+      final ci = row.readTable(cocktailIngredients);
+      final ing = row.readTable(ingredients);
+      return {
+        'amount': ci.amount,
+        'unit': ci.unit,
+        'name': ing.name,
+        'prepNote': ci.prepNote,
+      };
+    }).toList();
+  }
+  
+  /// Get the default saved bar
+  Future<SavedBar?> getDefaultSavedBar() async {
+    final result = await (select(savedBars)
+      ..where((sb) => sb.isDefault.equals(true))
+    ).getSingleOrNull();
+    
+    // If no default, get the most recently used
+    if (result == null) {
+      return await (select(savedBars)
+        ..orderBy([(sb) => OrderingTerm.desc(sb.lastUsed)])
+        ..limit(1)
+      ).getSingleOrNull();
+    }
+    
+    return result;
+  }
+  
+  /// Get ingredients in a saved bar
+  Future<List<Ingredient>> getSavedBarIngredients(int savedBarId) async {
+    final query = select(ingredients).join([
+      innerJoin(
+        savedBarIngredients, 
+        savedBarIngredients.ingredientId.equalsExp(ingredients.id),
+      ),
+    ])
+    ..where(savedBarIngredients.savedBarId.equals(savedBarId));
+    
+    final results = await query.get();
+    return results.map((row) => row.readTable(ingredients)).toList();
+  }
 }

@@ -31,17 +31,6 @@ class $CocktailsTable extends Cocktails
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _descriptionMeta = const VerificationMeta(
-    'description',
-  );
-  @override
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _methodMeta = const VerificationMeta('method');
   @override
   late final GeneratedColumn<String> method = GeneratedColumn<String>(
@@ -68,6 +57,17 @@ class $CocktailsTable extends Cocktails
   @override
   late final GeneratedColumn<String> history = GeneratedColumn<String>(
     'history',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tastingNotesMeta = const VerificationMeta(
+    'tastingNotes',
+  );
+  @override
+  late final GeneratedColumn<String> tastingNotes = GeneratedColumn<String>(
+    'tasting_notes',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -148,10 +148,10 @@ class $CocktailsTable extends Cocktails
   List<GeneratedColumn> get $columns => [
     id,
     name,
-    description,
     method,
     methodInstructions,
     history,
+    tastingNotes,
     glass,
     ice,
     garnish,
@@ -183,15 +183,6 @@ class $CocktailsTable extends Cocktails
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
-    if (data.containsKey('description')) {
-      context.handle(
-        _descriptionMeta,
-        description.isAcceptableOrUnknown(
-          data['description']!,
-          _descriptionMeta,
-        ),
-      );
-    }
     if (data.containsKey('method')) {
       context.handle(
         _methodMeta,
@@ -213,6 +204,15 @@ class $CocktailsTable extends Cocktails
       context.handle(
         _historyMeta,
         history.isAcceptableOrUnknown(data['history']!, _historyMeta),
+      );
+    }
+    if (data.containsKey('tasting_notes')) {
+      context.handle(
+        _tastingNotesMeta,
+        tastingNotes.isAcceptableOrUnknown(
+          data['tasting_notes']!,
+          _tastingNotesMeta,
+        ),
       );
     }
     if (data.containsKey('glass')) {
@@ -280,10 +280,6 @@ class $CocktailsTable extends Cocktails
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
-      description: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}description'],
-      ),
       method: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}method'],
@@ -295,6 +291,10 @@ class $CocktailsTable extends Cocktails
       history: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}history'],
+      ),
+      tastingNotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tasting_notes'],
       ),
       glass: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -336,10 +336,10 @@ class $CocktailsTable extends Cocktails
 class Cocktail extends DataClass implements Insertable<Cocktail> {
   final int id;
   final String name;
-  final String? description;
   final String method;
   final String? methodInstructions;
   final String? history;
+  final String? tastingNotes;
   final String glass;
   final String? ice;
   final String? garnish;
@@ -350,10 +350,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
   const Cocktail({
     required this.id,
     required this.name,
-    this.description,
     required this.method,
     this.methodInstructions,
     this.history,
+    this.tastingNotes,
     required this.glass,
     this.ice,
     this.garnish,
@@ -367,15 +367,15 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
-    if (!nullToAbsent || description != null) {
-      map['description'] = Variable<String>(description);
-    }
     map['method'] = Variable<String>(method);
     if (!nullToAbsent || methodInstructions != null) {
       map['method_instructions'] = Variable<String>(methodInstructions);
     }
     if (!nullToAbsent || history != null) {
       map['history'] = Variable<String>(history);
+    }
+    if (!nullToAbsent || tastingNotes != null) {
+      map['tasting_notes'] = Variable<String>(tastingNotes);
     }
     map['glass'] = Variable<String>(glass);
     if (!nullToAbsent || ice != null) {
@@ -399,9 +399,6 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     return CocktailsCompanion(
       id: Value(id),
       name: Value(name),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
       method: Value(method),
       methodInstructions: methodInstructions == null && nullToAbsent
           ? const Value.absent()
@@ -409,6 +406,9 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       history: history == null && nullToAbsent
           ? const Value.absent()
           : Value(history),
+      tastingNotes: tastingNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tastingNotes),
       glass: Value(glass),
       ice: ice == null && nullToAbsent ? const Value.absent() : Value(ice),
       garnish: garnish == null && nullToAbsent
@@ -431,12 +431,12 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     return Cocktail(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
-      description: serializer.fromJson<String?>(json['description']),
       method: serializer.fromJson<String>(json['method']),
       methodInstructions: serializer.fromJson<String?>(
         json['methodInstructions'],
       ),
       history: serializer.fromJson<String?>(json['history']),
+      tastingNotes: serializer.fromJson<String?>(json['tastingNotes']),
       glass: serializer.fromJson<String>(json['glass']),
       ice: serializer.fromJson<String?>(json['ice']),
       garnish: serializer.fromJson<String?>(json['garnish']),
@@ -452,10 +452,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
-      'description': serializer.toJson<String?>(description),
       'method': serializer.toJson<String>(method),
       'methodInstructions': serializer.toJson<String?>(methodInstructions),
       'history': serializer.toJson<String?>(history),
+      'tastingNotes': serializer.toJson<String?>(tastingNotes),
       'glass': serializer.toJson<String>(glass),
       'ice': serializer.toJson<String?>(ice),
       'garnish': serializer.toJson<String?>(garnish),
@@ -469,10 +469,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
   Cocktail copyWith({
     int? id,
     String? name,
-    Value<String?> description = const Value.absent(),
     String? method,
     Value<String?> methodInstructions = const Value.absent(),
     Value<String?> history = const Value.absent(),
+    Value<String?> tastingNotes = const Value.absent(),
     String? glass,
     Value<String?> ice = const Value.absent(),
     Value<String?> garnish = const Value.absent(),
@@ -483,12 +483,12 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
   }) => Cocktail(
     id: id ?? this.id,
     name: name ?? this.name,
-    description: description.present ? description.value : this.description,
     method: method ?? this.method,
     methodInstructions: methodInstructions.present
         ? methodInstructions.value
         : this.methodInstructions,
     history: history.present ? history.value : this.history,
+    tastingNotes: tastingNotes.present ? tastingNotes.value : this.tastingNotes,
     glass: glass ?? this.glass,
     ice: ice.present ? ice.value : this.ice,
     garnish: garnish.present ? garnish.value : this.garnish,
@@ -501,14 +501,14 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     return Cocktail(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
       method: data.method.present ? data.method.value : this.method,
       methodInstructions: data.methodInstructions.present
           ? data.methodInstructions.value
           : this.methodInstructions,
       history: data.history.present ? data.history.value : this.history,
+      tastingNotes: data.tastingNotes.present
+          ? data.tastingNotes.value
+          : this.tastingNotes,
       glass: data.glass.present ? data.glass.value : this.glass,
       ice: data.ice.present ? data.ice.value : this.ice,
       garnish: data.garnish.present ? data.garnish.value : this.garnish,
@@ -528,10 +528,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     return (StringBuffer('Cocktail(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('description: $description, ')
           ..write('method: $method, ')
           ..write('methodInstructions: $methodInstructions, ')
           ..write('history: $history, ')
+          ..write('tastingNotes: $tastingNotes, ')
           ..write('glass: $glass, ')
           ..write('ice: $ice, ')
           ..write('garnish: $garnish, ')
@@ -547,10 +547,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
   int get hashCode => Object.hash(
     id,
     name,
-    description,
     method,
     methodInstructions,
     history,
+    tastingNotes,
     glass,
     ice,
     garnish,
@@ -565,10 +565,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       (other is Cocktail &&
           other.id == this.id &&
           other.name == this.name &&
-          other.description == this.description &&
           other.method == this.method &&
           other.methodInstructions == this.methodInstructions &&
           other.history == this.history &&
+          other.tastingNotes == this.tastingNotes &&
           other.glass == this.glass &&
           other.ice == this.ice &&
           other.garnish == this.garnish &&
@@ -581,10 +581,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
 class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   final Value<int> id;
   final Value<String> name;
-  final Value<String?> description;
   final Value<String> method;
   final Value<String?> methodInstructions;
   final Value<String?> history;
+  final Value<String?> tastingNotes;
   final Value<String> glass;
   final Value<String?> ice;
   final Value<String?> garnish;
@@ -595,10 +595,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   const CocktailsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
-    this.description = const Value.absent(),
     this.method = const Value.absent(),
     this.methodInstructions = const Value.absent(),
     this.history = const Value.absent(),
+    this.tastingNotes = const Value.absent(),
     this.glass = const Value.absent(),
     this.ice = const Value.absent(),
     this.garnish = const Value.absent(),
@@ -610,10 +610,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   CocktailsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
-    this.description = const Value.absent(),
     required String method,
     this.methodInstructions = const Value.absent(),
     this.history = const Value.absent(),
+    this.tastingNotes = const Value.absent(),
     required String glass,
     this.ice = const Value.absent(),
     this.garnish = const Value.absent(),
@@ -629,10 +629,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   static Insertable<Cocktail> custom({
     Expression<int>? id,
     Expression<String>? name,
-    Expression<String>? description,
     Expression<String>? method,
     Expression<String>? methodInstructions,
     Expression<String>? history,
+    Expression<String>? tastingNotes,
     Expression<String>? glass,
     Expression<String>? ice,
     Expression<String>? garnish,
@@ -644,10 +644,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
-      if (description != null) 'description': description,
       if (method != null) 'method': method,
       if (methodInstructions != null) 'method_instructions': methodInstructions,
       if (history != null) 'history': history,
+      if (tastingNotes != null) 'tasting_notes': tastingNotes,
       if (glass != null) 'glass': glass,
       if (ice != null) 'ice': ice,
       if (garnish != null) 'garnish': garnish,
@@ -661,10 +661,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   CocktailsCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
-    Value<String?>? description,
     Value<String>? method,
     Value<String?>? methodInstructions,
     Value<String?>? history,
+    Value<String?>? tastingNotes,
     Value<String>? glass,
     Value<String?>? ice,
     Value<String?>? garnish,
@@ -676,10 +676,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     return CocktailsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
-      description: description ?? this.description,
       method: method ?? this.method,
       methodInstructions: methodInstructions ?? this.methodInstructions,
       history: history ?? this.history,
+      tastingNotes: tastingNotes ?? this.tastingNotes,
       glass: glass ?? this.glass,
       ice: ice ?? this.ice,
       garnish: garnish ?? this.garnish,
@@ -699,9 +699,6 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
     if (method.present) {
       map['method'] = Variable<String>(method.value);
     }
@@ -710,6 +707,9 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     }
     if (history.present) {
       map['history'] = Variable<String>(history.value);
+    }
+    if (tastingNotes.present) {
+      map['tasting_notes'] = Variable<String>(tastingNotes.value);
     }
     if (glass.present) {
       map['glass'] = Variable<String>(glass.value);
@@ -740,10 +740,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     return (StringBuffer('CocktailsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('description: $description, ')
           ..write('method: $method, ')
           ..write('methodInstructions: $methodInstructions, ')
           ..write('history: $history, ')
+          ..write('tastingNotes: $tastingNotes, ')
           ..write('glass: $glass, ')
           ..write('ice: $ice, ')
           ..write('garnish: $garnish, ')
@@ -3012,6 +3012,218 @@ class ShoppingListCompanion extends UpdateCompanion<ShoppingListData> {
   }
 }
 
+class $FavoritesTable extends Favorites
+    with TableInfo<$FavoritesTable, Favorite> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FavoritesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _cocktailIdMeta = const VerificationMeta(
+    'cocktailId',
+  );
+  @override
+  late final GeneratedColumn<int> cocktailId = GeneratedColumn<int>(
+    'cocktail_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cocktails (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _favoritedAtMeta = const VerificationMeta(
+    'favoritedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> favoritedAt = GeneratedColumn<DateTime>(
+    'favorited_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    clientDefault: () => DateTime.now(),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [cocktailId, favoritedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'favorites';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Favorite> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('cocktail_id')) {
+      context.handle(
+        _cocktailIdMeta,
+        cocktailId.isAcceptableOrUnknown(data['cocktail_id']!, _cocktailIdMeta),
+      );
+    }
+    if (data.containsKey('favorited_at')) {
+      context.handle(
+        _favoritedAtMeta,
+        favoritedAt.isAcceptableOrUnknown(
+          data['favorited_at']!,
+          _favoritedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {cocktailId};
+  @override
+  Favorite map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Favorite(
+      cocktailId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cocktail_id'],
+      )!,
+      favoritedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}favorited_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FavoritesTable createAlias(String alias) {
+    return $FavoritesTable(attachedDatabase, alias);
+  }
+}
+
+class Favorite extends DataClass implements Insertable<Favorite> {
+  final int cocktailId;
+  final DateTime favoritedAt;
+  const Favorite({required this.cocktailId, required this.favoritedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['cocktail_id'] = Variable<int>(cocktailId);
+    map['favorited_at'] = Variable<DateTime>(favoritedAt);
+    return map;
+  }
+
+  FavoritesCompanion toCompanion(bool nullToAbsent) {
+    return FavoritesCompanion(
+      cocktailId: Value(cocktailId),
+      favoritedAt: Value(favoritedAt),
+    );
+  }
+
+  factory Favorite.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Favorite(
+      cocktailId: serializer.fromJson<int>(json['cocktailId']),
+      favoritedAt: serializer.fromJson<DateTime>(json['favoritedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'cocktailId': serializer.toJson<int>(cocktailId),
+      'favoritedAt': serializer.toJson<DateTime>(favoritedAt),
+    };
+  }
+
+  Favorite copyWith({int? cocktailId, DateTime? favoritedAt}) => Favorite(
+    cocktailId: cocktailId ?? this.cocktailId,
+    favoritedAt: favoritedAt ?? this.favoritedAt,
+  );
+  Favorite copyWithCompanion(FavoritesCompanion data) {
+    return Favorite(
+      cocktailId: data.cocktailId.present
+          ? data.cocktailId.value
+          : this.cocktailId,
+      favoritedAt: data.favoritedAt.present
+          ? data.favoritedAt.value
+          : this.favoritedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Favorite(')
+          ..write('cocktailId: $cocktailId, ')
+          ..write('favoritedAt: $favoritedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(cocktailId, favoritedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Favorite &&
+          other.cocktailId == this.cocktailId &&
+          other.favoritedAt == this.favoritedAt);
+}
+
+class FavoritesCompanion extends UpdateCompanion<Favorite> {
+  final Value<int> cocktailId;
+  final Value<DateTime> favoritedAt;
+  const FavoritesCompanion({
+    this.cocktailId = const Value.absent(),
+    this.favoritedAt = const Value.absent(),
+  });
+  FavoritesCompanion.insert({
+    this.cocktailId = const Value.absent(),
+    this.favoritedAt = const Value.absent(),
+  });
+  static Insertable<Favorite> custom({
+    Expression<int>? cocktailId,
+    Expression<DateTime>? favoritedAt,
+  }) {
+    return RawValuesInsertable({
+      if (cocktailId != null) 'cocktail_id': cocktailId,
+      if (favoritedAt != null) 'favorited_at': favoritedAt,
+    });
+  }
+
+  FavoritesCompanion copyWith({
+    Value<int>? cocktailId,
+    Value<DateTime>? favoritedAt,
+  }) {
+    return FavoritesCompanion(
+      cocktailId: cocktailId ?? this.cocktailId,
+      favoritedAt: favoritedAt ?? this.favoritedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (cocktailId.present) {
+      map['cocktail_id'] = Variable<int>(cocktailId.value);
+    }
+    if (favoritedAt.present) {
+      map['favorited_at'] = Variable<DateTime>(favoritedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FavoritesCompanion(')
+          ..write('cocktailId: $cocktailId, ')
+          ..write('favoritedAt: $favoritedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3026,6 +3238,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SavedBarIngredientsTable savedBarIngredients =
       $SavedBarIngredientsTable(this);
   late final $ShoppingListTable shoppingList = $ShoppingListTable(this);
+  late final $FavoritesTable favorites = $FavoritesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3039,17 +3252,28 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savedBars,
     savedBarIngredients,
     shoppingList,
+    favorites,
   ];
+  @override
+  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'cocktails',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('favorites', kind: UpdateKind.delete)],
+    ),
+  ]);
 }
 
 typedef $$CocktailsTableCreateCompanionBuilder =
     CocktailsCompanion Function({
       Value<int> id,
       required String name,
-      Value<String?> description,
       required String method,
       Value<String?> methodInstructions,
       Value<String?> history,
+      Value<String?> tastingNotes,
       required String glass,
       Value<String?> ice,
       Value<String?> garnish,
@@ -3062,10 +3286,10 @@ typedef $$CocktailsTableUpdateCompanionBuilder =
     CocktailsCompanion Function({
       Value<int> id,
       Value<String> name,
-      Value<String?> description,
       Value<String> method,
       Value<String?> methodInstructions,
       Value<String?> history,
+      Value<String?> tastingNotes,
       Value<String> glass,
       Value<String?> ice,
       Value<String?> garnish,
@@ -3132,6 +3356,24 @@ final class $$CocktailsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$FavoritesTable, List<Favorite>>
+  _favoritesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.favorites,
+    aliasName: $_aliasNameGenerator(db.cocktails.id, db.favorites.cocktailId),
+  );
+
+  $$FavoritesTableProcessedTableManager get favoritesRefs {
+    final manager = $$FavoritesTableTableManager(
+      $_db,
+      $_db.favorites,
+    ).filter((f) => f.cocktailId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_favoritesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$CocktailsTableFilterComposer
@@ -3153,11 +3395,6 @@ class $$CocktailsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get description => $composableBuilder(
-    column: $table.description,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get method => $composableBuilder(
     column: $table.method,
     builder: (column) => ColumnFilters(column),
@@ -3170,6 +3407,11 @@ class $$CocktailsTableFilterComposer
 
   ColumnFilters<String> get history => $composableBuilder(
     column: $table.history,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tastingNotes => $composableBuilder(
+    column: $table.tastingNotes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3257,6 +3499,31 @@ class $$CocktailsTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> favoritesRefs(
+    Expression<bool> Function($$FavoritesTableFilterComposer f) f,
+  ) {
+    final $$FavoritesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.favorites,
+      getReferencedColumn: (t) => t.cocktailId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FavoritesTableFilterComposer(
+            $db: $db,
+            $table: $db.favorites,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$CocktailsTableOrderingComposer
@@ -3278,11 +3545,6 @@ class $$CocktailsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get description => $composableBuilder(
-    column: $table.description,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get method => $composableBuilder(
     column: $table.method,
     builder: (column) => ColumnOrderings(column),
@@ -3295,6 +3557,11 @@ class $$CocktailsTableOrderingComposer
 
   ColumnOrderings<String> get history => $composableBuilder(
     column: $table.history,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tastingNotes => $composableBuilder(
+    column: $table.tastingNotes,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -3349,11 +3616,6 @@ class $$CocktailsTableAnnotationComposer
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
-  GeneratedColumn<String> get description => $composableBuilder(
-    column: $table.description,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get method =>
       $composableBuilder(column: $table.method, builder: (column) => column);
 
@@ -3364,6 +3626,11 @@ class $$CocktailsTableAnnotationComposer
 
   GeneratedColumn<String> get history =>
       $composableBuilder(column: $table.history, builder: (column) => column);
+
+  GeneratedColumn<String> get tastingNotes => $composableBuilder(
+    column: $table.tastingNotes,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get glass =>
       $composableBuilder(column: $table.glass, builder: (column) => column);
@@ -3441,6 +3708,31 @@ class $$CocktailsTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> favoritesRefs<T extends Object>(
+    Expression<T> Function($$FavoritesTableAnnotationComposer a) f,
+  ) {
+    final $$FavoritesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.favorites,
+      getReferencedColumn: (t) => t.cocktailId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FavoritesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.favorites,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$CocktailsTableTableManager
@@ -3459,6 +3751,7 @@ class $$CocktailsTableTableManager
           PrefetchHooks Function({
             bool cocktailIngredientsRefs,
             bool collectionCocktailsRefs,
+            bool favoritesRefs,
           })
         > {
   $$CocktailsTableTableManager(_$AppDatabase db, $CocktailsTable table)
@@ -3476,10 +3769,10 @@ class $$CocktailsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<String?> description = const Value.absent(),
                 Value<String> method = const Value.absent(),
                 Value<String?> methodInstructions = const Value.absent(),
                 Value<String?> history = const Value.absent(),
+                Value<String?> tastingNotes = const Value.absent(),
                 Value<String> glass = const Value.absent(),
                 Value<String?> ice = const Value.absent(),
                 Value<String?> garnish = const Value.absent(),
@@ -3490,10 +3783,10 @@ class $$CocktailsTableTableManager
               }) => CocktailsCompanion(
                 id: id,
                 name: name,
-                description: description,
                 method: method,
                 methodInstructions: methodInstructions,
                 history: history,
+                tastingNotes: tastingNotes,
                 glass: glass,
                 ice: ice,
                 garnish: garnish,
@@ -3506,10 +3799,10 @@ class $$CocktailsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
-                Value<String?> description = const Value.absent(),
                 required String method,
                 Value<String?> methodInstructions = const Value.absent(),
                 Value<String?> history = const Value.absent(),
+                Value<String?> tastingNotes = const Value.absent(),
                 required String glass,
                 Value<String?> ice = const Value.absent(),
                 Value<String?> garnish = const Value.absent(),
@@ -3520,10 +3813,10 @@ class $$CocktailsTableTableManager
               }) => CocktailsCompanion.insert(
                 id: id,
                 name: name,
-                description: description,
                 method: method,
                 methodInstructions: methodInstructions,
                 history: history,
+                tastingNotes: tastingNotes,
                 glass: glass,
                 ice: ice,
                 garnish: garnish,
@@ -3544,12 +3837,14 @@ class $$CocktailsTableTableManager
               ({
                 cocktailIngredientsRefs = false,
                 collectionCocktailsRefs = false,
+                favoritesRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (cocktailIngredientsRefs) db.cocktailIngredients,
                     if (collectionCocktailsRefs) db.collectionCocktails,
+                    if (favoritesRefs) db.favorites,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -3596,6 +3891,27 @@ class $$CocktailsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (favoritesRefs)
+                        await $_getPrefetchedData<
+                          Cocktail,
+                          $CocktailsTable,
+                          Favorite
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CocktailsTableReferences
+                              ._favoritesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CocktailsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).favoritesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cocktailId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -3619,6 +3935,7 @@ typedef $$CocktailsTableProcessedTableManager =
       PrefetchHooks Function({
         bool cocktailIngredientsRefs,
         bool collectionCocktailsRefs,
+        bool favoritesRefs,
       })
     >;
 typedef $$IngredientsTableCreateCompanionBuilder =
@@ -6256,6 +6573,264 @@ typedef $$ShoppingListTableProcessedTableManager =
       ShoppingListData,
       PrefetchHooks Function({bool ingredientId})
     >;
+typedef $$FavoritesTableCreateCompanionBuilder =
+    FavoritesCompanion Function({
+      Value<int> cocktailId,
+      Value<DateTime> favoritedAt,
+    });
+typedef $$FavoritesTableUpdateCompanionBuilder =
+    FavoritesCompanion Function({
+      Value<int> cocktailId,
+      Value<DateTime> favoritedAt,
+    });
+
+final class $$FavoritesTableReferences
+    extends BaseReferences<_$AppDatabase, $FavoritesTable, Favorite> {
+  $$FavoritesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $CocktailsTable _cocktailIdTable(_$AppDatabase db) =>
+      db.cocktails.createAlias(
+        $_aliasNameGenerator(db.favorites.cocktailId, db.cocktails.id),
+      );
+
+  $$CocktailsTableProcessedTableManager get cocktailId {
+    final $_column = $_itemColumn<int>('cocktail_id')!;
+
+    final manager = $$CocktailsTableTableManager(
+      $_db,
+      $_db.cocktails,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cocktailIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$FavoritesTableFilterComposer
+    extends Composer<_$AppDatabase, $FavoritesTable> {
+  $$FavoritesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<DateTime> get favoritedAt => $composableBuilder(
+    column: $table.favoritedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CocktailsTableFilterComposer get cocktailId {
+    final $$CocktailsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cocktailId,
+      referencedTable: $db.cocktails,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CocktailsTableFilterComposer(
+            $db: $db,
+            $table: $db.cocktails,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FavoritesTableOrderingComposer
+    extends Composer<_$AppDatabase, $FavoritesTable> {
+  $$FavoritesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<DateTime> get favoritedAt => $composableBuilder(
+    column: $table.favoritedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CocktailsTableOrderingComposer get cocktailId {
+    final $$CocktailsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cocktailId,
+      referencedTable: $db.cocktails,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CocktailsTableOrderingComposer(
+            $db: $db,
+            $table: $db.cocktails,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FavoritesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FavoritesTable> {
+  $$FavoritesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<DateTime> get favoritedAt => $composableBuilder(
+    column: $table.favoritedAt,
+    builder: (column) => column,
+  );
+
+  $$CocktailsTableAnnotationComposer get cocktailId {
+    final $$CocktailsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cocktailId,
+      referencedTable: $db.cocktails,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CocktailsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cocktails,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FavoritesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FavoritesTable,
+          Favorite,
+          $$FavoritesTableFilterComposer,
+          $$FavoritesTableOrderingComposer,
+          $$FavoritesTableAnnotationComposer,
+          $$FavoritesTableCreateCompanionBuilder,
+          $$FavoritesTableUpdateCompanionBuilder,
+          (Favorite, $$FavoritesTableReferences),
+          Favorite,
+          PrefetchHooks Function({bool cocktailId})
+        > {
+  $$FavoritesTableTableManager(_$AppDatabase db, $FavoritesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FavoritesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FavoritesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FavoritesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> cocktailId = const Value.absent(),
+                Value<DateTime> favoritedAt = const Value.absent(),
+              }) => FavoritesCompanion(
+                cocktailId: cocktailId,
+                favoritedAt: favoritedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> cocktailId = const Value.absent(),
+                Value<DateTime> favoritedAt = const Value.absent(),
+              }) => FavoritesCompanion.insert(
+                cocktailId: cocktailId,
+                favoritedAt: favoritedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FavoritesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({cocktailId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (cocktailId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.cocktailId,
+                                referencedTable: $$FavoritesTableReferences
+                                    ._cocktailIdTable(db),
+                                referencedColumn: $$FavoritesTableReferences
+                                    ._cocktailIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$FavoritesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FavoritesTable,
+      Favorite,
+      $$FavoritesTableFilterComposer,
+      $$FavoritesTableOrderingComposer,
+      $$FavoritesTableAnnotationComposer,
+      $$FavoritesTableCreateCompanionBuilder,
+      $$FavoritesTableUpdateCompanionBuilder,
+      (Favorite, $$FavoritesTableReferences),
+      Favorite,
+      PrefetchHooks Function({bool cocktailId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6276,4 +6851,6 @@ class $AppDatabaseManager {
       $$SavedBarIngredientsTableTableManager(_db, _db.savedBarIngredients);
   $$ShoppingListTableTableManager get shoppingList =>
       $$ShoppingListTableTableManager(_db, _db.shoppingList);
+  $$FavoritesTableTableManager get favorites =>
+      $$FavoritesTableTableManager(_db, _db.favorites);
 }

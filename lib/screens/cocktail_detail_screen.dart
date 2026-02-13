@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database.dart' as db;
 import '../core/theme/app_theme.dart';
+import '../core/utils/image_utils.dart';
+import '../widgets/favorite_button.dart';
 
 class CocktailDetailScreen extends StatefulWidget {
   final db.AppDatabase database;
@@ -21,11 +24,38 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   List<_CocktailIngredientWithName> ingredients = [];
   bool isLoading = true;
   bool isHistoryExpanded = false;
+  String? _resolvedImagePath;
+  int _batchSize = 1; // Batch calculator: default to single serving
 
   @override
   void initState() {
     super.initState();
     _loadIngredients();
+    _resolveImagePath();
+    _trackRecentlyViewed();
+  }
+
+  Future<void> _trackRecentlyViewed() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('recently_viewed_ids') ?? [];
+    final idStr = widget.cocktail.id.toString();
+    ids.remove(idStr);
+    ids.insert(0, idStr);
+    if (ids.length > 10) ids.removeRange(10, ids.length);
+    await prefs.setStringList('recently_viewed_ids', ids);
+  }
+
+  Future<void> _resolveImagePath() async {
+    // Use imagePath from database, or generate from name if not set
+    final basePath = widget.cocktail.imagePath ?? 
+        ImageUtils.generateBasePathFromName(widget.cocktail.name);
+    
+    final resolved = await ImageUtils.findCocktailImage(basePath);
+    if (mounted) {
+      setState(() {
+        _resolvedImagePath = resolved;
+      });
+    }
   }
 
   Future<void> _showAddToCollectionDialog() async {
@@ -124,6 +154,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   }
 
   Future<void> _loadIngredients() async {
+    print('🔍 Loading ingredients for cocktail ID: ${widget.cocktail.id}');
+    
     final query = widget.database.select(widget.database.cocktailIngredients).join([
       innerJoin(
         widget.database.ingredients,
@@ -134,18 +166,91 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     ])..where(widget.database.cocktailIngredients.cocktailId.equals(widget.cocktail.id));
 
     final results = await query.get();
+    print('📊 Query returned ${results.length} results');
 
-    setState(() {
-      ingredients = results.map((row) {
-        final cocktailIngredient = row.readTable(widget.database.cocktailIngredients);
-        final ingredient = row.readTable(widget.database.ingredients);
-        return _CocktailIngredientWithName(
+    // Group by ingredient ID and take only ml versions (filter out oz duplicates)
+    final Map<int, _CocktailIngredientWithName> uniqueIngredients = {};
+    
+    for (final row in results) {
+      final cocktailIngredient = row.readTable(widget.database.cocktailIngredients);
+      final ingredient = row.readTable(widget.database.ingredients);
+      
+      print('  Found: ${ingredient.name} - ${cocktailIngredient.amount}${cocktailIngredient.unit}');
+      
+      // Only keep ml entries (skip oz duplicates)
+      if (cocktailIngredient.unit == 'ml') {
+        uniqueIngredients[ingredient.id] = _CocktailIngredientWithName(
           cocktailIngredient: cocktailIngredient,
           ingredientName: ingredient.name,
         );
-      }).toList();
+      }
+    }
+    
+    print('✅ Final ingredient count: ${uniqueIngredients.length}');
+
+    setState(() {
+      ingredients = uniqueIngredients.values.toList();
       isLoading = false;
     });
+  }
+
+  // Batch calculator: Scale ingredient amount based on batch size
+  String _getScaledAmount(_CocktailIngredientWithName ing) {
+    // If amount is 0 or very small, use prep_note as the amount display (text-based amounts)
+    final hasTextAmount = ing.cocktailIngredient.amount < 0.1 && 
+                        ing.cocktailIngredient.prepNote != null && 
+                        ing.cocktailIngredient.prepNote!.isNotEmpty;
+    
+    if (hasTextAmount) {
+      // For text amounts like "4 Dashes", try to scale the number
+      final prepNote = ing.cocktailIngredient.prepNote!;
+      final numericMatch = RegExp(r'[\d.]+').firstMatch(prepNote);
+      
+      if (numericMatch != null && _batchSize > 1) {
+        final originalAmount = double.tryParse(numericMatch.group(0)!);
+        if (originalAmount != null) {
+          final scaledAmount = originalAmount * _batchSize;
+          final formattedAmount = scaledAmount % 1 == 0
+              ? scaledAmount.toInt().toString()
+              : scaledAmount.toStringAsFixed(1);
+          
+          // Replace the number in the text
+          return prepNote.replaceFirst(numericMatch.group(0)!, formattedAmount);
+        }
+      }
+      return prepNote; // Return as-is if can't scale
+    } else {
+      // For numeric amounts like "30ml"
+      final scaledAmount = ing.cocktailIngredient.amount * _batchSize;
+      final formattedAmount = scaledAmount % 1 == 0
+          ? scaledAmount.toInt().toString()
+          : scaledAmount.toStringAsFixed(1);
+      
+      return '$formattedAmount${ing.cocktailIngredient.unit}';
+    }
+  }
+
+  // Batch calculator: Calculate total volume for the batch
+  String _getTotalVolume() {
+    double totalMl = 0;
+    
+    for (var ingredient in ingredients) {
+      if (ingredient.cocktailIngredient.unit.toLowerCase() == 'ml') {
+        totalMl += ingredient.cocktailIngredient.amount;
+      }
+    }
+    
+    final batchedTotal = totalMl * _batchSize;
+    
+    if (batchedTotal == 0) return '';
+    
+    // Show in ml or convert to liters for large batches
+    if (batchedTotal >= 1000) {
+      final liters = batchedTotal / 1000;
+      return '${liters.toStringAsFixed(2)}L total volume';
+    } else {
+      return '${batchedTotal.toStringAsFixed(0)}ml total volume';
+    }
   }
 
   List<String> _getMethodSteps() {
@@ -197,6 +302,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     }
 
     final methodSteps = _getMethodSteps();
+    final totalVolume = _getTotalVolume();
 
     return Scaffold(
       body: CustomScrollView(
@@ -206,6 +312,17 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
             expandedHeight: 280,
             pinned: true,
             collapsedHeight: 60,
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FavoriteButton(
+                  database: widget.database,
+                  cocktailId: widget.cocktail.id,
+                  showSnackbar: true,
+                  size: 26,
+                ),
+              ),
+            ],
             flexibleSpace: LayoutBuilder(
               builder: (context, constraints) {
                 final settings = context
@@ -228,9 +345,9 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (widget.cocktail.imagePath != null)
+                      if (_resolvedImagePath != null)
                         Image.asset(
-                          widget.cocktail.imagePath!,
+                          _resolvedImagePath!,
                           fit: BoxFit.cover,
                           alignment: Alignment.topCenter,
                           errorBuilder: (context, error, stackTrace) {
@@ -329,35 +446,123 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      ...ingredients.map((ing) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      
+                      // BATCH CALCULATOR UI
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceDark,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _batchSize > 1 ? AppTheme.accentGold.withValues(alpha: 0.3) : AppTheme.surfaceLight,
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
                           children: [
-                            SizedBox(
-                              width: 70,
-                              child: Text(
-                                '${ing.cocktailIngredient.amount.toStringAsFixed(0)}${ing.cocktailIngredient.unit}',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.textPrimary,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Batch Size',
+                                  style: TextStyle(
+                                    color: AppTheme.accentGold,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline),
+                                      color: _batchSize > 1 ? AppTheme.accentGold : AppTheme.textSecondary,
+                                      onPressed: _batchSize > 1
+                                          ? () => setState(() => _batchSize--)
+                                          : null,
+                                      iconSize: 28,
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.surfaceLight,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '$_batchSize',
+                                        style: const TextStyle(
+                                          color: AppTheme.textPrimary,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.add_circle_outline),
+                                      color: _batchSize < 99 ? AppTheme.accentGold : AppTheme.textSecondary,
+                                      onPressed: _batchSize < 99
+                                          ? () => setState(() => _batchSize++)
+                                          : null,
+                                      iconSize: 28,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            
+                            // Total volume indicator
+                            if (totalVolume.isNotEmpty && _batchSize > 1)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  totalVolume,
+                                  style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 13,
+                                    fontStyle: FontStyle.italic,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                ing.ingredientName,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: AppTheme.textPrimary,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ),
                           ],
                         ),
-                      )),
+                      ),
+                      
+                      // Ingredients list with scaled amounts
+                      ...ingredients.map((ing) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  _getScaledAmount(ing),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: _batchSize > 1 
+                                        ? AppTheme.accentGold 
+                                        : AppTheme.textPrimary,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  ing.ingredientName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: AppTheme.textPrimary,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),

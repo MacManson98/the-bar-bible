@@ -41,6 +41,9 @@ dependencies:
   # State management
   provider: ^6.1.1
   
+  # Swipeable cards
+  flutter_card_swiper: ^7.0.1
+  
   cupertino_icons: ^1.0.2
 
 dev_dependencies:
@@ -63,6 +66,7 @@ flutter:
   # Assets
   assets:
     - assets/images/cocktails/
+    - assets/databases/cocktails.db
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
