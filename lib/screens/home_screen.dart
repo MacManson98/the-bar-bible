@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,8 +36,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _favoritesCount = 0;
   int _collectionsCount = 0;
   bool _isLoading = true;
+  String? _loadError;
 
   static const String _recentlyViewedKey = 'recently_viewed_ids';
+  static const Duration _homeLoadTimeout = Duration(seconds: 10);
 
   // Entry animations
   late AnimationController _entryController;
@@ -84,13 +87,76 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _loadData() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
+    }
+
+    debugPrint('[HomeScreen] _loadData: started');
+
+    try {
+      final _HomeLoadResult result = await _performHomeLoad().timeout(
+        _homeLoadTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Home load timed out after ${_homeLoadTimeout.inSeconds} seconds.',
+          );
+        },
+      );
+
+      debugPrint('[HomeScreen] _loadData: complete');
+
+      if (!mounted) return;
+
+      setState(() {
+        _allCocktails = result.cocktails;
+        _tonightsPick = result.pick;
+        _pickReasoning = result.reasoning;
+        _favoritesCount = result.favoritesCount;
+        _collectionsCount = result.collectionsCount;
+        _recentlyViewed = result.recentlyViewed;
+        _isLoading = false;
+        _loadError = null;
+      });
+
+      _entryController.forward(from: 0);
+    } catch (error, stackTrace) {
+      debugPrint('[HomeScreen] _loadData: failed -> $error');
+      debugPrintStack(
+        label: '[HomeScreen] _loadData stack',
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _loadError = error.toString();
+      });
+    }
+  }
+
+  Future<_HomeLoadResult> _performHomeLoad() async {
+    debugPrint('[HomeScreen] load step: cocktails query');
     final cocktails = await widget.database.select(widget.database.cocktails).get();
+    debugPrint('[HomeScreen] load step complete: cocktails (${cocktails.length})');
+
+    debugPrint('[HomeScreen] load step: favorites query');
     final favorites = await widget.database.getFavoriteCocktails();
+    debugPrint('[HomeScreen] load step complete: favorites (${favorites.length})');
+
+    debugPrint('[HomeScreen] load step: collections query');
     final collections = await widget.database.select(widget.database.collections).get();
+    debugPrint('[HomeScreen] load step complete: collections (${collections.length})');
+
+    debugPrint('[HomeScreen] load step: recently viewed');
     final recentlyViewed = await _loadRecentlyViewed(cocktails);
+    debugPrint('[HomeScreen] load step complete: recently viewed (${recentlyViewed.length})');
 
     Cocktail? pick;
-    String reasoning;
+    String reasoning = '';
 
     if (favorites.isNotEmpty) {
       final notFavorited = cocktails.where(
@@ -131,36 +197,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         cocktails.shuffle();
         pick = cocktails.first;
         reasoning = 'Discover something new';
-      } else {
-        reasoning = '';
       }
     }
 
-    setState(() {
-      _allCocktails = cocktails;
-      _tonightsPick = pick;
-      _pickReasoning = reasoning;
-      _favoritesCount = favorites.length;
-      _collectionsCount = collections.length;
-      _recentlyViewed = recentlyViewed;
-      _isLoading = false;
-    });
-
-    _entryController.forward(from: 0);
+    return _HomeLoadResult(
+      cocktails: cocktails,
+      recentlyViewed: recentlyViewed,
+      pick: pick,
+      reasoning: reasoning,
+      favoritesCount: favorites.length,
+      collectionsCount: collections.length,
+    );
   }
 
   Future<List<Cocktail>> _loadRecentlyViewed(List<Cocktail> allCocktails) async {
-    final prefs = await SharedPreferences.getInstance();
-    final ids = prefs.getStringList(_recentlyViewedKey) ?? [];
-    final result = <Cocktail>[];
-    for (final idStr in ids) {
-      final id = int.tryParse(idStr);
-      if (id != null) {
-        final cocktail = allCocktails.where((c) => c.id == id).firstOrNull;
-        if (cocktail != null) result.add(cocktail);
+    try {
+      debugPrint('[HomeScreen] _loadRecentlyViewed: fetching prefs');
+      final prefs = await SharedPreferences.getInstance();
+      final ids = prefs.getStringList(_recentlyViewedKey) ?? [];
+      final result = <Cocktail>[];
+      for (final idStr in ids) {
+        final id = int.tryParse(idStr);
+        if (id != null) {
+          final cocktail = allCocktails.where((c) => c.id == id).firstOrNull;
+          if (cocktail != null) result.add(cocktail);
+        }
       }
+      debugPrint('[HomeScreen] _loadRecentlyViewed: complete (${result.length})');
+      return result;
+    } catch (error, stackTrace) {
+      debugPrint('[HomeScreen] _loadRecentlyViewed: failed -> $error');
+      debugPrintStack(
+        label: '[HomeScreen] _loadRecentlyViewed stack',
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
-    return result;
   }
 
   Future<void> _trackRecentlyViewed(int cocktailId) async {
@@ -232,6 +304,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    if (_loadError != null) {
+      return Scaffold(
+        backgroundColor: AppTheme.primaryDark,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: AppTheme.accentGold,
+                  size: 40,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Failed to load Home',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _loadError!,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary.withValues(alpha: 0.9),
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _loadData,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppTheme.primaryDark,
@@ -458,6 +574,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class _HomeLoadResult {
+  final List<Cocktail> cocktails;
+  final List<Cocktail> recentlyViewed;
+  final Cocktail? pick;
+  final String reasoning;
+  final int favoritesCount;
+  final int collectionsCount;
+
+  const _HomeLoadResult({
+    required this.cocktails,
+    required this.recentlyViewed,
+    required this.pick,
+    required this.reasoning,
+    required this.favoritesCount,
+    required this.collectionsCount,
+  });
 }
 
 // ─── Section Header ──────────────────────────────────────────────────────────
