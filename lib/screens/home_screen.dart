@@ -8,16 +8,17 @@ import '../data/database.dart';
 import 'cocktail_detail_screen.dart';
 import 'favorites_screen.dart';
 import 'collections_screen.dart';
-import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final AppDatabase database;
+  final String activeBarName;
   final VoidCallback onNavigateToBrowse;
   final VoidCallback onNavigateToFinder;
 
   const HomeScreen({
     super.key,
     required this.database,
+    required this.activeBarName,
     required this.onNavigateToBrowse,
     required this.onNavigateToFinder,
   });
@@ -266,41 +267,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: ListView(
               padding: const EdgeInsets.only(bottom: 100),
               children: [
-                // ▸ SECTION 1: Greeting + Settings
+                // ▸ SECTION 1: Greeting
                 _animatedSection(
                   index: 0,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 12, 0),
-                    child: Row(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            _getGreeting(),
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w300,
-                              color: AppTheme.textPrimary,
-                              letterSpacing: 0.2,
-                              height: 1.3,
-                            ),
+                        Text(
+                          _getGreeting(),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w300,
+                            color: AppTheme.textPrimary,
+                            letterSpacing: 0.2,
+                            height: 1.3,
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.settings_outlined, color: AppTheme.textSecondary, size: 22),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                            );
-                          },
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.activeBarName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textSecondary.withValues(alpha: 0.75),
+                            letterSpacing: 0.2,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
-
+                    
                 const SizedBox(height: 24),
-
+                
                 // ▸ SECTION 2: Tonight's Pick (hero)
                 if (_tonightsPick != null)
                   _animatedSection(
@@ -338,9 +339,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-
+                
                 const SizedBox(height: 28),
-
+                
                 // ▸ SECTION 3: Quick Access Grid
                 _animatedSection(
                   index: 2,
@@ -407,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-
+                
                 // ▸ SECTION 4: Recently Viewed
                 if (_recentlyViewed.isNotEmpty) ...[
                   const SizedBox(height: 28),

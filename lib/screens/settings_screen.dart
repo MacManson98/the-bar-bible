@@ -133,17 +133,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // About Section
           const _SectionHeader(title: 'ABOUT'),
-          _SettingTile(
+          const _SettingTile(
             icon: Icons.info_outline,
             title: 'Version',
             subtitle: '1.0.0 (MVP)',
-            onTap: () {},
           ),
-          _SettingTile(
+          const _SettingTile(
             icon: Icons.menu_book,
             title: 'Cocktail Database',
             subtitle: 'IBA Official Cocktails',
-            onTap: () {},
           ),
           _SettingTile(
             icon: Icons.copyright,

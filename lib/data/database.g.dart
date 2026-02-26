@@ -73,6 +73,17 @@ class $CocktailsTable extends Cocktails
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _tilesNotesMeta = const VerificationMeta(
+    'tilesNotes',
+  );
+  @override
+  late final GeneratedColumn<String> tilesNotes = GeneratedColumn<String>(
+    'tiles_notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _glassMeta = const VerificationMeta('glass');
   @override
   late final GeneratedColumn<String> glass = GeneratedColumn<String>(
@@ -152,6 +163,7 @@ class $CocktailsTable extends Cocktails
     methodInstructions,
     history,
     tastingNotes,
+    tilesNotes,
     glass,
     ice,
     garnish,
@@ -213,6 +225,12 @@ class $CocktailsTable extends Cocktails
           data['tasting_notes']!,
           _tastingNotesMeta,
         ),
+      );
+    }
+    if (data.containsKey('tiles_notes')) {
+      context.handle(
+        _tilesNotesMeta,
+        tilesNotes.isAcceptableOrUnknown(data['tiles_notes']!, _tilesNotesMeta),
       );
     }
     if (data.containsKey('glass')) {
@@ -296,6 +314,10 @@ class $CocktailsTable extends Cocktails
         DriftSqlType.string,
         data['${effectivePrefix}tasting_notes'],
       ),
+      tilesNotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tiles_notes'],
+      ),
       glass: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}glass'],
@@ -340,6 +362,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
   final String? methodInstructions;
   final String? history;
   final String? tastingNotes;
+  final String? tilesNotes;
   final String glass;
   final String? ice;
   final String? garnish;
@@ -354,6 +377,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     this.methodInstructions,
     this.history,
     this.tastingNotes,
+    this.tilesNotes,
     required this.glass,
     this.ice,
     this.garnish,
@@ -376,6 +400,9 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     }
     if (!nullToAbsent || tastingNotes != null) {
       map['tasting_notes'] = Variable<String>(tastingNotes);
+    }
+    if (!nullToAbsent || tilesNotes != null) {
+      map['tiles_notes'] = Variable<String>(tilesNotes);
     }
     map['glass'] = Variable<String>(glass);
     if (!nullToAbsent || ice != null) {
@@ -409,6 +436,9 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       tastingNotes: tastingNotes == null && nullToAbsent
           ? const Value.absent()
           : Value(tastingNotes),
+      tilesNotes: tilesNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tilesNotes),
       glass: Value(glass),
       ice: ice == null && nullToAbsent ? const Value.absent() : Value(ice),
       garnish: garnish == null && nullToAbsent
@@ -437,6 +467,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       ),
       history: serializer.fromJson<String?>(json['history']),
       tastingNotes: serializer.fromJson<String?>(json['tastingNotes']),
+      tilesNotes: serializer.fromJson<String?>(json['tilesNotes']),
       glass: serializer.fromJson<String>(json['glass']),
       ice: serializer.fromJson<String?>(json['ice']),
       garnish: serializer.fromJson<String?>(json['garnish']),
@@ -456,6 +487,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       'methodInstructions': serializer.toJson<String?>(methodInstructions),
       'history': serializer.toJson<String?>(history),
       'tastingNotes': serializer.toJson<String?>(tastingNotes),
+      'tilesNotes': serializer.toJson<String?>(tilesNotes),
       'glass': serializer.toJson<String>(glass),
       'ice': serializer.toJson<String?>(ice),
       'garnish': serializer.toJson<String?>(garnish),
@@ -473,6 +505,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     Value<String?> methodInstructions = const Value.absent(),
     Value<String?> history = const Value.absent(),
     Value<String?> tastingNotes = const Value.absent(),
+    Value<String?> tilesNotes = const Value.absent(),
     String? glass,
     Value<String?> ice = const Value.absent(),
     Value<String?> garnish = const Value.absent(),
@@ -489,6 +522,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
         : this.methodInstructions,
     history: history.present ? history.value : this.history,
     tastingNotes: tastingNotes.present ? tastingNotes.value : this.tastingNotes,
+    tilesNotes: tilesNotes.present ? tilesNotes.value : this.tilesNotes,
     glass: glass ?? this.glass,
     ice: ice.present ? ice.value : this.ice,
     garnish: garnish.present ? garnish.value : this.garnish,
@@ -509,6 +543,9 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       tastingNotes: data.tastingNotes.present
           ? data.tastingNotes.value
           : this.tastingNotes,
+      tilesNotes: data.tilesNotes.present
+          ? data.tilesNotes.value
+          : this.tilesNotes,
       glass: data.glass.present ? data.glass.value : this.glass,
       ice: data.ice.present ? data.ice.value : this.ice,
       garnish: data.garnish.present ? data.garnish.value : this.garnish,
@@ -532,6 +569,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
           ..write('methodInstructions: $methodInstructions, ')
           ..write('history: $history, ')
           ..write('tastingNotes: $tastingNotes, ')
+          ..write('tilesNotes: $tilesNotes, ')
           ..write('glass: $glass, ')
           ..write('ice: $ice, ')
           ..write('garnish: $garnish, ')
@@ -551,6 +589,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     methodInstructions,
     history,
     tastingNotes,
+    tilesNotes,
     glass,
     ice,
     garnish,
@@ -569,6 +608,7 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
           other.methodInstructions == this.methodInstructions &&
           other.history == this.history &&
           other.tastingNotes == this.tastingNotes &&
+          other.tilesNotes == this.tilesNotes &&
           other.glass == this.glass &&
           other.ice == this.ice &&
           other.garnish == this.garnish &&
@@ -585,6 +625,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   final Value<String?> methodInstructions;
   final Value<String?> history;
   final Value<String?> tastingNotes;
+  final Value<String?> tilesNotes;
   final Value<String> glass;
   final Value<String?> ice;
   final Value<String?> garnish;
@@ -599,6 +640,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     this.methodInstructions = const Value.absent(),
     this.history = const Value.absent(),
     this.tastingNotes = const Value.absent(),
+    this.tilesNotes = const Value.absent(),
     this.glass = const Value.absent(),
     this.ice = const Value.absent(),
     this.garnish = const Value.absent(),
@@ -614,6 +656,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     this.methodInstructions = const Value.absent(),
     this.history = const Value.absent(),
     this.tastingNotes = const Value.absent(),
+    this.tilesNotes = const Value.absent(),
     required String glass,
     this.ice = const Value.absent(),
     this.garnish = const Value.absent(),
@@ -633,6 +676,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     Expression<String>? methodInstructions,
     Expression<String>? history,
     Expression<String>? tastingNotes,
+    Expression<String>? tilesNotes,
     Expression<String>? glass,
     Expression<String>? ice,
     Expression<String>? garnish,
@@ -648,6 +692,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
       if (methodInstructions != null) 'method_instructions': methodInstructions,
       if (history != null) 'history': history,
       if (tastingNotes != null) 'tasting_notes': tastingNotes,
+      if (tilesNotes != null) 'tiles_notes': tilesNotes,
       if (glass != null) 'glass': glass,
       if (ice != null) 'ice': ice,
       if (garnish != null) 'garnish': garnish,
@@ -665,6 +710,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     Value<String?>? methodInstructions,
     Value<String?>? history,
     Value<String?>? tastingNotes,
+    Value<String?>? tilesNotes,
     Value<String>? glass,
     Value<String?>? ice,
     Value<String?>? garnish,
@@ -680,6 +726,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
       methodInstructions: methodInstructions ?? this.methodInstructions,
       history: history ?? this.history,
       tastingNotes: tastingNotes ?? this.tastingNotes,
+      tilesNotes: tilesNotes ?? this.tilesNotes,
       glass: glass ?? this.glass,
       ice: ice ?? this.ice,
       garnish: garnish ?? this.garnish,
@@ -710,6 +757,9 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     }
     if (tastingNotes.present) {
       map['tasting_notes'] = Variable<String>(tastingNotes.value);
+    }
+    if (tilesNotes.present) {
+      map['tiles_notes'] = Variable<String>(tilesNotes.value);
     }
     if (glass.present) {
       map['glass'] = Variable<String>(glass.value);
@@ -744,6 +794,7 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
           ..write('methodInstructions: $methodInstructions, ')
           ..write('history: $history, ')
           ..write('tastingNotes: $tastingNotes, ')
+          ..write('tilesNotes: $tilesNotes, ')
           ..write('glass: $glass, ')
           ..write('ice: $ice, ')
           ..write('garnish: $garnish, ')
@@ -3274,6 +3325,7 @@ typedef $$CocktailsTableCreateCompanionBuilder =
       Value<String?> methodInstructions,
       Value<String?> history,
       Value<String?> tastingNotes,
+      Value<String?> tilesNotes,
       required String glass,
       Value<String?> ice,
       Value<String?> garnish,
@@ -3290,6 +3342,7 @@ typedef $$CocktailsTableUpdateCompanionBuilder =
       Value<String?> methodInstructions,
       Value<String?> history,
       Value<String?> tastingNotes,
+      Value<String?> tilesNotes,
       Value<String> glass,
       Value<String?> ice,
       Value<String?> garnish,
@@ -3412,6 +3465,11 @@ class $$CocktailsTableFilterComposer
 
   ColumnFilters<String> get tastingNotes => $composableBuilder(
     column: $table.tastingNotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tilesNotes => $composableBuilder(
+    column: $table.tilesNotes,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3565,6 +3623,11 @@ class $$CocktailsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get tilesNotes => $composableBuilder(
+    column: $table.tilesNotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get glass => $composableBuilder(
     column: $table.glass,
     builder: (column) => ColumnOrderings(column),
@@ -3629,6 +3692,11 @@ class $$CocktailsTableAnnotationComposer
 
   GeneratedColumn<String> get tastingNotes => $composableBuilder(
     column: $table.tastingNotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tilesNotes => $composableBuilder(
+    column: $table.tilesNotes,
     builder: (column) => column,
   );
 
@@ -3773,6 +3841,7 @@ class $$CocktailsTableTableManager
                 Value<String?> methodInstructions = const Value.absent(),
                 Value<String?> history = const Value.absent(),
                 Value<String?> tastingNotes = const Value.absent(),
+                Value<String?> tilesNotes = const Value.absent(),
                 Value<String> glass = const Value.absent(),
                 Value<String?> ice = const Value.absent(),
                 Value<String?> garnish = const Value.absent(),
@@ -3787,6 +3856,7 @@ class $$CocktailsTableTableManager
                 methodInstructions: methodInstructions,
                 history: history,
                 tastingNotes: tastingNotes,
+                tilesNotes: tilesNotes,
                 glass: glass,
                 ice: ice,
                 garnish: garnish,
@@ -3803,6 +3873,7 @@ class $$CocktailsTableTableManager
                 Value<String?> methodInstructions = const Value.absent(),
                 Value<String?> history = const Value.absent(),
                 Value<String?> tastingNotes = const Value.absent(),
+                Value<String?> tilesNotes = const Value.absent(),
                 required String glass,
                 Value<String?> ice = const Value.absent(),
                 Value<String?> garnish = const Value.absent(),
@@ -3817,6 +3888,7 @@ class $$CocktailsTableTableManager
                 methodInstructions: methodInstructions,
                 history: history,
                 tastingNotes: tastingNotes,
+                tilesNotes: tilesNotes,
                 glass: glass,
                 ice: ice,
                 garnish: garnish,

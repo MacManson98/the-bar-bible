@@ -1,13 +1,55 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 
-/// Stub Achievements/Badges screen.
-/// Placeholder data — replace with real badge logic later.
+/// All achievement milestones.
+/// Thresholds match the popup logic in my_bar_screen.dart.
+class _Milestone {
+  final String key;
+  final String name;
+  final String description;
+  final String emoji;
+  final int threshold;
+
+  const _Milestone(this.key, this.name, this.description, this.emoji, this.threshold);
+}
+
+const List<_Milestone> _allMilestones = [
+  _Milestone('first_pour',     'First Pour',     'Add your first ingredient',   '\u{1F943}', 1),
+  _Milestone('getting_started','Getting Started', 'Stock 5 ingredients',         '\u{1F949}', 5),
+  _Milestone('home_bartender', 'Home Bartender',  'Stock 16 ingredients',        '\u{1F948}', 16),
+  _Milestone('well_stocked',   'Well Stocked',    'Stock 30 ingredients',        '\u{1F947}', 30),
+  _Milestone('professional',   'Professional',    'Stock 40+ ingredients',       '\u{1F48E}', 40),
+  _Milestone('completionist',  'Completionist',   'Stock every ingredient',      '\u{1F3C6}', -1), // -1 = uses totalIngredients
+];
+
 class AchievementsScreen extends StatelessWidget {
-  const AchievementsScreen({super.key});
+  /// Current number of stocked ingredients in the active bar.
+  final int ingredientCount;
+  /// Total number of ingredients in the database (for Completionist).
+  final int totalIngredients;
+
+  const AchievementsScreen({
+    super.key,
+    required this.ingredientCount,
+    required this.totalIngredients,
+  });
+
+  List<_BadgeData> _computeBadges() {
+    final badges = <_BadgeData>[];
+    for (final m in _allMilestones) {
+      final threshold = m.threshold < 0 ? totalIngredients : m.threshold;
+      final earned = threshold > 0 && ingredientCount >= threshold;
+      badges.add(_BadgeData(m.name, m.description, m.emoji, earned));
+    }
+    return badges;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final badges = _computeBadges();
+    final earned = badges.where((b) => b.earned).toList();
+    final locked = badges.where((b) => !b.earned).toList();
+
     return Scaffold(
       backgroundColor: AppTheme.primaryDark,
       appBar: AppBar(
@@ -56,21 +98,23 @@ class AchievementsScreen extends StatelessWidget {
                       color: AppTheme.accentGold, size: 26),
                 ),
                 const SizedBox(width: 14),
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '3 of 12 Earned',
-                      style: TextStyle(
+                      '${earned.length} of ${badges.length} Earned',
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Keep stocking to unlock more',
-                      style: TextStyle(
+                      earned.length == badges.length
+                          ? 'All achievements unlocked!'
+                          : 'Keep stocking to unlock more',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
                       ),
@@ -82,15 +126,18 @@ class AchievementsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Badge grid
-          _buildSectionLabel('Earned'),
-          const SizedBox(height: 10),
-          _buildBadgeGrid(_earnedBadges),
+          if (earned.isNotEmpty) ...[
+            _buildSectionLabel('Earned'),
+            const SizedBox(height: 10),
+            _buildBadgeGrid(earned),
+            const SizedBox(height: 24),
+          ],
 
-          const SizedBox(height: 24),
-          _buildSectionLabel('Locked'),
-          const SizedBox(height: 10),
-          _buildBadgeGrid(_lockedBadges),
+          if (locked.isNotEmpty) ...[
+            _buildSectionLabel('Locked'),
+            const SizedBox(height: 10),
+            _buildBadgeGrid(locked),
+          ],
         ],
       ),
     );
@@ -133,24 +180,6 @@ class AchievementsScreen extends StatelessWidget {
       },
     );
   }
-
-  static final _earnedBadges = [
-    const _BadgeData('First Pour', 'Added your first ingredient', '🥃', true),
-    const _BadgeData('Getting Started', 'Stocked 5 ingredients', '🥉', true),
-    const _BadgeData('Spirit Forward', 'Added 3 spirits', '🍸', true),
-  ];
-
-  static final _lockedBadges = [
-    const _BadgeData('Home Bartender', 'Stock 16 core ingredients', '🥈', false),
-    const _BadgeData('Citrus Club', 'Add all citrus', '🍋', false),
-    const _BadgeData('Bitter Truth', 'Add 3+ bitters', '💧', false),
-    const _BadgeData('Sweet Tooth', 'Add all sweeteners', '🍯', false),
-    const _BadgeData('Well Stocked', 'Stock 30 ingredients', '🥇', false),
-    const _BadgeData('Professional', 'Stock 40+ ingredients', '💎', false),
-    const _BadgeData('Mixologist', 'Unlock 50 cocktails', '🎯', false),
-    const _BadgeData('Cocktail Master', 'Unlock 100 cocktails', '👑', false),
-    const _BadgeData('Completionist', 'Stock every ingredient', '🏆', false),
-  ];
 }
 
 class _BadgeData {

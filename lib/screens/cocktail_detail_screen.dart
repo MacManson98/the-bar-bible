@@ -26,6 +26,13 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   bool isHistoryExpanded = false;
   String? _resolvedImagePath;
   int _batchSize = 1; // Batch calculator: default to single serving
+  bool _serviceMode = false;
+  bool _useOz = false;
+  Set<int> _barIngredientIds = {};
+  final Set<int> _busyAddIngredientIds = <int>{};
+  int? _activeBarId;
+  String _activeBarName = '';
+  bool _isMissingSectionExpanded = false;
 
   @override
   void initState() {
@@ -33,6 +40,77 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     _loadIngredients();
     _resolveImagePath();
     _trackRecentlyViewed();
+    _loadServiceMode();
+    _loadBarContext();
+  }
+
+  Future<void> _loadBarContext() async {
+    final bar = await widget.database.getDefaultSavedBar();
+    if (bar == null || !mounted) return;
+    final barIngredients = await widget.database.getSavedBarIngredients(bar.id);
+    if (!mounted) return;
+    setState(() {
+      _activeBarId = bar.id;
+      _barIngredientIds = barIngredients.map((i) => i.id).toSet();
+      _activeBarName = bar.name;
+    });
+  }
+
+  Set<int> _requiredIngredientIds() {
+    return ingredients.map((i) => i.cocktailIngredient.ingredientId).toSet();
+  }
+
+  List<_CocktailIngredientWithName> _missingIngredients() {
+    return ingredients
+        .where((i) => !_barIngredientIds.contains(i.cocktailIngredient.ingredientId))
+        .toList();
+  }
+
+  Future<void> _addMissingIngredientToActiveBar(int ingredientId) async {
+    final barId = _activeBarId;
+    if (barId == null || _barIngredientIds.contains(ingredientId)) return;
+    if (_busyAddIngredientIds.contains(ingredientId)) return;
+
+    setState(() => _busyAddIngredientIds.add(ingredientId));
+    try {
+      await widget.database.addIngredientToSavedBar(
+        savedBarId: barId,
+        ingredientId: ingredientId,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _barIngredientIds = {..._barIngredientIds, ingredientId};
+        if (_missingIngredients().isEmpty) {
+          _isMissingSectionExpanded = false;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not add ingredient. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyAddIngredientIds.remove(ingredientId));
+      }
+    }
+  }
+
+  Future<void> _loadServiceMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final svc = prefs.getBool('service_mode') ?? false;
+      final oz = prefs.getBool('use_oz') ?? false;
+      if (mounted) {
+        setState(() {
+          _serviceMode = svc;
+          _useOz = oz;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _trackRecentlyViewed() async {
@@ -86,11 +164,12 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     final existingCollections = await (widget.database.select(widget.database.collectionCocktails)
       ..where((tbl) => tbl.cocktailId.equals(widget.cocktail.id))
     ).get();
+    if (!mounted) return;
 
     final existingCollectionIds = existingCollections.map((e) => e.collectionId).toSet();
+    if (!mounted) return;
 
     showDialog(
-      // ignore: use_build_context_synchronously
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,
@@ -154,8 +233,6 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   }
 
   Future<void> _loadIngredients() async {
-    print('🔍 Loading ingredients for cocktail ID: ${widget.cocktail.id}');
-    
     final query = widget.database.select(widget.database.cocktailIngredients).join([
       innerJoin(
         widget.database.ingredients,
@@ -166,7 +243,6 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     ])..where(widget.database.cocktailIngredients.cocktailId.equals(widget.cocktail.id));
 
     final results = await query.get();
-    print('📊 Query returned ${results.length} results');
 
     // Group by ingredient ID and take only ml versions (filter out oz duplicates)
     final Map<int, _CocktailIngredientWithName> uniqueIngredients = {};
@@ -174,9 +250,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     for (final row in results) {
       final cocktailIngredient = row.readTable(widget.database.cocktailIngredients);
       final ingredient = row.readTable(widget.database.ingredients);
-      
-      print('  Found: ${ingredient.name} - ${cocktailIngredient.amount}${cocktailIngredient.unit}');
-      
+
       // Only keep ml entries (skip oz duplicates)
       if (cocktailIngredient.unit == 'ml') {
         uniqueIngredients[ingredient.id] = _CocktailIngredientWithName(
@@ -185,8 +259,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
         );
       }
     }
-    
-    print('✅ Final ingredient count: ${uniqueIngredients.length}');
+
+    if (!mounted) return;
 
     setState(() {
       ingredients = uniqueIngredients.values.toList();
@@ -222,6 +296,16 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     } else {
       // For numeric amounts like "30ml"
       final scaledAmount = ing.cocktailIngredient.amount * _batchSize;
+
+      // Convert ml → oz if user preference is set
+      if (_useOz && ing.cocktailIngredient.unit.toLowerCase() == 'ml') {
+        final ozAmount = scaledAmount * 0.033814;
+        final formatted = ozAmount < 0.1
+            ? ozAmount.toStringAsFixed(2)
+            : ozAmount.toStringAsFixed(1);
+        return '${formatted}oz';
+      }
+
       final formattedAmount = scaledAmount % 1 == 0
           ? scaledAmount.toInt().toString()
           : scaledAmount.toStringAsFixed(1);
@@ -243,6 +327,11 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     final batchedTotal = totalMl * _batchSize;
     
     if (batchedTotal == 0) return '';
+
+    if (_useOz) {
+      final totalOz = batchedTotal * 0.033814;
+      return '${totalOz.toStringAsFixed(1)}oz total volume';
+    }
     
     // Show in ml or convert to liters for large batches
     if (batchedTotal >= 1000) {
@@ -445,6 +534,158 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                           ),
                         ],
                       ),
+                      // Bar context + missing ingredients
+                      if (_activeBarName.isNotEmpty && ingredients.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 4),
+                          child: Builder(builder: (_) {
+                            final requiredIds = _requiredIngredientIds();
+                            final missing = _missingIngredients();
+                            final missingCount = missing.length;
+                            final allHave = requiredIds.isNotEmpty && missingCount == 0;
+
+                            if (allHave) {
+                              return Row(
+                                children: [
+                                  const Icon(
+                                    Icons.check_circle_rounded,
+                                    size: 13,
+                                    color: AppTheme.accentGold,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'You have everything for this ($_activeBarName) ✓',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.accentGold,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () {
+                                    setState(() {
+                                      _isMissingSectionExpanded =
+                                          !_isMissingSectionExpanded;
+                                    });
+                                  },
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 4),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          'Missing $missingCount ingredient(s) ($_activeBarName)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.textSecondary
+                                                .withValues(alpha: 0.9),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Icon(
+                                          _isMissingSectionExpanded
+                                              ? Icons.keyboard_arrow_up_rounded
+                                              : Icons.keyboard_arrow_down_rounded,
+                                          size: 16,
+                                          color: AppTheme.textSecondary
+                                              .withValues(alpha: 0.8),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                AnimatedSize(
+                                  duration:
+                                      const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  child: _isMissingSectionExpanded
+                                      ? Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 4),
+                                          child: Column(
+                                            children: missing.map((ing) {
+                                              final ingredientId = ing
+                                                  .cocktailIngredient
+                                                  .ingredientId;
+                                              final inBar = _barIngredientIds
+                                                  .contains(ingredientId);
+                                              final isBusy =
+                                                  _busyAddIngredientIds
+                                                      .contains(ingredientId);
+
+                                              return Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 3,
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        ing.ingredientName,
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          color: AppTheme
+                                                              .textSecondary
+                                                              .withValues(
+                                                                  alpha: 0.95),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    IconButton(
+                                                      visualDensity:
+                                                          VisualDensity
+                                                              .compact,
+                                                      splashRadius: 16,
+                                                      iconSize: 16,
+                                                      color: inBar
+                                                          ? AppTheme.accentGold
+                                                          : AppTheme
+                                                              .textSecondary,
+                                                      icon: isBusy
+                                                          ? const SizedBox(
+                                                              width: 14,
+                                                              height: 14,
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                strokeWidth:
+                                                                    1.8,
+                                                              ),
+                                                            )
+                                                          : Icon(
+                                                              inBar
+                                                                  ? Icons
+                                                                      .check_rounded
+                                                                  : Icons
+                                                                      .add_rounded,
+                                                            ),
+                                                      onPressed:
+                                                          (inBar || isBusy)
+                                                          ? null
+                                                          : () => _addMissingIngredientToActiveBar(
+                                                              ingredientId),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                              ],
+                            );
+                          }),
+                        ),
                       const SizedBox(height: 16),
                       
                       // BATCH CALCULATOR UI
@@ -531,16 +772,16 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                       // Ingredients list with scaled amounts
                       ...ingredients.map((ing) {
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
+                          padding: EdgeInsets.only(bottom: _serviceMode ? 18 : 14),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               SizedBox(
-                                width: 100,
+                                width: _serviceMode ? 120 : 100,
                                 child: Text(
                                   _getScaledAmount(ing),
                                   style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: _serviceMode ? 22 : 16,
                                     fontWeight: FontWeight.bold,
                                     color: _batchSize > 1 
                                         ? AppTheme.accentGold 
@@ -552,8 +793,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                               Expanded(
                                 child: Text(
                                   ing.ingredientName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
+                                  style: TextStyle(
+                                    fontSize: _serviceMode ? 22 : 16,
                                     color: AppTheme.textPrimary,
                                     height: 1.4,
                                   ),
@@ -623,8 +864,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                                 Expanded(
                                   child: Text(
                                     entry.value,
-                                    style: const TextStyle(
-                                      fontSize: 15,
+                                    style: TextStyle(
+                                      fontSize: _serviceMode ? 20 : 15,
                                       color: AppTheme.textPrimary,
                                       height: 1.4,
                                     ),
@@ -654,8 +895,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                         Expanded(
                           child: Text(
                             widget.cocktail.garnish!,
-                            style: const TextStyle(
-                              fontSize: 14,
+                            style: TextStyle(
+                              fontSize: _serviceMode ? 18 : 14,
                               color: AppTheme.textSecondary,
                             ),
                           ),

@@ -31,6 +31,10 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
   Set<String> selectedMethods = {};
   Set<int> selectedDifficulties = {};
 
+  // Track newly selected cocktails this session (not existing ones)
+  Set<int> _pendingAdded = {};
+  Set<int> _pendingRemoved = {};
+
   final List<String> spirits = ['Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Brandy', 'Cognac', 'Other'];
   final List<String> methods = ['shake', 'stir', 'build'];
 
@@ -61,6 +65,9 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
     });
   }
 
+  /// Count of net new additions this session
+  int get _newSelectionCount => _pendingAdded.length;
+
   void _showFiltersSheet() {
     final tempSpirits = Set<String>.from(selectedSpirits);
     final tempMethods = Set<String>.from(selectedMethods);
@@ -86,7 +93,7 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                   const Text(
                     'FILTERS',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
                     ),
@@ -205,31 +212,57 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
         selectedMethods.isNotEmpty ||
         selectedDifficulties.isNotEmpty;
 
+    final count = _newSelectionCount;
+    final buttonLabel = count == 0 ? 'Cancel' : 'Add $count Cocktail${count == 1 ? '' : 's'}';
+    final buttonIsAction = count > 0;
+
     return Dialog(
       backgroundColor: AppTheme.primaryDark,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: Column(
         children: [
-          // Header
+          // ── Header ──────────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
+            padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+            decoration: BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: AppTheme.surfaceLight),
+                bottom: BorderSide(
+                  color: AppTheme.accentGold.withValues(alpha: 0.18),
+                ),
               ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text(
-                  'ADD COCKTAILS',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Add to ${widget.collection.name}',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.3,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${filteredCocktails.length} cocktails',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close, size: 20, color: AppTheme.textSecondary),
                   onPressed: () {
                     Navigator.pop(context);
                     widget.onClose();
@@ -238,245 +271,171 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
               ],
             ),
           ),
-          // Search and Filter
+
+          // ── Search + Filter bar ──────────────────────────────────
           Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
               children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Search cocktails...',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (value) {
-                    searchQuery = value;
-                    _applyFilters();
-                  },
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _showFiltersSheet,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: hasActiveFilters ? AppTheme.accentGold : AppTheme.surfaceDark,
-                    foregroundColor: hasActiveFilters ? AppTheme.primaryDark : AppTheme.textPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: hasActiveFilters ? AppTheme.accentGold : AppTheme.surfaceLight,
+                Expanded(
+                  child: Container(
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceDark,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.surfaceLight.withValues(alpha: 0.8),
                       ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.filter_list, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        hasActiveFilters
-                            ? 'FILTERS (${selectedSpirits.length + selectedMethods.length + selectedDifficulties.length})'
-                            : 'FILTERS',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
+                    child: TextField(
+                      style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Search cocktails…',
+                        hintStyle: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                        prefixIcon: Icon(Icons.search, size: 17, color: AppTheme.textSecondary),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        isDense: true,
                       ),
-                    ],
+                      onChanged: (value) {
+                        searchQuery = value;
+                        _applyFilters();
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _showFiltersSheet,
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: hasActiveFilters
+                          ? AppTheme.accentGold.withValues(alpha: 0.15)
+                          : AppTheme.surfaceDark,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: hasActiveFilters
+                            ? AppTheme.accentGold.withValues(alpha: 0.6)
+                            : AppTheme.surfaceLight.withValues(alpha: 0.8),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.filter_list,
+                          size: 16,
+                          color: hasActiveFilters ? AppTheme.accentGold : AppTheme.textSecondary,
+                        ),
+                        if (hasActiveFilters) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            '${selectedSpirits.length + selectedMethods.length + selectedDifficulties.length}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.accentGold,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          // Cocktail list
+          const SizedBox(height: 10),
+
+          // ── Cocktail list ────────────────────────────────────────
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               itemCount: filteredCocktails.length,
               itemBuilder: (context, index) {
                 final cocktail = filteredCocktails[index];
                 final isInCollection = widget.existingCocktailIds.contains(cocktail.id);
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () async {
-                        if (isInCollection) {
-                          await (widget.database.delete(widget.database.collectionCocktails)
-                            ..where((tbl) {
-                              return tbl.collectionId.equals(widget.collection.id) &
-                                  tbl.cocktailId.equals(cocktail.id);
-                            })).go();
-                          widget.existingCocktailIds.remove(cocktail.id);
-                        } else {
-                          await widget.database.into(widget.database.collectionCocktails).insert(
-                            CollectionCocktailsCompanion.insert(
-                              collectionId: widget.collection.id,
-                              cocktailId: cocktail.id,
-                            ),
-                          );
-                          widget.existingCocktailIds.add(cocktail.id);
-                        }
-                        setState(() {});
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surfaceDark,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isInCollection ? AppTheme.accentGold : AppTheme.surfaceLight,
-                            width: isInCollection ? 2 : 1,
-                          ),
+                return _PickerRow(
+                  cocktail: cocktail,
+                  isInCollection: isInCollection,
+                  onTap: () async {
+                    if (isInCollection) {
+                      await (widget.database.delete(widget.database.collectionCocktails)
+                        ..where((tbl) {
+                          return tbl.collectionId.equals(widget.collection.id) &
+                              tbl.cocktailId.equals(cocktail.id);
+                        })).go();
+                      widget.existingCocktailIds.remove(cocktail.id);
+                      _pendingAdded.remove(cocktail.id);
+                      _pendingRemoved.add(cocktail.id);
+                    } else {
+                      await widget.database.into(widget.database.collectionCocktails).insert(
+                        CollectionCocktailsCompanion.insert(
+                          collectionId: widget.collection.id,
+                          cocktailId: cocktail.id,
                         ),
-                        child: Row(
-                          children: [
-                            if (cocktail.imagePath != null)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.asset(
-                                  cocktail.imagePath!,
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 60,
-                                      height: 60,
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.surfaceLight,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Icon(
-                                        Icons.local_bar,
-                                        color: AppTheme.accentGold,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              )
-                            else
-                              Container(
-                                width: 60,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surfaceLight,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.local_bar,
-                                  color: AppTheme.accentGold,
-                                ),
-                              ),
-                            const SizedBox(width: 12),
-                            Container(
-                              width: 4,
-                              height: 60,
-                              decoration: BoxDecoration(
-                                color: AppTheme.accentGold,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    cocktail.name.toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        cocktail.baseSpirit.toUpperCase(),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppTheme.accentGold,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                      Container(
-                                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                                        width: 3,
-                                        height: 3,
-                                        decoration: const BoxDecoration(
-                                          color: AppTheme.textSecondary,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      Text(
-                                        cocktail.method.toUpperCase(),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppTheme.textSecondary,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    cocktail.glass,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(
-                              isInCollection ? Icons.check_circle : Icons.circle_outlined,
-                              color: isInCollection ? AppTheme.accentGold : AppTheme.textSecondary,
-                              size: 28,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                      );
+                      widget.existingCocktailIds.add(cocktail.id);
+                      _pendingAdded.add(cocktail.id);
+                      _pendingRemoved.remove(cocktail.id);
+                    }
+                    setState(() {});
+                  },
                 );
               },
             ),
           ),
-          // Done button at bottom
+
+          // ── Dynamic bottom action ────────────────────────────────
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryDark,
               border: Border(
-                top: BorderSide(color: AppTheme.surfaceLight),
-              ),
-            ),
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                widget.onClose();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.accentGold,
-                foregroundColor: AppTheme.primaryDark,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                top: BorderSide(
+                  color: AppTheme.accentGold.withValues(alpha: 0.14),
                 ),
               ),
-              child: const Text(
-                'DONE',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: SizedBox(
+                key: ValueKey(buttonIsAction),
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    widget.onClose();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: buttonIsAction
+                        ? AppTheme.accentGold
+                        : AppTheme.surfaceDark,
+                    foregroundColor: buttonIsAction
+                        ? AppTheme.primaryDark
+                        : AppTheme.textSecondary,
+                    elevation: buttonIsAction ? 2 : 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: buttonIsAction
+                          ? BorderSide.none
+                          : BorderSide(
+                              color: AppTheme.surfaceLight.withValues(alpha: 0.6),
+                            ),
+                    ),
+                  ),
+                  child: Text(
+                    buttonLabel.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      color: buttonIsAction ? AppTheme.primaryDark : AppTheme.textSecondary,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -486,6 +445,149 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
     );
   }
 }
+
+// ── Picker Row ─────────────────────────────────────────────────────────────────
+// Compact, picker-friendly variant of VaultCocktailRow with premium selection state
+class _PickerRow extends StatelessWidget {
+  final Cocktail cocktail;
+  final bool isInCollection;
+  final VoidCallback onTap;
+
+  const _PickerRow({
+    required this.cocktail,
+    required this.isInCollection,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = [cocktail.baseSpirit, cocktail.method]
+        .where((v) => v.trim().isNotEmpty)
+        .join(' · ');
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isInCollection
+              ? AppTheme.accentGold.withValues(alpha: 0.06)
+              : AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isInCollection
+                ? AppTheme.accentGold.withValues(alpha: 0.55)
+                : AppTheme.surfaceLight.withValues(alpha: 0.55),
+            width: isInCollection ? 1.5 : 1.0,
+          ),
+          boxShadow: isInCollection
+              ? [
+                  BoxShadow(
+                    color: AppTheme.accentGold.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            // Gold accent bar (matches VaultCocktailRow)
+            Container(
+              width: 3,
+              height: 44,
+              decoration: BoxDecoration(
+                color: isInCollection
+                    ? AppTheme.accentGold
+                    : AppTheme.accentGold.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // Text content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cocktail.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isInCollection ? AppTheme.textPrimary : AppTheme.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (meta.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isInCollection
+                            ? AppTheme.accentGold.withValues(alpha: 0.75)
+                            : AppTheme.textSecondary,
+                        fontSize: 11,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Premium selection badge
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+              child: isInCollection
+                  ? Container(
+                      key: const ValueKey('checked'),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentGold,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accentGold.withValues(alpha: 0.35),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 14,
+                        color: AppTheme.primaryDark,
+                      ),
+                    )
+                  : Container(
+                      key: const ValueKey('unchecked'),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppTheme.surfaceLight,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Filter helpers ─────────────────────────────────────────────────────────────
 
 class _FilterSection extends StatelessWidget {
   final String label;

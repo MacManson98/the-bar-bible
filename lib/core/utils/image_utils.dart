@@ -10,6 +10,7 @@ class ImageUtils {
     'jpeg',
     'webp',
   ];
+  static final Map<String, String?> _resolvedCache = {};
 
   /// Find the first available image format for a given base path
   /// 
@@ -24,12 +25,16 @@ class ImageUtils {
     if (basePath.contains('.')) {
       basePath = basePath.substring(0, basePath.lastIndexOf('.'));
     }
+    if (_resolvedCache.containsKey(basePath)) {
+      return _resolvedCache[basePath];
+    }
 
     for (final extension in _supportedFormats) {
       final fullPath = '$basePath.$extension';
       try {
         // Try to load the asset to check if it exists
         await rootBundle.load(fullPath);
+        _resolvedCache[basePath] = fullPath;
         return fullPath; // Image found!
       } catch (_) {
         // Image not found, try next format
@@ -38,6 +43,7 @@ class ImageUtils {
     }
 
     // No image found in any format
+    _resolvedCache[basePath] = null;
     return null;
   }
 

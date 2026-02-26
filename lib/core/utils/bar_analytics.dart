@@ -23,7 +23,12 @@ class BarAnalytics {
     // 2. Load all data
     final allCocktails = await database.select(database.cocktails).get();
     final allIngredients = await database.select(database.ingredients).get();
+    final allCiRows = await database.select(database.cocktailIngredients).get();
     final ingredientMap = {for (var i in allIngredients) i.id: i};
+    final cisByCocktail = <int, List<CocktailIngredient>>{};
+    for (final ci in allCiRows) {
+      cisByCocktail.putIfAbsent(ci.cocktailId, () => <CocktailIngredient>[]).add(ci);
+    }
 
     // Build canonical sets
     final Set<String> barCanonicals = {};
@@ -43,9 +48,7 @@ class BarAnalytics {
     final Map<String, int> missingIngredientUnlocks = {};
 
     for (final cocktail in allCocktails) {
-      final ciRows = await (database.select(database.cocktailIngredients)
-            ..where((ci) => ci.cocktailId.equals(cocktail.id)))
-          .get();
+      final ciRows = cisByCocktail[cocktail.id] ?? const <CocktailIngredient>[];
       if (ciRows.isEmpty) continue;
 
       // Deduplicate by canonical
@@ -96,9 +99,7 @@ class BarAnalytics {
       final List<String> unlockNames = [];
       for (final cocktail in allCocktails) {
         if (unlockNames.length >= 3) break;
-        final ciRows = await (database.select(database.cocktailIngredients)
-              ..where((ci) => ci.cocktailId.equals(cocktail.id)))
-            .get();
+        final ciRows = cisByCocktail[cocktail.id] ?? const <CocktailIngredient>[];
 
         final Map<String, String> required = {};
         for (final ci in ciRows) {
@@ -191,13 +192,16 @@ class BarAnalytics {
 
     // Count cocktails makeable before and after
     final allCocktails = await database.select(database.cocktails).get();
+    final allCiRows = await database.select(database.cocktailIngredients).get();
+    final cisByCocktail = <int, List<CocktailIngredient>>{};
+    for (final ci in allCiRows) {
+      cisByCocktail.putIfAbsent(ci.cocktailId, () => <CocktailIngredient>[]).add(ci);
+    }
     int beforeCount = 0;
     int afterCount = 0;
 
     for (final cocktail in allCocktails) {
-      final ciRows = await (database.select(database.cocktailIngredients)
-            ..where((ci) => ci.cocktailId.equals(cocktail.id)))
-          .get();
+      final ciRows = cisByCocktail[cocktail.id] ?? const <CocktailIngredient>[];
       if (ciRows.isEmpty) continue;
 
       final Map<String, String> required = {};

@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'core/theme/app_theme.dart';
+import 'core/services/bar_service.dart';
 import 'core/utils/image_utils.dart';
 import 'data/database.dart';
 import 'screens/home_screen.dart';
 import 'screens/cocktail_detail_screen.dart';
 import 'screens/finder_screen.dart';
 import 'screens/my_bar_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,53 +62,106 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _selectedIndex = 0;
+  static const int _homeTabIndex = 0;
+  static const int _browseTabIndex = 1;
+  static const int _finderTabIndex = 2;
+  static const int _myBarTabIndex = 3;
+
+  int _selectedIndex = _homeTabIndex;
+  String _activeBarName = 'My Bar';
+  late final BarService _barService;
   
-  // GlobalKey to reach Finder state for My Bar communication
+  // GlobalKeys to reach tab states for cross-tab refresh
   final _finderKey = GlobalKey<FinderScreenState>();
-  
-  late final List<Widget> _screens;
+  final _myBarKey = GlobalKey<MyBarScreenState>();
+  Timer? _barChangedDebounceTimer;
   
   @override
   void initState() {
     super.initState();
-    _screens = [
+    _barService = BarService(widget.database);
+    _loadActiveBarName();
+  }
+
+  List<Widget> _buildScreens() {
+    return [
       HomeScreen(
         database: widget.database,
-        onNavigateToBrowse: () => _onTabTapped(1),
-        onNavigateToFinder: () => _onTabTapped(2),
+        activeBarName: _activeBarName,
+        onNavigateToBrowse: () => _onTabTapped(_browseTabIndex),
+        onNavigateToFinder: () => _onTabTapped(_finderTabIndex),
       ),
       CocktailsListScreen(database: widget.database),
       FinderScreen(
         key: _finderKey,
         database: widget.database,
-        onNavigateToMyBar: () => _onTabTapped(3),
+        onBarSwitched: _switchBarFromPill,
+        onNavigateToMyBar: () => _onTabTapped(_myBarTabIndex),
       ),
       MyBarScreen(
+        key: _myBarKey,
         database: widget.database,
+        activeBarName: _activeBarName,
+        onBarSwitched: _switchBarFromPill,
         onBarChanged: _onBarChanged,
-        onNavigateToFinder: () => _onTabTapped(2),
+        onNavigateToFinder: () => _onTabTapped(_finderTabIndex),
       ),
+      const SettingsScreen(),
     ];
+  }
+
+  Future<void> _loadActiveBarName() async {
+    final bar = await widget.database.getDefaultSavedBar();
+    if (mounted && bar != null) {
+      setState(() => _activeBarName = bar.name);
+    }
+  }
+
+  /// Called when the Bar Context Pill selects a different bar.
+  Future<void> _switchBarFromPill(int barId) async {
+    await _barService.setDefaultBar(barId);
+
+    // Refresh pill label
+    await _loadActiveBarName();
+
+    // Refresh both bar-aware tabs (await My Bar so it finishes before user sees stale data)
+    _finderKey.currentState?.loadBarAndMatch();
+    await _myBarKey.currentState?.loadData();
   }
 
   void _onTabTapped(int index) {
     // If switching TO Finder, refresh it (bar may have changed)
-    if (index == 2 && _selectedIndex != 2) {
+    if (index == _finderTabIndex && _selectedIndex != _finderTabIndex) {
       _finderKey.currentState?.loadBarAndMatch();
+    }
+    // If switching TO My Bar, refresh it (active bar may have changed in Finder)
+    if (index == _myBarTabIndex && _selectedIndex != _myBarTabIndex) {
+      _myBarKey.currentState?.loadData();
     }
     setState(() {
       _selectedIndex = index;
     });
   }
 
-  /// Called by My Bar whenever an ingredient is toggled.
+  /// Called by My Bar whenever an ingredient is toggled or bar is switched.
   void _onBarChanged() {
-    // If Finder is the active tab, refresh immediately.
-    // Otherwise it will refresh when user switches to Finder tab.
-    if (_selectedIndex == 2) {
-      _finderKey.currentState?.loadBarAndMatch();
-    }
+    _barChangedDebounceTimer?.cancel();
+    _barChangedDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      // Keep pill label in sync (My Bar may have switched bars internally)
+      _loadActiveBarName();
+      // If Finder is the active tab, refresh immediately.
+      // Otherwise it will refresh when user switches to Finder tab.
+      if (_selectedIndex == _finderTabIndex) {
+        _finderKey.currentState?.loadBarAndMatch();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _barChangedDebounceTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -113,7 +169,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: _buildScreens(),
       ),
       extendBody: true,
       bottomNavigationBar: _buildBottomNavBar(),
@@ -204,6 +260,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Icon(Icons.liquor, size: 24),
               ),
               label: 'My Bar',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.settings_outlined, size: 24),
+              ),
+              activeIcon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.settings, size: 24),
+              ),
+              label: 'Settings',
             ),
           ],
         ),
@@ -594,3 +661,4 @@ class _EmptyState extends StatelessWidget {
     ]));
   }
 }
+

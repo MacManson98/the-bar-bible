@@ -1,32 +1,24 @@
+import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:drift/drift.dart' hide Column;
+import '../core/services/bar_service.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/bar_create_diagnostics.dart';
+import '../core/utils/image_utils.dart';
 import '../core/utils/bar_analytics.dart';
 import '../data/database.dart';
 import '../data/ingredient_data.dart';
-import 'achievements_screen.dart';
+import '../widgets/bar_selector_dropdown.dart';
+import 'cocktail_detail_screen.dart';
 
 typedef BarChangedCallback = void Function();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SHELF CONFIG
 // ═══════════════════════════════════════════════════════════════════════════════
-
-const Map<String, int> _coreShelfTargets = {
-  'Spirits': 4,
-  'Liqueurs': 3,
-  'Citrus': 2,
-  'Juices': 2,
-  'Sweeteners': 2,
-  'Mixers': 2,
-  'Bitters': 2,
-  'Coffee': 1,
-  'Other': 1,
-};
-
-int get _totalShelfTarget => _coreShelfTargets.values.fold(0, (a, b) => a + b);
 
 class _AchievementMilestone {
   final String key;
@@ -92,18 +84,55 @@ const Map<String, List<_BottleSpec>> _categoryBottles = {
   'Other': [_BottleSpec(_BottleShape.box, heightScale: 1.0, hMargin: 0.0)],
 };
 
-/// Ambient warmth: as bar fills, the environment subtly warms.
-/// Returns 0.0 (empty) to 1.0 (fully stocked).
-double _barWarmth(Map<String, int> counts) {
-  int filled = 0;
-  int total = 0;
-  for (final cat in IngredientCategory.allCategories) {
-    final stocked = counts[cat] ?? 0;
-    final target = _coreShelfTargets[cat] ?? 2;
-    filled += min(stocked, target);
-    total += target;
-  }
-  return total > 0 ? (filled / total).clamp(0.0, 1.0) : 0.0;
+const Map<String, double> _seriousnessCategoryWeights = {
+  IngredientCategory.spirits: 1.0,
+  IngredientCategory.liqueurs: 0.78,
+  IngredientCategory.bitters: 0.56,
+  IngredientCategory.citrus: 0.42,
+  IngredientCategory.juices: 0.38,
+  IngredientCategory.sweeteners: 0.34,
+  IngredientCategory.mixers: 0.30,
+  IngredientCategory.coffee: 0.24,
+  IngredientCategory.other: 0.16,
+};
+
+const double _seriousnessSmallCountFactor = 0.18;
+const bool _debugShowBackbarBounds = false;
+
+class _BackbarDensityConfig {
+  final int bottleCount;
+  final int backRowCount;
+  final double spacingTightness;
+  final double fillLevel;
+
+  const _BackbarDensityConfig({
+    required this.bottleCount,
+    required this.backRowCount,
+    required this.spacingTightness,
+    required this.fillLevel,
+  });
+
+  const _BackbarDensityConfig.empty()
+    : bottleCount = 6,
+      backRowCount = 0,
+      spacingTightness = 0.0,
+      fillLevel = 0.08;
+
+  int get frontRowCount => max(0, bottleCount - backRowCount);
+}
+
+class _SeriousnessSnapshot {
+  final Map<String, int> categoryCounts;
+  final int stockedCount;
+  final double index;
+  final _BackbarDensityConfig density;
+
+  const _SeriousnessSnapshot({
+    required this.categoryCounts,
+    required this.stockedCount,
+    required this.index,
+    required this.density,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -112,21 +141,25 @@ double _barWarmth(Map<String, int> counts) {
 
 class MyBarScreen extends StatefulWidget {
   final AppDatabase database;
+  final String activeBarName;
+  final ValueChanged<int>? onBarSwitched;
   final BarChangedCallback? onBarChanged;
   final VoidCallback? onNavigateToFinder;
 
   const MyBarScreen({
     super.key,
     required this.database,
+    required this.activeBarName,
+    this.onBarSwitched,
     this.onBarChanged,
     this.onNavigateToFinder,
   });
 
   @override
-  State<MyBarScreen> createState() => _MyBarScreenState();
+  State<MyBarScreen> createState() => MyBarScreenState();
 }
 
-class _MyBarScreenState extends State<MyBarScreen>
+class MyBarScreenState extends State<MyBarScreen>
     with TickerProviderStateMixin {
   List<Ingredient> _allIngredients = [];
   Set<int> _barIngredientIds = {};
@@ -140,9 +173,10 @@ class _MyBarScreenState extends State<MyBarScreen>
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
 
-  final ScrollController _listScrollController = ScrollController();
+  final ScrollController _listScrollController = ScrollController(
+    keepScrollOffset: false,
+  );
   final Map<String, GlobalKey> _categoryKeys = {};
-
   int _suggestionMode = 0;
   static const _suggestionLabels = [
     'Closest unlock',
@@ -160,13 +194,39 @@ class _MyBarScreenState extends State<MyBarScreen>
 
   late AnimationController _counterAnimController;
   late BarAnalytics _barAnalytics;
-  Map<String, int> _prevCategoryCounts = {};
+  late final BarService _barService;
   Set<String> _earnedAchievementKeys = {};
+  List<Cocktail> _allCocktailsCache = [];
+  Map<int, Set<String>> _requiredCanonicalsByCocktail = {};
+  bool _matchDataLoaded = false;
+  bool _unlockSheetOpen = false;
+  int _pendingUnlockCount = 0;
+  final Set<int> _pendingUnlockedCocktailIds = <int>{};
+  final Set<int> _busyIngredientIds = <int>{};
+  final Map<int, BuildContext> _ingredientRowContexts = <int, BuildContext>{};
+  final Set<String> _suggestionAddsInFlight = <String>{};
+  DateTime? _lastSuggestionAddAt;
+  bool _isCreatingBar = false;
+  BarCreateDiagnosticsFlow? _createDiagnostics;
+  bool _createHydrationScheduled = false;
+  int? _pendingCreateHydrationBarId;
+  BarCreateDiagnosticsFlow? _pendingCreateHydrationDiagnostics;
+  DateTime? _lastImeSensitiveEventAt;
+  Timer? _searchDebounceTimer;
+  Timer? _unlockDebounceTimer;
+  DateTime? _suppressUnlockSheetUntil;
+  Map<String, int> _categoryCountsCache = const {};
+  int _totalStockedCountCache = 0;
+  double _seriousnessIndexCache = 0.0;
+  _BackbarDensityConfig _backbarDensityCache =
+      const _BackbarDensityConfig.empty();
+  bool _lastHeroChangeWasAdd = false;
 
   @override
   void initState() {
     super.initState();
     _barAnalytics = BarAnalytics(widget.database);
+    _barService = BarService(widget.database);
 
     _headerAnimController = AnimationController(
       vsync: this,
@@ -207,15 +267,20 @@ class _MyBarScreenState extends State<MyBarScreen>
 
   @override
   void dispose() {
+    _finishCreateDiagnostics(result: 'disposed');
     _searchController.dispose();
     _searchFocusNode.dispose();
     _listScrollController.dispose();
     _headerAnimController.dispose();
     _unlockAnimController.dispose();
     _counterAnimController.dispose();
+    _searchDebounceTimer?.cancel();
+    _unlockDebounceTimer?.cancel();
     _unlockOverlay?.remove();
     super.dispose();
   }
+
+  Future<void> loadData() => _loadData();
 
   Future<void> _loadData() async {
     final ingredients = await widget.database
@@ -244,13 +309,24 @@ class _MyBarScreenState extends State<MyBarScreen>
     );
     final barIds = barIngredients.map((i) => i.id).toSet();
     final analytics = await _barAnalytics.compute();
+    final seriousness = _computeSeriousnessSnapshot(
+      ingredients: ingredients,
+      stockedIds: barIds,
+    );
 
+    if (!mounted) return;
     setState(() {
       _allIngredients = ingredients;
       _activeBar = activeBar;
-      _savedBars = bars;
+      _savedBars = List<SavedBar>.from(bars)
+          ..sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
       _barIngredientIds = barIds;
       _analytics = analytics;
+      _categoryCountsCache = seriousness.categoryCounts;
+      _totalStockedCountCache = seriousness.stockedCount;
+      _seriousnessIndexCache = seriousness.index;
+      _backbarDensityCache = seriousness.density;
+      _lastHeroChangeWasAdd = false;
       _isLoading = false;
     });
     _earnedAchievementKeys = _earnedAchievementSetForCount(
@@ -258,10 +334,215 @@ class _MyBarScreenState extends State<MyBarScreen>
     );
 
     _headerAnimController.forward();
+    _scrollIngredientListToTop();
+  }
+
+  void _scrollIngredientListToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_listScrollController.hasClients) return;
+      if (_listScrollController.offset <= 0.5) return;
+      _listScrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _setSearchQuery(String value) {
+    _searchDebounceTimer?.cancel();
+    if (value.isEmpty) {
+      if (_searchQuery.isEmpty) return;
+      setState(() => _searchQuery = '');
+      _scrollIngredientListToTop();
+      return;
+    }
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || value == _searchQuery) return;
+      setState(() => _searchQuery = value);
+      _scrollIngredientListToTop();
+    });
+  }
+
+  Future<void> _delayForImeSettleIfNeeded() async {
+    final last = _lastImeSensitiveEventAt;
+    if (last == null) return;
+    const settleWindow = Duration(milliseconds: 220);
+    final elapsed = DateTime.now().difference(last);
+    if (elapsed >= settleWindow) return;
+    final wait = settleWindow - elapsed;
+    if (kDebugMode) {
+      debugPrint('MyBar IME settle delay ${wait.inMilliseconds}ms');
+    }
+    await Future.delayed(wait);
+  }
+
+  String _nextAutoBarName(List<SavedBar> bars) {
+    final names = bars.map((b) => b.name.trim().toLowerCase()).toSet();
+    const base = 'new bar';
+    if (!names.contains(base)) return 'New Bar';
+    var index = 2;
+    while (names.contains('$base $index')) {
+      index++;
+    }
+    return 'New Bar $index';
+  }
+
+  void _markCreateSetState(String reason) {
+    _createDiagnostics?.incrementSetState(reason);
+  }
+
+  void _finishCreateDiagnostics({required String result}) {
+    _createDiagnostics?.finish(result: result);
+    _createDiagnostics = null;
+  }
+
+  Future<void> _handleSuggestionAdd() async {
+    final suggestion = _analytics?.suggestion;
+    if (suggestion == null) return;
+
+    final canonical = suggestion.canonicalName;
+    final now = DateTime.now();
+    final last = _lastSuggestionAddAt;
+    if (last != null && now.difference(last).inMilliseconds < 150) {
+      return;
+    }
+    _lastSuggestionAddAt = now;
+
+    if (_suggestionAddsInFlight.contains(canonical)) return;
+
+    final matches = _allIngredients
+        .where((i) => IngredientEquivalence.normalise(i.name) == canonical)
+        .toList(growable: false);
+    if (matches.isEmpty) return;
+
+    Ingredient? target;
+    for (final ingredient in matches) {
+      if (!_barIngredientIds.contains(ingredient.id)) {
+        target = ingredient;
+        break;
+      }
+    }
+    if (target == null) return;
+
+    if (!mounted) return;
+    setState(() => _suggestionAddsInFlight.add(canonical));
+
+    try {
+      await _toggleIngredient(target.id);
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not add suggested ingredient. Please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _suggestionAddsInFlight.remove(canonical));
+      }
+    }
+  }
+
+  _SeriousnessSnapshot _computeSeriousnessSnapshot({
+    required List<Ingredient> ingredients,
+    required Set<int> stockedIds,
+  }) {
+    final categoryCounts = <String, int>{};
+    final allCategoryTotals = <String, int>{};
+
+    for (final ingredient in ingredients) {
+      allCategoryTotals[ingredient.category] =
+          (allCategoryTotals[ingredient.category] ?? 0) + 1;
+      if (stockedIds.contains(ingredient.id)) {
+        categoryCounts[ingredient.category] =
+            (categoryCounts[ingredient.category] ?? 0) + 1;
+      }
+    }
+
+    double seriousnessScore = 0.0;
+    double maxSeriousnessScore = 0.0;
+    for (final category in IngredientCategory.allCategories) {
+      final weight = _seriousnessCategoryWeights[category] ?? 0.2;
+      seriousnessScore += weight * (categoryCounts[category] ?? 0);
+      maxSeriousnessScore += weight * (allCategoryTotals[category] ?? 0);
+    }
+
+    final scoreNorm = maxSeriousnessScore > 0
+        ? (seriousnessScore / maxSeriousnessScore).clamp(0.0, 1.0)
+        : 0.0;
+    final totalNorm = ingredients.isNotEmpty
+        ? (stockedIds.length / ingredients.length).clamp(0.0, 1.0)
+        : 0.0;
+    final combined =
+        (scoreNorm + (_seriousnessSmallCountFactor * totalNorm)) /
+        (1.0 + _seriousnessSmallCountFactor);
+    final seriousnessIndex = combined.clamp(0.0, 1.0);
+
+    return _SeriousnessSnapshot(
+      categoryCounts: categoryCounts,
+      stockedCount: stockedIds.length,
+      index: seriousnessIndex,
+      density: _densityForSeriousnessIndex(seriousnessIndex),
+    );
+  }
+
+  _BackbarDensityConfig _densityForSeriousnessIndex(double index) {
+    int total;
+    double spacingTightness;
+    if (index < 0.2) {
+      final t = (index / 0.2).clamp(0.0, 1.0);
+      total = (6 + (2 * t)).round();
+      spacingTightness = 0.06;
+    } else if (index < 0.5) {
+      final t = ((index - 0.2) / 0.3).clamp(0.0, 1.0);
+      total = (10 + (4 * t)).round();
+      spacingTightness = 0.15;
+    } else if (index < 0.8) {
+      final t = ((index - 0.5) / 0.3).clamp(0.0, 1.0);
+      total = (16 + (6 * t)).round();
+      spacingTightness = 0.23;
+    } else {
+      final t = ((index - 0.8) / 0.2).clamp(0.0, 1.0);
+      total = (24 + (6 * t)).round();
+      spacingTightness = 0.30;
+    }
+    total = max(6, total);
+
+    final hasBackRow = index >= 0.5;
+    final backRatio = index >= 0.8 ? 0.40 : 0.32;
+    final backRow = hasBackRow ? (total * backRatio).round() : 0;
+    final fillLevel = (0.10 + (index * 0.86)).clamp(0.0, 1.0);
+
+    return _BackbarDensityConfig(
+      bottleCount: total,
+      backRowCount: backRow,
+      spacingTightness: spacingTightness,
+      fillLevel: fillLevel,
+    );
+  }
+
+  void _recomputeSeriousnessCaches({required bool changedByAdd}) {
+    _createDiagnostics?.incrementCounter(
+      '_recomputeSeriousnessCaches',
+      stackTrace: StackTrace.current,
+    );
+    final snapshot = _computeSeriousnessSnapshot(
+      ingredients: _allIngredients,
+      stockedIds: _barIngredientIds,
+    );
+    _categoryCountsCache = snapshot.categoryCounts;
+    _totalStockedCountCache = snapshot.stockedCount;
+    _seriousnessIndexCache = snapshot.index;
+    _backbarDensityCache = snapshot.density;
+    _lastHeroChangeWasAdd = changedByAdd;
   }
 
   Future<void> _refreshAnalytics() async {
-    _prevCategoryCounts = Map.from(_categoryCounts);
     final analytics = await _barAnalytics.compute();
     _checkForNewAchievements();
     if (mounted) {
@@ -283,9 +564,6 @@ class _MyBarScreenState extends State<MyBarScreen>
     }
     return set;
   }
-
-  int get _earnedAchievementCount =>
-      _earnedAchievementSetForCount(_barIngredientIds.length).length;
 
   void _checkForNewAchievements() {
     final current = _earnedAchievementSetForCount(_barIngredientIds.length);
@@ -407,47 +685,348 @@ class _MyBarScreenState extends State<MyBarScreen>
     }
   }
 
-  Future<void> _toggleIngredient(int ingredientId, {GlobalKey? rowKey}) async {
+  Future<void> _toggleIngredient(int ingredientId) async {
     if (_activeBar == null) return;
+    if (_busyIngredientIds.contains(ingredientId)) return;
+
+    setState(() => _busyIngredientIds.add(ingredientId));
     HapticFeedback.lightImpact();
 
-    final isAdding = !_barIngredientIds.contains(ingredientId);
-    int delta = 0;
-    if (isAdding) {
-      delta = await _barAnalytics.computeUnlockDelta(ingredientId, true);
-    }
+    try {
+      final isAdding = !_barIngredientIds.contains(ingredientId);
+      Set<int> exactBefore = {};
+      Set<int> exactAfter = {};
+      int delta = 0;
+      if (isAdding) {
+        exactBefore = await _computeExactMatchCocktailIds(_barIngredientIds);
+        delta = await _barAnalytics.computeUnlockDelta(ingredientId, true);
+      }
 
-    if (_barIngredientIds.contains(ingredientId)) {
-      await (widget.database.delete(widget.database.savedBarIngredients)..where(
-            (bi) =>
-                bi.savedBarId.equals(_activeBar!.id) &
-                bi.ingredientId.equals(ingredientId),
-          ))
-          .go();
-      setState(() => _barIngredientIds.remove(ingredientId));
-    } else {
-      await widget.database
-          .into(widget.database.savedBarIngredients)
-          .insert(
-            SavedBarIngredientsCompanion.insert(
-              savedBarId: _activeBar!.id,
-              ingredientId: ingredientId,
-            ),
-          );
-      setState(() => _barIngredientIds.add(ingredientId));
-    }
+      if (_barIngredientIds.contains(ingredientId)) {
+        await (widget.database.delete(widget.database.savedBarIngredients)
+              ..where(
+                (bi) =>
+                    bi.savedBarId.equals(_activeBar!.id) &
+                    bi.ingredientId.equals(ingredientId),
+              ))
+            .go();
+        setState(() {
+          _barIngredientIds.remove(ingredientId);
+          _recomputeSeriousnessCaches(changedByAdd: false);
+        });
+      } else {
+        await widget.database.addIngredientToSavedBar(
+          savedBarId: _activeBar!.id,
+          ingredientId: ingredientId,
+        );
+        setState(() {
+          _barIngredientIds.add(ingredientId);
+          _recomputeSeriousnessCaches(changedByAdd: true);
+        });
+        exactAfter = await _computeExactMatchCocktailIds(_barIngredientIds);
+      }
 
-    if (isAdding && delta > 0 && rowKey != null) {
-      _showUnlockDelta(delta, rowKey);
-    }
+      final anchorContext = _ingredientRowContexts[ingredientId];
+      if (isAdding && delta > 0 && anchorContext != null && anchorContext.mounted) {
+        _showUnlockDelta(delta, anchorContext);
+      }
+      if (isAdding) {
+        final newlyUnlockedIds = exactAfter.difference(exactBefore);
+        if (newlyUnlockedIds.isNotEmpty) {
+          _queueUnlockedCocktails(newlyUnlockedIds);
+        }
+      }
 
-    widget.onBarChanged?.call();
-    _refreshAnalytics();
+      widget.onBarChanged?.call();
+      await _refreshAnalytics();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update ingredient. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyIngredientIds.remove(ingredientId));
+      }
+    }
   }
 
-  void _showUnlockDelta(int delta, GlobalKey rowKey) {
+  Future<void> _ensureMatchDataLoaded() async {
+    if (_matchDataLoaded) return;
+    final cocktails = await widget.database
+        .select(widget.database.cocktails)
+        .get();
+    final allCi = await widget.database
+        .select(widget.database.cocktailIngredients)
+        .get();
+    final ingredientNameById = {for (final i in _allIngredients) i.id: i.name};
+    final required = <int, Set<String>>{};
+    for (final ci in allCi) {
+      final ingredientName = ingredientNameById[ci.ingredientId];
+      if (ingredientName == null) continue;
+      final canon = IngredientEquivalence.normalise(ingredientName);
+      required.putIfAbsent(ci.cocktailId, () => <String>{}).add(canon);
+    }
+    _allCocktailsCache = cocktails;
+    _requiredCanonicalsByCocktail = required;
+    _matchDataLoaded = true;
+  }
+
+  Future<Set<int>> _computeExactMatchCocktailIds(
+    Set<int> barIngredientIds,
+  ) async {
+    await _ensureMatchDataLoaded();
+    final ingredientNameById = {for (final i in _allIngredients) i.id: i.name};
+    final barCanonicals = <String>{};
+    for (final id in barIngredientIds) {
+      final name = ingredientNameById[id];
+      if (name != null) {
+        barCanonicals.add(IngredientEquivalence.normalise(name));
+      }
+    }
+    final barSubCanonicals = <String>{};
+    for (final canon in barCanonicals) {
+      barSubCanonicals.addAll(IngredientSubstitutions.getSubstitutes(canon));
+    }
+
+    final exact = <int>{};
+    for (final cocktail in _allCocktailsCache) {
+      final required = _requiredCanonicalsByCocktail[cocktail.id];
+      if (required == null || required.isEmpty) continue;
+      bool allMatched = true;
+      for (final canon in required) {
+        if (!barCanonicals.contains(canon) &&
+            !barSubCanonicals.contains(canon)) {
+          allMatched = false;
+          break;
+        }
+      }
+      if (allMatched) exact.add(cocktail.id);
+    }
+    return exact;
+  }
+
+  void _queueUnlockedCocktails(Set<int> newlyUnlockedIds) {
+    if (newlyUnlockedIds.isEmpty || !mounted) return;
+    _pendingUnlockedCocktailIds.addAll(newlyUnlockedIds);
+    _pendingUnlockCount = _pendingUnlockedCocktailIds.length;
+
+    _unlockDebounceTimer?.cancel();
+    _unlockDebounceTimer = Timer(
+      const Duration(milliseconds: 900),
+      _flushPendingUnlocks,
+    );
+  }
+
+  void _clearPendingUnlocks() {
+    _pendingUnlockedCocktailIds.clear();
+    _pendingUnlockCount = 0;
+  }
+
+  Future<void> _flushPendingUnlocks() async {
+    if (!mounted || _pendingUnlockCount == 0) return;
+
+    if (_unlockSheetOpen) {
+      _unlockDebounceTimer?.cancel();
+      _unlockDebounceTimer = Timer(
+        const Duration(milliseconds: 350),
+        _flushPendingUnlocks,
+      );
+      return;
+    }
+
+    final suppressUntil = _suppressUnlockSheetUntil;
+    if (suppressUntil != null && DateTime.now().isBefore(suppressUntil)) {
+      _clearPendingUnlocks();
+      return;
+    }
+
+    final idsToShow = Set<int>.from(_pendingUnlockedCocktailIds);
+    _clearPendingUnlocks();
+
+    final keepAddingSelected = await _showUnlockedCocktailsSheet(idsToShow);
+    if (keepAddingSelected) {
+      _suppressUnlockSheetUntil = DateTime.now().add(
+        const Duration(seconds: 2),
+      );
+    }
+  }
+
+  Future<bool> _showUnlockedCocktailsSheet(Set<int> unlockedIds) async {
+    if (!mounted || _unlockSheetOpen) return false;
+    _unlockSheetOpen = true;
+    final unlocked =
+        _allCocktailsCache.where((c) => unlockedIds.contains(c.id)).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+
+    final keepAddingSelected = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final single = unlocked.length == 1;
+        final title = single
+            ? unlocked.first.name
+            : '${unlocked.length} cocktails unlocked';
+        final subtitle = single
+            ? 'You can now make this in ${widget.activeBarName}.'
+            : 'New recipes are now available in ${widget.activeBarName}.';
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppTheme.surfaceDark.withValues(alpha: 0.99),
+                AppTheme.primaryDark.withValues(alpha: 0.99),
+              ],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(
+              color: AppTheme.surfaceLight.withValues(alpha: 0.35),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.36),
+                blurRadius: 22,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 2,
+                width: double.infinity,
+                color: AppTheme.accentGold.withValues(alpha: 0.92),
+              ),
+              const SizedBox(height: 16),
+              _AnimatedUnlockReveal(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'UNLOCKED',
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.accentGold.withValues(alpha: 0.95),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.9),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (single)
+                _AnimatedUnlockReveal(
+                  child: SizedBox(
+                    height: 212,
+                    width: double.infinity,
+                    child: _UnlockPreviewCard(
+                      cocktail: unlocked.first,
+                      showName: false,
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 168,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: unlocked.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (_, index) => SizedBox(
+                      width: 156,
+                      child: _AnimatedUnlockReveal(
+                        child: _UnlockPreviewCard(cocktail: unlocked[index]),
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textPrimary,
+                        side: BorderSide(
+                          color: AppTheme.surfaceLight.withValues(alpha: 0.7),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      child: const Text('Keep Adding'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentGold,
+                        foregroundColor: AppTheme.primaryDark,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx, false);
+                        if (single) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CocktailDetailScreen(
+                                database: widget.database,
+                                cocktail: unlocked.first,
+                              ),
+                            ),
+                          );
+                        } else {
+                          widget.onNavigateToFinder?.call();
+                        }
+                      },
+                      child: Text(single ? 'View Cocktail' : 'View in Finder'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    _unlockSheetOpen = false;
+    return keepAddingSelected == true;
+  }
+
+  void _showUnlockDelta(int delta, BuildContext anchorContext) {
     _unlockOverlay?.remove();
-    final renderBox = rowKey.currentContext?.findRenderObject() as RenderBox?;
+    final renderBox = anchorContext.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
     final position = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
@@ -495,106 +1074,13 @@ class _MyBarScreenState extends State<MyBarScreen>
     });
   }
 
-  Future<void> _loadPreset(String presetName) async {
-    if (_activeBar == null) return;
-    final presetIngredientNames = BarPresets.getPreset(presetName);
-    if (presetIngredientNames.isEmpty) return;
-
-    final matchedIds = <int>{};
-    for (final name in presetIngredientNames) {
-      final match = _allIngredients.where(
-        (i) => i.name.toLowerCase() == name.toLowerCase(),
-      );
-      if (match.isNotEmpty) matchedIds.add(match.first.id);
-    }
-
-    await (widget.database.delete(
-      widget.database.savedBarIngredients,
-    )..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
-
-    for (final id in matchedIds) {
-      await widget.database
-          .into(widget.database.savedBarIngredients)
-          .insert(
-            SavedBarIngredientsCompanion.insert(
-              savedBarId: _activeBar!.id,
-              ingredientId: id,
-            ),
-          );
-    }
-
-    setState(() => _barIngredientIds = matchedIds);
-    widget.onBarChanged?.call();
-    _refreshAnalytics();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Loaded "$presetName" — ${matchedIds.length} ingredients',
-          ),
-          backgroundColor: AppTheme.surfaceDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
-    }
-  }
-
-  Future<void> _clearBar() async {
-    if (_activeBar == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceDark,
-        title: const Text(
-          'Clear Bar',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: const Text(
-          'Remove all ingredients from your bar?',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Clear',
-              style: TextStyle(color: AppTheme.accentGold),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    await (widget.database.delete(
-      widget.database.savedBarIngredients,
-    )..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
-    setState(() => _barIngredientIds.clear());
-    widget.onBarChanged?.call();
-    _refreshAnalytics();
-  }
-
   Future<void> _switchToBar(int barId) async {
-    await (widget.database.update(widget.database.savedBars)
-          ..where((b) => b.isDefault.equals(true)))
-        .write(const SavedBarsCompanion(isDefault: Value(false)));
-    await (widget.database.update(
-      widget.database.savedBars,
-    )..where((b) => b.id.equals(barId))).write(
-      SavedBarsCompanion(
-        isDefault: const Value(true),
-        lastUsed: Value(DateTime.now()),
-      ),
+    _createDiagnostics?.incrementCounter(
+      '_switchToBar',
+      stackTrace: StackTrace.current,
     );
+    await _delayForImeSettleIfNeeded();
+    await _barService.setDefaultBar(barId);
 
     final active = await (widget.database.select(
       widget.database.savedBars,
@@ -605,6 +1091,7 @@ class _MyBarScreenState extends State<MyBarScreen>
     )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
 
     if (!mounted) return;
+    _markCreateSetState('_switchToBar:setState');
     setState(() {
       _activeBar = active;
       _savedBars = bars;
@@ -612,150 +1099,274 @@ class _MyBarScreenState extends State<MyBarScreen>
       _activeShelfCategory = null;
       _searchQuery = '';
       _searchController.clear();
+      _recomputeSeriousnessCaches(changedByAdd: false);
     });
+    _scrollIngredientListToTop();
 
     widget.onBarChanged?.call();
     _refreshAnalytics();
   }
 
-  Future<String?> _showBarNameDialog({
-    required String title,
-    required String actionLabel,
-    String hintText = 'Bar name',
-  }) async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+  void _scheduleCreateHydration(
+    int barId, {
+    BarCreateDiagnosticsFlow? diagnostics,
+  }) {
+    _pendingCreateHydrationBarId = barId;
+    _pendingCreateHydrationDiagnostics = diagnostics;
+    if (_createHydrationScheduled) return;
+    _createHydrationScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _createHydrationScheduled = false;
+      final hydrationBarId = _pendingCreateHydrationBarId;
+      final flow = _pendingCreateHydrationDiagnostics;
+      _pendingCreateHydrationBarId = null;
+      _pendingCreateHydrationDiagnostics = null;
+      if (!mounted || hydrationBarId == null) {
+        flow?.finish(result: 'aborted');
+        if (identical(_createDiagnostics, flow)) {
+          _createDiagnostics = null;
+        }
+        return;
+      }
+
+      final phaseBSw = Stopwatch()..start();
+      try {
+        flow?.step('phaseB:postFrameStart');
+        await _delayForImeSettleIfNeeded();
+        flow?.step('phaseB:imeSettleDone');
+        if (widget.onBarSwitched != null) {
+          flow?.incrementCounter(
+            '_switchToBar(delegate)',
+            stackTrace: StackTrace.current,
+          );
+          widget.onBarSwitched!(hydrationBarId);
+        } else {
+          await _switchToBar(hydrationBarId);
+        }
+        flow?.step('phaseB:switchDone');
+      } finally {
+        flow?.step('phaseB:finally');
+        if (kDebugMode) {
+          debugPrint(
+            'MyBar create Phase B (deferred hydration) ${phaseBSw.elapsedMilliseconds}ms',
+          );
+        }
+        if (mounted) {
+          _markCreateSetState('phaseB:complete');
+          setState(() => _isCreatingBar = false);
+        }
+        _finishCreateDiagnostics(result: 'completed');
+      }
+    });
+  }
+
+  Future<void> _createNewBar() async {
+    if (_isCreatingBar) return;
+    final flow = BarCreateDiagnosticsFlow.start('MyBar');
+    _createDiagnostics = flow;
+    flow.step('tapHandler');
+    if (mounted) {
+      _markCreateSetState('create:start');
+      setState(() => _isCreatingBar = true);
+    }
+
+    final phaseASw = Stopwatch()..start();
+    try {
+      final now = DateTime.now();
+      final trimmedName = _nextAutoBarName(_savedBars);
+      flow.step('phaseA:autoName:$trimmedName');
+      final newBarId = await widget.database
+          .into(widget.database.savedBars)
+          .insert(
+            SavedBarsCompanion.insert(
+              name: trimmedName,
+              isDefault: const Value(true),
+              lastUsed: Value(now),
+            ),
+          );
+      flow.step('phaseA:insertBar');
+
+      if (!mounted) {
+        _finishCreateDiagnostics(result: 'unmounted');
+        return;
+      }
+
+      final optimisticBar = SavedBar(
+        id: newBarId,
+        name: trimmedName,
+        isDefault: true,
+        createdAt: now,
+        lastUsed: now,
+      );
+      final existing = List<SavedBar>.from(_savedBars)
+        ..removeWhere((b) => b.id == newBarId)
+        ..insert(0, optimisticBar);
+
+      _markCreateSetState('phaseA:optimisticUi');
+      setState(() {
+        _savedBars = existing;
+        _activeBar = optimisticBar;
+        _barIngredientIds = {};
+        _activeShelfCategory = null;
+        _searchQuery = '';
+        _searchController.clear();
+        _categoryCountsCache = const {};
+        _totalStockedCountCache = 0;
+        _seriousnessIndexCache = 0.0;
+        _backbarDensityCache = const _BackbarDensityConfig.empty();
+        _lastHeroChangeWasAdd = false;
+      });
+      flow.step('phaseA:setStateDone');
+      _scrollIngredientListToTop();
+      flow.step('phaseA:scrollTopDone');
+
+      if (kDebugMode) {
+        debugPrint(
+          'MyBar create Phase A (immediate UI) ${phaseASw.elapsedMilliseconds}ms',
+        );
+      }
+
+      _scheduleCreateHydration(newBarId, diagnostics: flow);
+      flow.step('phaseA:scheduleDeferredHydration');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Created "${optimisticBar.name}"'),
+            action: SnackBarAction(
+              label: 'Rename',
+              onPressed: () {
+                _showRenameBarDialog(optimisticBar.id, optimisticBar.name);
+              },
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      flow.step('error');
+      if (!mounted) {
+        _finishCreateDiagnostics(result: 'unmounted_error');
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not create bar. Please try again.'),
+        ),
+      );
+      _markCreateSetState('create:error');
+      setState(() => _isCreatingBar = false);
+      _finishCreateDiagnostics(result: 'error');
+    }
+  }
+
+  Future<void> _showRenameBarDialog(int barId, String initialName) async {
+    final controller = TextEditingController(text: initialName);
+    final renamed = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,
-        title: Text(title, style: const TextStyle(color: AppTheme.textPrimary)),
+        title: const Text(
+          'Rename Bar',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(
-            hintText: hintText,
-            hintStyle: const TextStyle(color: AppTheme.textSecondary),
-            filled: true,
-            fillColor: AppTheme.primaryDark,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
+          decoration: const InputDecoration(
+            hintText: 'Bar name',
+            hintStyle: TextStyle(color: AppTheme.textSecondary),
           ),
-          onSubmitted: (_) => Navigator.pop(ctx, controller.text.trim()),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
+            child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: Text(
-              actionLabel,
-              style: const TextStyle(color: AppTheme.accentGold),
-            ),
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx, name);
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
     );
-    if (result == null || result.trim().isEmpty) return null;
-    return result.trim();
-  }
+    controller.dispose();
+    if (!mounted || renamed == null || renamed.trim().isEmpty) return;
+    final name = renamed.trim();
 
-  Future<void> _saveCurrentBarAsNew() async {
-    final name = await _showBarNameDialog(
-      title: 'Save As New Bar',
-      actionLabel: 'Save',
-      hintText: 'e.g., Home Classic Setup',
-    );
-    if (name == null) return;
+    await (widget.database.update(widget.database.savedBars)
+          ..where((b) => b.id.equals(barId)))
+        .write(SavedBarsCompanion(name: Value(name)));
 
-    int? newBarId;
-    await widget.database.transaction(() async {
-      newBarId = await widget.database
-          .into(widget.database.savedBars)
-          .insert(
-            SavedBarsCompanion.insert(
-              name: name,
-              lastUsed: Value(DateTime.now()),
-            ),
-          );
-      for (final ingredientId in _barIngredientIds) {
-        await widget.database
-            .into(widget.database.savedBarIngredients)
-            .insert(
-              SavedBarIngredientsCompanion.insert(
-                savedBarId: newBarId!,
-                ingredientId: ingredientId,
-              ),
-            );
+    final bars = await (widget.database.select(
+      widget.database.savedBars,
+    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+    if (!mounted) return;
+    setState(() {
+      _savedBars = bars;
+      if (_activeBar?.id == barId) {
+        _activeBar = _activeBar!.copyWith(name: name);
       }
     });
-    if (newBarId == null) return;
-
-    await _switchToBar(newBarId!);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Saved "$name" as a new bar'),
-        backgroundColor: AppTheme.surfaceDark,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
   }
 
-  void _onShelfCategoryTap(String category) {
-    if (_activeShelfCategory == category) {
-      setState(() => _activeShelfCategory = null);
-    } else {
-      _activateCategoryFilter(category);
-    }
+  Future<void> _clearCurrentBarWithConfirm() async {
+    if (_activeBar == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'Clear Current Bar',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          'Remove all ingredients from "${_activeBar!.name}"?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Clear', style: TextStyle(color: Colors.red.shade300)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || _activeBar == null) return;
+
+    await (widget.database.delete(
+      widget.database.savedBarIngredients,
+    )..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
+
+    if (!mounted) return;
+    setState(() {
+      _barIngredientIds.clear();
+      _recomputeSeriousnessCaches(changedByAdd: false);
+    });
+    widget.onBarChanged?.call();
+    await _refreshAnalytics();
   }
 
   void _activateCategoryFilter(String category) {
+    if (_activeShelfCategory == category) return;
     setState(() {
       _activeShelfCategory = category;
-      _searchQuery = '';
-      _searchController.clear();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _categoryKeys[category];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-          alignment: 0.0,
-        );
-      }
-    });
+    _scrollIngredientListToTop();
   }
 
-  void _swipeIngredientCategory({required bool forward}) {
-    const categories = IngredientCategory.allCategories;
-    if (categories.isEmpty) return;
-
-    final currentIndex = _activeShelfCategory == null
-        ? -1
-        : categories.indexOf(_activeShelfCategory!);
-
-    int nextIndex;
-    if (currentIndex < 0) {
-      nextIndex = forward ? 0 : categories.length - 1;
-    } else {
-      nextIndex = (currentIndex + (forward ? 1 : -1)) % categories.length;
-      if (nextIndex < 0) nextIndex += categories.length;
-    }
-
-    final nextCategory = categories[nextIndex];
-    HapticFeedback.selectionClick();
-    _activateCategoryFilter(nextCategory);
+  void _clearCategoryFilter() {
+    if (_activeShelfCategory == null) return;
+    setState(() => _activeShelfCategory = null);
+    _scrollIngredientListToTop();
   }
 
   List<Ingredient> get _filteredIngredients {
@@ -782,39 +1393,7 @@ class _MyBarScreenState extends State<MyBarScreen>
   }
 
   Map<String, int> get _categoryCounts {
-    final map = <String, int>{};
-    for (final i in _allIngredients) {
-      if (_barIngredientIds.contains(i.id)) {
-        map[i.category] = (map[i.category] ?? 0) + 1;
-      }
-    }
-    return map;
-  }
-
-  int get _totalShelfSlotsFilled {
-    int filled = 0;
-    for (final cat in IngredientCategory.allCategories) {
-      final stocked = _categoryCounts[cat] ?? 0;
-      final target = _coreShelfTargets[cat] ?? 2;
-      filled += min(stocked, target);
-    }
-    return filled;
-  }
-
-  String get _milestoneMessage {
-    final level = _analytics?.barLevel ?? BarLevel.empty;
-    final count = _barIngredientIds.length;
-    final next = level.nextThreshold;
-    if (level == BarLevel.professional) {
-      return 'Full setup · ${_analytics?.exactMatchCount ?? 0} cocktails unlocked';
-    }
-    final remaining = next - count;
-    if (remaining <= 0) return '';
-    const levels = BarLevel.values;
-    final nextIndex = level.index + 1;
-    if (nextIndex >= levels.length) return '';
-    final nextLevel = levels[nextIndex];
-    return '$remaining more to ${nextLevel.label}';
+    return _categoryCountsCache;
   }
 
   @override
@@ -828,47 +1407,63 @@ class _MyBarScreenState extends State<MyBarScreen>
       );
     }
 
-    final analytics = _analytics ?? BarAnalyticsResult.empty();
-    final counts = _categoryCounts;
-    final warmth = _barWarmth(counts);
+    final heroHeight = (MediaQuery.of(context).size.height * 0.32).clamp(
+      228.0,
+      320.0,
+    );
 
     return Scaffold(
       backgroundColor: AppTheme.primaryDark,
       body: SafeArea(
         child: Column(
           children: [
-            // ── 1+2. Unified ambient zone: header + bar rail ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Center(
+                child: BarSelectorDropdown(
+                  currentBarName: _activeBar?.name ?? widget.activeBarName,
+                  currentBarId: _activeBar?.id,
+                  bars: _savedBars,
+                  maxWidth: 320,
+                  isCreateInProgress: _isCreatingBar,
+                  onSelectBar: (barId) async {
+                    if (barId == _activeBar?.id) return;
+                    if (widget.onBarSwitched != null) {
+                      widget.onBarSwitched!(barId);
+                      return;
+                    }
+                    await _switchToBar(barId);
+                  },
+                  onCreateBar: () async {
+                    await _createNewBar();
+                  },
+                  onClearBar: () async {
+                    await _clearCurrentBarWithConfirm();
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            // ── 1+2. Unified ambient hero shelf ──
             FadeTransition(
               opacity: _headerFade,
-              child: _BarInteriorZone(
-                level: analytics.barLevel,
-                milestoneMessage: _milestoneMessage,
-                shelfFilled: _totalShelfSlotsFilled,
-                shelfTotal: _totalShelfTarget,
-                badgeCount: _earnedAchievementCount,
-                activeBarId: _activeBar?.id,
-                savedBars: _savedBars,
-                warmth: warmth,
-                categoryCounts: counts,
-                prevCategoryCounts: _prevCategoryCounts,
-                activeCategory: _activeShelfCategory,
-                onBadgesTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AchievementsScreen()),
+              child: SizedBox(
+                height: heroHeight,
+                child: _MyBarHeroCard(
+                  stockedCount: _totalStockedCountCache,
+                  seriousnessIndex: _seriousnessIndexCache,
+                  density: _backbarDensityCache,
+                  showAddSheen: _lastHeroChangeWasAdd,
                 ),
-                onPresetSelected: (value) {
-                  if (value == 'clear') {
-                    _clearBar();
-                  } else if (value == 'save_as_new_bar') {
-                    _saveCurrentBarAsNew();
-                  } else if (value.startsWith('bar:')) {
-                    final id = int.tryParse(value.substring(4));
-                    if (id != null) _switchToBar(id);
-                  } else if (value.startsWith('preset:')) {
-                    _loadPreset(value.substring(7));
-                  }
-                },
-                onShelfCategoryTap: _onShelfCategoryTap,
+              ),
+            ),
+
+            // Clear separation: emotional hero vs functional controls.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Container(
+                height: 1,
+                color: AppTheme.surfaceLight.withValues(alpha: 0.35),
               ),
             ),
 
@@ -876,34 +1471,45 @@ class _MyBarScreenState extends State<MyBarScreen>
             _IngredientSearchField(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              onChanged: (v) => setState(() {
-                _searchQuery = v;
-                if (v.isNotEmpty) _activeShelfCategory = null;
-              }),
+              onChanged: _setSearchQuery,
               onClear: () {
                 _searchController.clear();
-                setState(() => _searchQuery = '');
+                _setSearchQuery('');
               },
               hasQuery: _searchQuery.isNotEmpty,
             ),
 
-            // ── 4. Smart suggestion ──
+            // ── 4. Category chips ──
+            _CategoryFilterChips(
+              selectedCategory: _activeShelfCategory,
+              stockedCounts: _categoryCounts,
+              onSelect: (category) {
+                if (category == null) {
+                  _clearCategoryFilter();
+                  return;
+                }
+                _activateCategoryFilter(category);
+              },
+            ),
+
+            // ── 5. Smart suggestion ──
             if (_analytics?.suggestion != null && _barIngredientIds.isNotEmpty)
               _InlineSuggestion(
                 suggestion: _analytics!.suggestion!,
                 modeLabel: _suggestionLabels[_suggestionMode],
-                onAdd: () async {
-                  final match = _allIngredients.where(
-                    (i) =>
-                        IngredientEquivalence.normalise(i.name) ==
-                        _analytics!.suggestion!.canonicalName,
-                  );
-                  if (match.isNotEmpty &&
-                      !_barIngredientIds.contains(match.first.id)) {
-                    await _toggleIngredient(match.first.id);
-                    HapticFeedback.mediumImpact();
-                  }
-                },
+                isBusy:
+                    _suggestionAddsInFlight.contains(
+                      _analytics!.suggestion!.canonicalName,
+                    ) ||
+                    _allIngredients
+                        .where(
+                          (i) =>
+                              IngredientEquivalence.normalise(i.name) ==
+                              _analytics!.suggestion!.canonicalName,
+                        )
+                        .map((i) => i.id)
+                        .any(_busyIngredientIds.contains),
+                onAdd: _handleSuggestionAdd,
                 onCycleMode: () {
                   setState(() {
                     _suggestionMode = (_suggestionMode + 1) % 3;
@@ -911,15 +1517,18 @@ class _MyBarScreenState extends State<MyBarScreen>
                 },
               ),
 
-            // ── 5. Ingredient list ──
+            // ── 6. Ingredient list ──
             Expanded(
               child: _IngredientListSection(
                 groupedIngredients: _groupedIngredients,
                 barIngredientIds: _barIngredientIds,
+                busyIngredientIds: _busyIngredientIds,
                 onToggle: _toggleIngredient,
+                onTapWithContext: (ingredientId, ctx) {
+                  _ingredientRowContexts[ingredientId] = ctx;
+                },
                 scrollController: _listScrollController,
                 categoryKeys: _categoryKeys,
-                onSwipeCategory: _swipeIngredientCategory,
               ),
             ),
           ],
@@ -933,568 +1542,626 @@ class _MyBarScreenState extends State<MyBarScreen>
 //  1+2. BAR INTERIOR ZONE — unified header + rail in one ambient surface
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _BarInteriorZone extends StatelessWidget {
-  final BarLevel level;
-  final String milestoneMessage;
-  final int shelfFilled;
-  final int shelfTotal;
-  final int badgeCount;
-  final int? activeBarId;
-  final List<SavedBar> savedBars;
-  final double warmth; // 0.0–1.0 ambient warmth
-  final Map<String, int> categoryCounts;
-  final Map<String, int> prevCategoryCounts;
-  final String? activeCategory;
-  final VoidCallback onBadgesTap;
-  final ValueChanged<String> onPresetSelected;
-  final ValueChanged<String> onShelfCategoryTap;
+class _MyBarHeroCard extends StatelessWidget {
+  final int stockedCount;
+  final double seriousnessIndex;
+  final _BackbarDensityConfig density;
+  final bool showAddSheen;
 
-  const _BarInteriorZone({
-    required this.level,
-    required this.milestoneMessage,
-    required this.shelfFilled,
-    required this.shelfTotal,
-    required this.badgeCount,
-    required this.activeBarId,
-    required this.savedBars,
-    required this.warmth,
-    required this.categoryCounts,
-    required this.prevCategoryCounts,
-    required this.activeCategory,
-    required this.onBadgesTap,
-    required this.onPresetSelected,
-    required this.onShelfCategoryTap,
+  const _MyBarHeroCard({
+    required this.stockedCount,
+    required this.seriousnessIndex,
+    required this.density,
+    required this.showAddSheen,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Ambient warmth tints the entire zone as bar fills
-    final warmColor = Color.lerp(
-      const Color(0xFF1E1E1E), // cold/empty
-      const Color(0xFF2A2010), // warm amber
-      warmth * 0.6, // subtle — never goes full warm
+    final warmTint = Color.lerp(
+      const Color(0xFF1E1E1E),
+      const Color(0xFF2B2317),
+      seriousnessIndex * 0.6,
     )!;
 
-    final borderRadius = BorderRadius.circular(14);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
-        borderRadius: borderRadius,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppTheme.accentGold.withValues(alpha: 0.05 + warmth * 0.06),
+          color: AppTheme.accentGold.withValues(
+            alpha: 0.08 + seriousnessIndex * 0.1,
+          ),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppTheme.surfaceDark, warmTint],
         ),
       ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: Stack(
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: _StaticGrainPainter(
+                    seed: 31,
+                    opacity: 0.028,
+                    step: 4,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your bar is growing',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Stocking spirits and essentials builds a serious backbar.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.84),
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Backbar density',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.25,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.74),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                height: 146,
+                child: _BackbarShelfStage(
+                  targetFillLevel: density.fillLevel,
+                  bottleCount: density.bottleCount,
+                  backRowCount: density.backRowCount,
+                  spacingTightness: density.spacingTightness,
+                  showAddSheen: showAddSheen,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Backbar: $stockedCount stocked',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.84),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackbarShelfStage extends StatefulWidget {
+  final double targetFillLevel;
+  final int bottleCount;
+  final int backRowCount;
+  final double spacingTightness;
+  final bool showAddSheen;
+
+  const _BackbarShelfStage({
+    required this.targetFillLevel,
+    required this.bottleCount,
+    required this.backRowCount,
+    required this.spacingTightness,
+    required this.showAddSheen,
+  });
+
+  @override
+  State<_BackbarShelfStage> createState() => _BackbarShelfStageState();
+}
+
+class _BackbarShelfStageState extends State<_BackbarShelfStage>
+    with TickerProviderStateMixin {
+  late AnimationController _fillController;
+  late Animation<double> _fillAnimation;
+  late AnimationController _sheenController;
+  late Animation<double> _sheenSweep;
+  late Animation<double> _sheenOpacity;
+  double _currentFill = 0.10;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentFill = widget.targetFillLevel.clamp(0.0, 1.0);
+    _fillController = AnimationController(vsync: this, value: 1.0);
+    _fillAnimation = AlwaysStoppedAnimation<double>(_currentFill);
+    _sheenController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _sheenSweep = Tween<double>(begin: -0.8, end: 1.2).animate(
+      CurvedAnimation(parent: _sheenController, curve: Curves.easeOutCubic),
+    );
+    _sheenOpacity = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.26), weight: 34),
+        TweenSequenceItem(tween: Tween(begin: 0.26, end: 0.0), weight: 66),
+      ],
+    ).animate(CurvedAnimation(parent: _sheenController, curve: Curves.easeOut));
+  }
+
+  @override
+  void didUpdateWidget(covariant _BackbarShelfStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextFill = widget.targetFillLevel.clamp(0.0, 1.0);
+    final increasing = nextFill > _currentFill;
+    final duration = increasing
+        ? const Duration(milliseconds: 460)
+        : const Duration(milliseconds: 320);
+    final curve = increasing ? Curves.easeOutCubic : Curves.easeInOutCubic;
+
+    _fillController.duration = duration;
+    _fillAnimation = Tween<double>(
+      begin: _currentFill,
+      end: nextFill,
+    ).animate(CurvedAnimation(parent: _fillController, curve: curve));
+    _currentFill = nextFill;
+    _fillController.forward(from: 0.0);
+
+    if (increasing && widget.showAddSheen) {
+      _sheenController.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _fillController.dispose();
+    _sheenController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stageSize = Size(constraints.maxWidth, constraints.maxHeight);
+        return Stack(
           children: [
             Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [AppTheme.surfaceDark, warmColor],
-                  ),
-                ),
-              ),
-            ),
-            // Stable low-opacity grain keeps the interior feeling tactile.
-            const Positioned.fill(
-              child: IgnorePointer(
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: _StaticGrainPainter(
-                      seed: 27,
-                      opacity: 0.03,
-                      step: 4,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([
+                  _fillController,
+                  _sheenController,
+                ]),
+                builder: (context, child) {
+                  return CustomPaint(
+                    size: stageSize,
+                    painter: _BackbarShelfPainter(
+                      fillLevel: _fillAnimation.value,
+                      bottleCount: widget.bottleCount,
+                      backRowCount: widget.backRowCount,
+                      spacingTightness: widget.spacingTightness,
+                      sheenX: _sheenSweep.value,
+                      sheenOpacity: _sheenOpacity.value,
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Header row ──
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 16, 12, 6),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final compact = constraints.maxWidth < 430;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.accentGold.withValues(
-                                      alpha: 0.10,
-                                    ),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: AppTheme.accentGold.withValues(
-                                        alpha: 0.20,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '${level.icon}  ${level.label}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.accentGold,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              _BadgesPillButton(
-                                badgeCount: badgeCount,
-                                onTap: onBadgesTap,
-                                compact: compact,
-                              ),
-                              const SizedBox(width: 4),
-                              _PresetsPillButton(
-                                onSelected: onPresetSelected,
-                                savedBars: savedBars,
-                                activeBarId: activeBarId,
-                                compact: compact,
-                              ),
-                            ],
-                          ),
-                          if (milestoneMessage.isNotEmpty) ...[
-                            const SizedBox(height: 9),
-                            Text(
-                              milestoneMessage,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: AppTheme.textSecondary.withValues(
-                                  alpha: 0.68,
-                                ),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                ),
-
-                // ── Progress bar ──
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween(
-                        begin: 0.0,
-                        end: shelfTotal > 0
-                            ? (shelfFilled / shelfTotal).clamp(0.0, 1.0)
-                            : 0.0,
-                      ),
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, _) => LinearProgressIndicator(
-                        value: value,
-                        backgroundColor: AppTheme.surfaceLight.withValues(
-                          alpha: 0.35,
-                        ),
-                        valueColor: const AlwaysStoppedAnimation(
-                          AppTheme.accentGold,
-                        ),
-                        minHeight: 2,
+            if (kDebugMode && _debugShowBackbarBounds)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: AppTheme.accentGold.withValues(alpha: 0.45),
                       ),
                     ),
                   ),
                 ),
-
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 7, 14, 0),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceLight.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppTheme.accentGold.withValues(alpha: 0.14),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.chevron_left_rounded,
-                            size: 16,
-                            color: AppTheme.accentGold.withValues(alpha: 0.72),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 16,
-                            color: AppTheme.accentGold.withValues(alpha: 0.72),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Swipe across categories',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary.withValues(
-                                alpha: 0.82,
-                              ),
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // ── Bar rail (bottles on shelf) ──
-                SizedBox(
-                  height: 80,
-                  child: RepaintBoundary(
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: IngredientCategory.allCategories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 2),
-                      itemBuilder: (context, index) {
-                        final cat = IngredientCategory.allCategories[index];
-                        final stocked = categoryCounts[cat] ?? 0;
-                        final target = _coreShelfTargets[cat] ?? 2;
-                        final isActive = activeCategory == cat;
-                        final prevStocked = prevCategoryCounts[cat] ?? 0;
-                        final justCompleted =
-                            prevStocked < target && stocked >= target;
-
-                        return GestureDetector(
-                          onTap: () => onShelfCategoryTap(cat),
-                          behavior: HitTestBehavior.opaque,
-                          child: _RailCell(
-                            category: cat,
-                            stocked: stocked,
-                            target: target,
-                            isActive: isActive,
-                            justCompleted: justCompleted,
-                            warmth: warmth,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BadgesPillButton extends StatelessWidget {
-  final int badgeCount;
-  final bool compact;
-  final VoidCallback onTap;
-
-  const _BadgesPillButton({
-    required this.badgeCount,
-    required this.onTap,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _HeaderPillButton(
-      icon: Icons.emoji_events_outlined,
-      label: 'Achievements',
-      trailing: Container(
-        constraints: const BoxConstraints(minWidth: 18),
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppTheme.accentGold.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: AppTheme.accentGold.withValues(alpha: 0.22),
-          ),
-        ),
-        child: Text(
-          '$badgeCount',
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.accentGold,
-          ),
-        ),
-      ),
-      onTap: onTap,
-      compact: compact,
-    );
-  }
-}
-
-class _PresetsPillButton extends StatelessWidget {
-  final ValueChanged<String> onSelected;
-  final List<SavedBar> savedBars;
-  final int? activeBarId;
-  final bool compact;
-
-  const _PresetsPillButton({
-    required this.onSelected,
-    required this.savedBars,
-    required this.activeBarId,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _HeaderPillButton(
-      label: 'Presets',
-      icon: null,
-      trailing: Icon(
-        Icons.keyboard_arrow_down_rounded,
-        size: compact ? 16 : 17,
-        color: AppTheme.accentGold.withValues(alpha: 0.74),
-      ),
-      compact: compact,
-      onTap: () async {
-        final triggerBox = context.findRenderObject() as RenderBox?;
-        final overlayBox =
-            Overlay.of(context).context.findRenderObject() as RenderBox?;
-        if (triggerBox == null || overlayBox == null) return;
-
-        final topLeft = triggerBox.localToGlobal(
-          Offset.zero,
-          ancestor: overlayBox,
-        );
-        final bottomRight = triggerBox.localToGlobal(
-          triggerBox.size.bottomRight(Offset.zero),
-          ancestor: overlayBox,
-        );
-
-        final selected = await showMenu<String>(
-          context: context,
-          color: AppTheme.surfaceDark,
-          position: RelativeRect.fromRect(
-            Rect.fromPoints(topLeft, bottomRight),
-            Offset.zero & overlayBox.size,
-          ),
-          items: [
-            const PopupMenuItem(
-              enabled: false,
-              child: Text(
-                'BARS',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppTheme.accentGold,
-                  letterSpacing: 1,
-                ),
               ),
-            ),
-            ...savedBars.map((bar) {
-              final isActive = bar.id == activeBarId;
-              return PopupMenuItem(
-                value: 'bar:${bar.id}',
-                child: Row(
-                  children: [
-                    Icon(
-                      isActive
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      size: 14,
-                      color: isActive
-                          ? AppTheme.accentGold
-                          : AppTheme.textSecondary.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 165,
-                      child: Text(
-                        bar.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isActive
-                              ? AppTheme.accentGold
-                              : AppTheme.textPrimary,
-                          fontWeight: isActive
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const PopupMenuItem(
-              value: 'save_as_new_bar',
-              child: Row(
-                children: [
-                  Icon(Icons.add, color: AppTheme.accentGold, size: 16),
-                  SizedBox(width: 8),
-                  Text(
-                    'Save as New Bar',
-                    style: TextStyle(color: AppTheme.textPrimary),
-                  ),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem(
-              enabled: false,
-              child: Text(
-                'PRESETS',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppTheme.accentGold,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
-            ...BarPresets.getAllPresetNames().map(
-              (name) => PopupMenuItem(
-                value: 'preset:$name',
-                child: Text(
-                  name,
-                  style: const TextStyle(color: AppTheme.textPrimary),
-                ),
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem(
-              value: 'clear',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.clear_all,
-                    color: AppTheme.textSecondary,
-                    size: 16,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Clear All',
-                    style: TextStyle(color: AppTheme.textSecondary),
-                  ),
-                ],
-              ),
-            ),
           ],
         );
-
-        if (selected != null) onSelected(selected);
       },
     );
   }
 }
 
-class _HeaderPillButton extends StatefulWidget {
-  final String? label;
-  final IconData? icon;
-  final Widget? trailing;
-  final bool compact;
-  final VoidCallback onTap;
+class _BackbarShelfPainter extends CustomPainter {
+  final double fillLevel;
+  final int bottleCount;
+  final int backRowCount;
+  final double spacingTightness;
+  final double sheenX;
+  final double sheenOpacity;
 
-  const _HeaderPillButton({
-    required this.label,
-    required this.icon,
-    this.trailing,
-    this.compact = false,
-    required this.onTap,
+  _BackbarShelfPainter({
+    required this.fillLevel,
+    required this.bottleCount,
+    required this.backRowCount,
+    required this.spacingTightness,
+    required this.sheenX,
+    required this.sheenOpacity,
   });
 
+  static final List<Path> _templates = _BottleTemplateLibrary.templates;
+
   @override
-  State<_HeaderPillButton> createState() => _HeaderPillButtonState();
+  void paint(Canvas canvas, Size size) {
+    final stageRect = Offset.zero & size;
+    final top = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          AppTheme.surfaceDark.withValues(alpha: 0.72),
+          const Color(0xFF1E1A14).withValues(alpha: 0.94),
+        ],
+      ).createShader(stageRect);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(stageRect, const Radius.circular(10)),
+      top,
+    );
+
+    final shelfY = size.height - 18;
+    final shelfGlow = Paint()
+      ..color = AppTheme.accentGold.withValues(alpha: 0.24)
+      ..strokeWidth = 1.2;
+    final shelfBase = Paint()
+      ..color = AppTheme.surfaceLight.withValues(alpha: 0.58)
+      ..strokeWidth = 3.0;
+    canvas.drawLine(
+      Offset(4, shelfY),
+      Offset(size.width - 4, shelfY),
+      shelfGlow,
+    );
+    canvas.drawLine(
+      Offset(4, shelfY + 1.6),
+      Offset(size.width - 4, shelfY + 1.6),
+      shelfBase,
+    );
+
+    final frontCount = max(0, bottleCount - backRowCount);
+    _paintRow(
+      canvas: canvas,
+      size: size,
+      count: max(0, backRowCount),
+      isBackRow: true,
+      baselineY: shelfY - 6,
+      fillLevel: fillLevel * 0.92,
+      spacingTightness: spacingTightness,
+    );
+    _paintRow(
+      canvas: canvas,
+      size: size,
+      count: max(6, frontCount),
+      isBackRow: false,
+      baselineY: shelfY,
+      fillLevel: fillLevel,
+      spacingTightness: spacingTightness,
+    );
+  }
+
+  void _paintRow({
+    required Canvas canvas,
+    required Size size,
+    required int count,
+    required bool isBackRow,
+    required double baselineY,
+    required double fillLevel,
+    required double spacingTightness,
+  }) {
+    if (count <= 0) return;
+    final rowInset = isBackRow ? 18.0 : 10.0;
+    final rowWidth = max(1.0, size.width - rowInset * 2);
+    final normSpacing = count > 1 ? rowWidth / (count - 1) : rowWidth;
+    final compressed = normSpacing * (1.0 - spacingTightness.clamp(0.0, 0.35));
+    final rowSpan = compressed * (count - 1);
+    final leftStart = (size.width - rowSpan) / 2;
+
+    for (int i = 0; i < count; i++) {
+      final template =
+          _templates[(i * 7 + (isBackRow ? 3 : 11)) % _templates.length];
+      final jitter = (((i * 19 + (isBackRow ? 5 : 13)) % 7) - 3) * 0.7;
+      final x = leftStart + (compressed * i) + jitter;
+      final width = (isBackRow ? 12.0 : 14.5) + ((i % 4) * 0.8);
+      final height = (isBackRow ? 40.0 : 54.0) + (((i * 11) % 5) * 2.4);
+      final rect = Rect.fromLTWH(
+        x - (width / 2),
+        baselineY - height,
+        width,
+        height,
+      );
+      _paintBottle(
+        canvas: canvas,
+        template: template,
+        rect: rect,
+        fillLevel: fillLevel,
+        backRow: isBackRow,
+      );
+    }
+  }
+
+  void _paintBottle({
+    required Canvas canvas,
+    required Path template,
+    required Rect rect,
+    required double fillLevel,
+    required bool backRow,
+  }) {
+    final matrix = Matrix4.identity()
+      ..translateByDouble(rect.left, rect.top, 0.0, 1.0)
+      ..scaleByDouble(rect.width, rect.height, 1.0, 1.0);
+    final path = template.transform(matrix.storage);
+
+    final glassOutline = Paint()
+      ..color =
+          (backRow
+                  ? AppTheme.surfaceLight.withValues(alpha: 0.52)
+                  : AppTheme.surfaceLight.withValues(alpha: 0.66))
+              .withValues(alpha: backRow ? 0.50 : 0.64)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = backRow ? 0.9 : 1.1;
+    final glassBody = Paint()
+      ..color = backRow
+          ? Colors.white.withValues(alpha: 0.045)
+          : Colors.white.withValues(alpha: 0.065)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, glassBody);
+    canvas.drawPath(path, glassOutline);
+
+    final inner = path.getBounds().deflate(max(0.5, rect.width * 0.07));
+    final clampedFill = fillLevel.clamp(0.0, 1.0);
+    final liquidTop = inner.bottom - (inner.height * clampedFill);
+    final liquidRect = Rect.fromLTRB(
+      inner.left,
+      liquidTop,
+      inner.right,
+      inner.bottom + 1,
+    );
+    final liquid = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          AppTheme.accentGold.withValues(alpha: backRow ? 0.26 : 0.34),
+          AppTheme.accentGold.withValues(alpha: backRow ? 0.42 : 0.54),
+        ],
+      ).createShader(liquidRect);
+
+    canvas.save();
+    canvas.clipPath(path);
+    canvas.drawRect(liquidRect, liquid);
+
+    final highlightX = inner.left + (inner.width * 0.23);
+    final highlight = Paint()
+      ..color = Colors.white.withValues(alpha: backRow ? 0.06 : 0.09);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          highlightX,
+          inner.top + 2,
+          max(1.0, inner.width * 0.10),
+          max(4.0, inner.height * 0.70),
+        ),
+        const Radius.circular(2),
+      ),
+      highlight,
+    );
+
+    if (sheenOpacity > 0.0 && clampedFill > 0.12) {
+      final sheen = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment(sheenX - 0.22, -1),
+          end: Alignment(sheenX + 0.10, 1),
+          colors: [
+            Colors.transparent,
+            Colors.white.withValues(alpha: sheenOpacity),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(inner);
+      canvas.drawRect(inner, sheen);
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _BackbarShelfPainter oldDelegate) {
+    return fillLevel != oldDelegate.fillLevel ||
+        bottleCount != oldDelegate.bottleCount ||
+        backRowCount != oldDelegate.backRowCount ||
+        spacingTightness != oldDelegate.spacingTightness ||
+        sheenX != oldDelegate.sheenX ||
+        sheenOpacity != oldDelegate.sheenOpacity;
+  }
 }
 
-class _HeaderPillButtonState extends State<_HeaderPillButton> {
-  bool _pressed = false;
+class _BottleTemplateLibrary {
+  static final List<Path> templates = <Path>[
+    _tallClassic(),
+    _bourgogne(),
+    _roundShoulder(),
+    _flaskSlim(),
+    _apothecary(),
+  ];
+
+  static Path _tallClassic() {
+    return Path()
+      ..moveTo(0.40, 0.0)
+      ..lineTo(0.60, 0.0)
+      ..lineTo(0.60, 0.16)
+      ..cubicTo(0.76, 0.25, 0.84, 0.37, 0.84, 0.54)
+      ..lineTo(0.84, 1.0)
+      ..lineTo(0.16, 1.0)
+      ..lineTo(0.16, 0.54)
+      ..cubicTo(0.16, 0.37, 0.24, 0.25, 0.40, 0.16)
+      ..close();
+  }
+
+  static Path _bourgogne() {
+    return Path()
+      ..moveTo(0.38, 0.0)
+      ..lineTo(0.62, 0.0)
+      ..lineTo(0.62, 0.13)
+      ..cubicTo(0.83, 0.24, 0.92, 0.42, 0.88, 0.60)
+      ..lineTo(0.84, 1.0)
+      ..lineTo(0.16, 1.0)
+      ..lineTo(0.12, 0.60)
+      ..cubicTo(0.08, 0.42, 0.17, 0.24, 0.38, 0.13)
+      ..close();
+  }
+
+  static Path _roundShoulder() {
+    return Path()
+      ..moveTo(0.42, 0.0)
+      ..lineTo(0.58, 0.0)
+      ..lineTo(0.58, 0.16)
+      ..cubicTo(0.80, 0.23, 0.93, 0.40, 0.90, 0.62)
+      ..lineTo(0.86, 1.0)
+      ..lineTo(0.14, 1.0)
+      ..lineTo(0.10, 0.62)
+      ..cubicTo(0.07, 0.40, 0.20, 0.23, 0.42, 0.16)
+      ..close();
+  }
+
+  static Path _flaskSlim() {
+    return Path()
+      ..moveTo(0.44, 0.0)
+      ..lineTo(0.56, 0.0)
+      ..lineTo(0.56, 0.17)
+      ..lineTo(0.70, 0.30)
+      ..lineTo(0.72, 1.0)
+      ..lineTo(0.28, 1.0)
+      ..lineTo(0.30, 0.30)
+      ..lineTo(0.44, 0.17)
+      ..close();
+  }
+
+  static Path _apothecary() {
+    return Path()
+      ..moveTo(0.35, 0.0)
+      ..lineTo(0.65, 0.0)
+      ..lineTo(0.65, 0.11)
+      ..lineTo(0.78, 0.22)
+      ..lineTo(0.82, 1.0)
+      ..lineTo(0.18, 1.0)
+      ..lineTo(0.22, 0.22)
+      ..lineTo(0.35, 0.11)
+      ..close();
+  }
+}
+
+class _UnlockPreviewCard extends StatelessWidget {
+  final Cocktail cocktail;
+  final bool showName;
+
+  const _UnlockPreviewCard({required this.cocktail, this.showName = true});
 
   @override
   Widget build(BuildContext context) {
-    final background = _pressed
-        ? AppTheme.surfaceLight.withValues(alpha: 0.12)
-        : AppTheme.surfaceLight.withValues(alpha: 0.18);
-    final border = _pressed
-        ? AppTheme.accentGold.withValues(alpha: 0.16)
-        : AppTheme.accentGold.withValues(alpha: 0.13);
-
-    return AnimatedScale(
-      duration: const Duration(milliseconds: 110),
-      curve: Curves.easeOut,
-      scale: _pressed ? 0.98 : 1.0,
-      child: Material(
-        color: Colors.transparent,
-        child: Ink(
-          height: 46,
-          padding: EdgeInsets.symmetric(horizontal: widget.compact ? 7 : 9),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: border),
+    final basePath =
+        cocktail.imagePath ??
+        ImageUtils.generateBasePathFromName(cocktail.name);
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.primaryDark,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.surfaceLight.withValues(alpha: 0.65),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentGold.withValues(alpha: 0.18),
+            blurRadius: 20,
+            spreadRadius: 0.6,
+            offset: const Offset(0, 5),
           ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(24),
-            splashColor: AppTheme.accentGold.withValues(alpha: 0.08),
-            highlightColor: AppTheme.accentGold.withValues(alpha: 0.06),
-            hoverColor: AppTheme.accentGold.withValues(alpha: 0.03),
-            onHighlightChanged: (isHighlighted) {
-              if (_pressed != isHighlighted) {
-                setState(() => _pressed = isHighlighted);
-              }
-            },
-            onTap: widget.onTap,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.icon != null)
-                  Icon(
-                    widget.icon,
-                    size: widget.compact ? 16 : 17,
-                    color: AppTheme.accentGold.withValues(alpha: 0.76),
-                  ),
-                if (widget.icon != null && widget.label != null)
-                  SizedBox(width: widget.compact ? 4 : 5),
-                if (widget.label != null)
-                  Text(
-                    widget.label!,
-                    style: TextStyle(
-                      fontSize: widget.compact ? 10.8 : 11.4,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: FutureBuilder<String?>(
+              future: ImageUtils.findCocktailImage(basePath),
+              builder: (context, snapshot) {
+                final path = snapshot.data;
+                if (path == null) {
+                  return Container(
+                    color: AppTheme.surfaceLight.withValues(alpha: 0.2),
+                    child: const Center(
+                      child: Icon(
+                        Icons.local_bar_rounded,
+                        color: AppTheme.textSecondary,
+                        size: 22,
+                      ),
                     ),
-                  ),
-                if (widget.trailing != null) ...[
-                  SizedBox(width: widget.label == null ? 4 : 5),
-                  widget.trailing!,
-                ],
-              ],
+                  );
+                }
+                return Image.asset(
+                  path,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                );
+              },
             ),
           ),
-        ),
+          if (showName)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                cocktail.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+        ],
       ),
+    );
+  }
+}
+
+class _AnimatedUnlockReveal extends StatelessWidget {
+  final Widget child;
+
+  const _AnimatedUnlockReveal({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      tween: Tween<double>(begin: 0.97, end: 1.0),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.scale(scale: value, child: child),
+        );
+      },
+      child: child,
     );
   }
 }
@@ -1570,13 +2237,11 @@ class _RailCellState extends State<_RailCell>
   @override
   Widget build(BuildContext context) {
     final isFull = widget.stocked >= widget.target;
-    final hasOverflow = widget.stocked > widget.target;
     final isEmpty = widget.stocked == 0;
     final bottles =
         _categoryBottles[widget.category] ??
         [const _BottleSpec(_BottleShape.box)];
     final filledCount = min(widget.stocked, widget.target);
-    final label = _shortLabels[widget.category] ?? widget.category;
 
     // Shelf surface color evolves with warmth + completion
     final shelfColor = isFull
@@ -1720,42 +2385,6 @@ class _RailCellState extends State<_RailCell>
 
                 // Shelf ledge reads as a physical edge.
                 _ShelfLedge(color: shelfColor),
-
-                const SizedBox(height: 3),
-
-                // ── Label + overflow ──
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: widget.isActive
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        letterSpacing: 0.15,
-                        color: widget.isActive
-                            ? AppTheme.accentGold
-                            : isEmpty
-                            ? AppTheme.textSecondary.withValues(alpha: 0.3)
-                            : AppTheme.textSecondary.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    if (hasOverflow) ...[
-                      const SizedBox(width: 2),
-                      Text(
-                        '+${widget.stocked - widget.target}',
-                        style: TextStyle(
-                          fontSize: 7.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.accentGold.withValues(alpha: 0.65),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
               ],
             ),
           ),
@@ -1763,18 +2392,6 @@ class _RailCellState extends State<_RailCell>
       },
     );
   }
-
-  static const _shortLabels = {
-    'Spirits': 'Spirits',
-    'Liqueurs': 'Liqueurs',
-    'Citrus': 'Citrus',
-    'Juices': 'Juices',
-    'Sweeteners': 'Sweets',
-    'Mixers': 'Mixers',
-    'Bitters': 'Bitters',
-    'Coffee': 'Coffee',
-    'Other': 'Other',
-  };
 }
 
 /// Three-layer shelf ledge: highlight, surface, shadow.
@@ -2406,15 +3023,95 @@ class _IngredientSearchField extends StatelessWidget {
 //  4. INLINE SUGGESTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
+class _CategoryFilterChips extends StatelessWidget {
+  final String? selectedCategory;
+  final Map<String, int> stockedCounts;
+  final ValueChanged<String?> onSelect;
+
+  const _CategoryFilterChips({
+    required this.selectedCategory,
+    required this.stockedCounts,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip({
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.accentGold.withValues(alpha: 0.18)
+                : AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected
+                  ? AppTheme.accentGold.withValues(alpha: 0.42)
+                  : AppTheme.surfaceLight.withValues(alpha: 0.75),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: selected
+                  ? AppTheme.accentGold
+                  : AppTheme.textSecondary.withValues(alpha: 0.92),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 34,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          chip(
+            label: 'All',
+            selected: selectedCategory == null,
+            onTap: () => onSelect(null),
+          ),
+          const SizedBox(width: 8),
+          ...IngredientCategory.allCategories.expand((category) {
+            final stocked = stockedCounts[category] ?? 0;
+            return [
+              chip(
+                label: '$category ($stocked)',
+                selected: selectedCategory == category,
+                onTap: () => onSelect(category),
+              ),
+              const SizedBox(width: 8),
+            ];
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 class _InlineSuggestion extends StatelessWidget {
   final SmartSuggestion suggestion;
   final String modeLabel;
+  final bool isBusy;
   final VoidCallback onAdd;
   final VoidCallback onCycleMode;
 
   const _InlineSuggestion({
     required this.suggestion,
     required this.modeLabel,
+    required this.isBusy,
     required this.onAdd,
     required this.onCycleMode,
   });
@@ -2472,25 +3169,36 @@ class _InlineSuggestion extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: onAdd,
+              onTap: isBusy ? null : onAdd,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.accentGold,
+                  color: isBusy
+                      ? AppTheme.accentGold.withValues(alpha: 0.6)
+                      : AppTheme.accentGold,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text(
-                  'ADD',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.primaryDark,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                child: isBusy
+                    ? const SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.6,
+                          color: AppTheme.primaryDark,
+                        ),
+                      )
+                    : const Text(
+                        'ADD',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryDark,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -2507,18 +3215,20 @@ class _InlineSuggestion extends StatelessWidget {
 class _IngredientListSection extends StatelessWidget {
   final Map<String, List<Ingredient>> groupedIngredients;
   final Set<int> barIngredientIds;
-  final Future<void> Function(int, {GlobalKey? rowKey}) onToggle;
+  final Set<int> busyIngredientIds;
+  final Future<void> Function(int) onToggle;
+  final void Function(int ingredientId, BuildContext context) onTapWithContext;
   final ScrollController scrollController;
   final Map<String, GlobalKey> categoryKeys;
-  final void Function({required bool forward}) onSwipeCategory;
 
   const _IngredientListSection({
     required this.groupedIngredients,
     required this.barIngredientIds,
+    required this.busyIngredientIds,
     required this.onToggle,
+    required this.onTapWithContext,
     required this.scrollController,
     required this.categoryKeys,
-    required this.onSwipeCategory,
   });
 
   @override
@@ -2552,61 +3262,55 @@ class _IngredientListSection extends StatelessWidget {
       }
     }
 
+    final sortedByCategory = <String, List<Ingredient>>{};
     for (final entry in sortedEntries) {
       categoryKeys.putIfAbsent(entry.key, () => GlobalKey());
+      sortedByCategory[entry.key] = List<Ingredient>.from(entry.value)
+        ..sort((a, b) {
+          final aS = barIngredientIds.contains(a.id);
+          final bS = barIngredientIds.contains(b.id);
+          if (aS && !bS) return -1;
+          if (!aS && bS) return 1;
+          return a.name.compareTo(b.name);
+        });
     }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity <= -250) {
-          onSwipeCategory(forward: true);
-        } else if (velocity >= 250) {
-          onSwipeCategory(forward: false);
-        }
-      },
-      child: CustomScrollView(
-        controller: scrollController,
-        slivers: [
-          for (final entry in sortedEntries) ...[
-            SliverPersistentHeader(
-              key: categoryKeys[entry.key],
-              pinned: true,
-              delegate: _StickyHeaderDelegate(
-                category: entry.key,
-                icon: IngredientCategory.categoryIcons[entry.key] ?? '📦',
-                count: entry.value
-                    .where((i) => barIngredientIds.contains(i.id))
-                    .length,
-                total: entry.value.length,
-              ),
+    return CustomScrollView(
+      controller: scrollController,
+      slivers: [
+        for (final entry in sortedEntries) ...[
+          SliverPersistentHeader(
+            key: categoryKeys[entry.key],
+            pinned: true,
+            delegate: _StickyHeaderDelegate(
+              category: entry.key,
+              icon: IngredientCategory.categoryIcons[entry.key] ?? '📦',
+              count: entry.value
+                  .where((i) => barIngredientIds.contains(i.id))
+                  .length,
+              total: entry.value.length,
             ),
-            SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final sorted = List<Ingredient>.from(entry.value)
-                  ..sort((a, b) {
-                    final aS = barIngredientIds.contains(a.id);
-                    final bS = barIngredientIds.contains(b.id);
-                    if (aS && !bS) return -1;
-                    if (!aS && bS) return 1;
-                    return a.name.compareTo(b.name);
-                  });
-                final ingredient = sorted[index];
-                final rowKey = GlobalKey();
-                final isStocked = barIngredientIds.contains(ingredient.id);
-                return _IngredientRow(
-                  key: rowKey,
-                  ingredient: ingredient,
-                  isStocked: isStocked,
-                  onTap: () => onToggle(ingredient.id, rowKey: rowKey),
-                );
-              }, childCount: entry.value.length),
-            ),
-          ],
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final sorted = sortedByCategory[entry.key] ?? const <Ingredient>[];
+              final ingredient = sorted[index];
+              final isStocked = barIngredientIds.contains(ingredient.id);
+              final isBusy = busyIngredientIds.contains(ingredient.id);
+              return _IngredientRow(
+                ingredient: ingredient,
+                isStocked: isStocked,
+                isBusy: isBusy,
+                onTap: isBusy ? null : () => onToggle(ingredient.id),
+                onTapWithContext: isBusy
+                    ? null
+                    : (ctx) => onTapWithContext(ingredient.id, ctx),
+              );
+            }, childCount: (sortedByCategory[entry.key] ?? const <Ingredient>[]).length),
+          ),
         ],
-      ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
     );
   }
 }
@@ -2682,13 +3386,16 @@ class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
 class _IngredientRow extends StatefulWidget {
   final Ingredient ingredient;
   final bool isStocked;
-  final VoidCallback onTap;
+  final bool isBusy;
+  final VoidCallback? onTap;
+  final void Function(BuildContext ctx)? onTapWithContext;
 
   const _IngredientRow({
-    super.key,
     required this.ingredient,
     required this.isStocked,
+    required this.isBusy,
     required this.onTap,
+    required this.onTapWithContext,
   });
 
   @override
@@ -2737,7 +3444,12 @@ class _IngredientRowState extends State<_IngredientRow>
     return ScaleTransition(
       scale: _scale,
       child: InkWell(
-        onTap: widget.onTap,
+        onTap: widget.onTap == null
+            ? null
+            : () {
+                widget.onTapWithContext?.call(context);
+                widget.onTap?.call();
+              },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
@@ -2757,18 +3469,30 @@ class _IngredientRowState extends State<_IngredientRow>
                 width: 26,
                 height: 26,
                 decoration: BoxDecoration(
-                  color: widget.isStocked
+                  color: widget.isBusy
+                      ? AppTheme.surfaceDark
+                      : widget.isStocked
                       ? AppTheme.accentGold
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(7),
                   border: Border.all(
-                    color: widget.isStocked
+                    color: widget.isBusy
+                        ? AppTheme.accentGold.withValues(alpha: 0.6)
+                        : widget.isStocked
                         ? AppTheme.accentGold
                         : AppTheme.surfaceLight,
                     width: 1.5,
                   ),
                 ),
-                child: widget.isStocked
+                child: widget.isBusy
+                    ? const Padding(
+                        padding: EdgeInsets.all(6),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.7,
+                          color: AppTheme.accentGold,
+                        ),
+                      )
+                    : widget.isStocked
                     ? const Icon(
                         Icons.check,
                         color: AppTheme.primaryDark,
@@ -2809,3 +3533,5 @@ class _IngredientRowState extends State<_IngredientRow>
     );
   }
 }
+
+

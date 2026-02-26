@@ -1,20 +1,32 @@
+import 'dart:convert';
+import 'dart:math';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
+import '../core/services/bar_service.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/bar_create_diagnostics.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
 import '../data/ingredient_data.dart';
+import '../widgets/bar_selector_dropdown.dart';
 import 'cocktail_detail_screen.dart';
 
 enum _FinderMode { canMake, oneAway, all }
 
+enum _FinderViewMode { tiles, list }
+
 class FinderScreen extends StatefulWidget {
   final AppDatabase database;
+  final ValueChanged<int>? onBarSwitched;
   final VoidCallback? onNavigateToMyBar;
 
   const FinderScreen({
     super.key,
     required this.database,
+    this.onBarSwitched,
     this.onNavigateToMyBar,
   });
 
@@ -24,6 +36,12 @@ class FinderScreen extends StatefulWidget {
 
 class FinderScreenState extends State<FinderScreen>
     with TickerProviderStateMixin {
+  static const int _railPreviewLimitNormal = 10;
+  static const int _railPreviewLimitSmall = 10;
+  static const int _railPreviewLimitStartHereSmall = 10;
+  static const int _smallTilesThreshold = 12;
+  static const double _railTileHeight = 220;
+
   int _barCount = 0;
   List<CocktailMatch> _exactMatches = [];
   List<CocktailMatch> _missing1 = [];
@@ -31,21 +49,44 @@ class FinderScreenState extends State<FinderScreen>
   SavedBar? _activeBar;
   List<SavedBar> _savedBars = [];
   _FinderMode _mode = _FinderMode.canMake;
-  bool _isSwitchingBar = false;
+  _FinderViewMode _viewMode = _FinderViewMode.tiles;
+  String? _activeRailId;
+  String? _activeRailTitle;
+  bool Function(CocktailMatch m)? _activeRailPredicate;
+  // _isSwitchingBar removed â€” bar switching now handled by shell pill
 
   String _searchQuery = '';
   String _spiritFilter = 'All';
   String _sortBy = 'match';
-  bool _showSubstitutions = true;
+  bool _isSpiritFilterOpen = false;
+  bool _isRailTransitioning = false;
+  bool _isCreatingBar = false;
+  BarCreateDiagnosticsFlow? _createDiagnostics;
+  bool _deferredBarRefreshScheduled = false;
+  SavedBar? _pendingDeferredRefreshBar;
+  List<SavedBar> _pendingDeferredRefreshBars = const [];
+  BarCreateDiagnosticsFlow? _pendingDeferredRefreshDiagnostics;
+  DateTime? _lastImeSensitiveEventAt;
+  Timer? _searchDebounceTimer;
 
   bool _isLoading = true;
+  late final BarService _barService;
   final _searchController = TextEditingController();
+  final _resultsScrollController = ScrollController();
   final Map<int, _FinderSnapshot> _snapshotCache = {};
   final Map<int, _BarQuickStats> _barStats = {};
   bool _finderDataLoaded = false;
   List<Cocktail> _allCocktails = [];
   Map<int, Ingredient> _ingredientMap = {};
   Map<int, List<CocktailIngredient>> _cocktailIngredientsByCocktail = {};
+  Map<int, _CocktailMeta> _cocktailMetaById = {};
+
+  // Derived/cached view data. Rebuilt only when source data or filters change.
+  List<CocktailMatch> _filteredExactCache = const [];
+  List<CocktailMatch> _filteredMissing1Cache = const [];
+  List<CocktailMatch> _filteredMissing2PlusCache = const [];
+  List<CocktailMatch> _modeResultsCache = const [];
+  List<_RailSectionData> _cachedTileSections = const [];
 
   late AnimationController _animController;
   late Animation<double> _heroFade;
@@ -54,6 +95,7 @@ class FinderScreenState extends State<FinderScreen>
   @override
   void initState() {
     super.initState();
+    _barService = BarService(widget.database);
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -73,26 +115,89 @@ class FinderScreenState extends State<FinderScreen>
 
   @override
   void dispose() {
+    _finishCreateDiagnostics(result: 'disposed');
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
+    _resultsScrollController.dispose();
     _animController.dispose();
     super.dispose();
   }
 
+  Future<void> _delayForImeSettleIfNeeded() async {
+    final last = _lastImeSensitiveEventAt;
+    if (last == null) return;
+    const settleWindow = Duration(milliseconds: 220);
+    final elapsed = DateTime.now().difference(last);
+    if (elapsed >= settleWindow) return;
+    final wait = settleWindow - elapsed;
+    if (kDebugMode) {
+      debugPrint('Finder IME settle delay ${wait.inMilliseconds}ms');
+    }
+    await Future.delayed(wait);
+  }
+
+  String _nextAutoBarName(List<SavedBar> bars) {
+    final names = bars.map((b) => b.name.trim().toLowerCase()).toSet();
+    const base = 'new bar';
+    if (!names.contains(base)) return 'New Bar';
+    var index = 2;
+    while (names.contains('$base $index')) {
+      index++;
+    }
+    return 'New Bar $index';
+  }
+
+  void _markCreateSetState(String reason) {
+    _createDiagnostics?.incrementSetState(reason);
+  }
+
+  void _finishCreateDiagnostics({required String result}) {
+    _createDiagnostics?.finish(result: result);
+    _createDiagnostics = null;
+  }
+
+  void _setSearchQueryDebounced(String value) {
+    _searchDebounceTimer?.cancel();
+    if (value.isEmpty) {
+      if (_searchQuery.isEmpty) return;
+      setState(() {
+        _searchQuery = '';
+        _refreshDerivedCaches();
+      });
+      return;
+    }
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || value == _searchQuery) return;
+      setState(() {
+        _searchQuery = value;
+        _refreshDerivedCaches();
+      });
+    });
+  }
+
   Future<void> loadBarAndMatch() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
+    // Clear cached snapshots so we recompute from DB truth.
+    // Ingredients may have changed in My Bar since last visit.
+    _snapshotCache.clear();
+    _barStats.clear();
+
     await _ensureFinderData();
 
     final bars = await (widget.database.select(
       widget.database.savedBars,
     )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
     SavedBar? activeBar = await widget.database.getDefaultSavedBar();
-    activeBar ??= bars.isNotEmpty ? bars.first : null;
+    activeBar = _resolvePreferredBar(activeBar, bars);
 
     final snapshot = await _snapshotForBar(activeBar);
     _sortList(snapshot.exact);
     _sortList(snapshot.missing1);
     _sortList(snapshot.missing2Plus);
     _animController.reset();
+    if (!mounted) return;
 
     setState(() {
       _activeBar = activeBar;
@@ -113,11 +218,21 @@ class FinderScreenState extends State<FinderScreen>
           canMakeCount: snapshot.exact.length,
         );
       }
+      _refreshDerivedCaches();
       _isLoading = false;
     });
 
     _animController.forward();
     _prefetchBars(bars, activeBarId: activeBar?.id);
+  }
+
+  SavedBar? _resolvePreferredBar(SavedBar? activeBar, List<SavedBar> bars) {
+    if (bars.isEmpty) return null;
+    if (activeBar != null) return activeBar;
+    for (final bar in bars) {
+      if (bar.name.trim().toLowerCase() == 'my bar') return bar;
+    }
+    return bars.first;
   }
 
   Future<void> _ensureFinderData() async {
@@ -138,10 +253,15 @@ class FinderScreenState extends State<FinderScreen>
           .putIfAbsent(ci.cocktailId, () => [])
           .add(ci);
     }
+    _cocktailMetaById = {for (final c in _allCocktails) c.id: _metaFor(c)};
     _finderDataLoaded = true;
   }
 
   Future<_FinderSnapshot> _snapshotForBar(SavedBar? bar) async {
+    _createDiagnostics?.incrementCounter(
+      '_snapshotForBar',
+      stackTrace: StackTrace.current,
+    );
     final barId = bar?.id ?? -1;
     final cached = _snapshotCache[barId];
     if (cached != null) return cached;
@@ -161,16 +281,15 @@ class FinderScreenState extends State<FinderScreen>
     }
 
     final barSubCanonicals = <String>{};
-    if (_showSubstitutions) {
-      for (final canon in barCanonicals) {
-        barSubCanonicals.addAll(IngredientSubstitutions.getSubstitutes(canon));
-      }
+    for (final canon in barCanonicals) {
+      barSubCanonicals.addAll(IngredientSubstitutions.getSubstitutes(canon));
     }
 
     final exact = <CocktailMatch>[];
     final m1 = <CocktailMatch>[];
     final m2 = <CocktailMatch>[];
 
+    var processed = 0;
     for (final cocktail in _allCocktails) {
       final ciRows = _cocktailIngredientsByCocktail[cocktail.id] ?? const [];
       if (ciRows.isEmpty) continue;
@@ -191,7 +310,7 @@ class FinderScreenState extends State<FinderScreen>
       for (final entry in requiredCanonToDisplay.entries) {
         if (barCanonicals.contains(entry.key)) {
           matchedCount++;
-        } else if (_showSubstitutions && barSubCanonicals.contains(entry.key)) {
+        } else if (barSubCanonicals.contains(entry.key)) {
           matchedCount++;
           subsUsed.add(entry.value);
         } else {
@@ -218,6 +337,13 @@ class FinderScreenState extends State<FinderScreen>
         m1.add(match);
       } else {
         m2.add(match);
+      }
+
+      processed++;
+      if (processed % 120 == 0) {
+        // Yield periodically so heavy snapshot builds do not block animation
+        // frames (IME/show-hide and create transitions).
+        await Future<void>.delayed(Duration.zero);
       }
     }
 
@@ -304,12 +430,6 @@ class FinderScreenState extends State<FinderScreen>
       );
     }
 
-    final filteredExact = _applyFilters(_exactMatches);
-    final filtered1 = _applyFilters(_missing1);
-    final filtered2 = _applyFilters(_missing2Plus);
-    final activeName = _activeBar?.name ?? 'My Bar';
-    final modeResults = _resultsForMode(filteredExact, filtered1, filtered2);
-
     return Scaffold(
       backgroundColor: AppTheme.primaryDark,
       body: SafeArea(
@@ -322,42 +442,44 @@ class FinderScreenState extends State<FinderScreen>
                     child: ScaleTransition(
                       scale: _heroScale,
                       child: _buildHeroHeader(
-                        readyCount: filteredExact.length,
-                        activeBarName: activeName,
-                        oneAwayCount: filtered1.length,
+                        readyCount: _filteredExactCache.length,
+                        oneAwayCount: _filteredMissing1Cache.length,
                         allCount:
-                            filteredExact.length +
-                            filtered1.length +
-                            filtered2.length,
+                            _filteredExactCache.length +
+                            _filteredMissing1Cache.length +
+                            _filteredMissing2PlusCache.length,
                       ),
                     ),
                   ),
+                  const SizedBox(height: 6),
                   _buildSearchRow(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Showing cocktails for "$activeName"',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary.withValues(alpha: 0.78),
-                        ),
-                      ),
-                    ),
-                  ),
                   Expanded(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 260),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) {
+                        final slide =
+                            Tween<Offset>(
+                              begin: const Offset(0.02, 0),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutCubic,
+                              ),
+                            );
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(position: slide, child: child),
+                        );
+                      },
                       child: Opacity(
                         key: ValueKey(
-                          '${_activeBar?.id ?? -1}_${_mode.name}_$_isSwitchingBar',
+                          '${_activeBar?.id ?? -1}_${_mode.name}_${_viewMode.name}',
                         ),
-                        opacity: _isSwitchingBar ? 0.55 : 1.0,
-                        child: _buildResultsForMode(modeResults),
+                        opacity: 1.0,
+                        child: _buildResultsForMode(_modeResultsCache),
                       ),
                     ),
                   ),
@@ -382,137 +504,218 @@ class FinderScreenState extends State<FinderScreen>
     }
   }
 
-  // ── Hero Header ──
+  void _refreshDerivedCaches() {
+    _createDiagnostics?.incrementCounter(
+      '_refreshDerivedCaches',
+      stackTrace: StackTrace.current,
+    );
+    _filteredExactCache = _applyFilters(_exactMatches);
+    _filteredMissing1Cache = _applyFilters(_missing1);
+    _filteredMissing2PlusCache = _applyFilters(_missing2Plus);
+    _modeResultsCache = _resultsForMode(
+      _filteredExactCache,
+      _filteredMissing1Cache,
+      _filteredMissing2PlusCache,
+    );
+    if (_mode == _FinderMode.canMake && _viewMode == _FinderViewMode.tiles) {
+      _cachedTileSections = _computeTileSections(_modeResultsCache);
+    } else {
+      _cachedTileSections = const [];
+    }
+  }
+
+  List<_RailSectionData> _computeTileSections(List<CocktailMatch> matches) {
+    final rails = _buildFinderRails(matches);
+    if (rails.isEmpty) return const [];
+
+    final isSmallTilesMode = matches.length < _smallTilesThreshold;
+    final sections = <_RailSectionData>[];
+    final usedIds = <int>{};
+
+    if (isSmallTilesMode) {
+      _FinderRailBucket? startHere;
+      for (final rail in rails) {
+        if (rail.id == 'start_here') {
+          startHere = rail;
+          break;
+        }
+      }
+      if (startHere != null) {
+        final startAvailable = startHere.matches
+            .where((m) => !usedIds.contains(m.cocktail.id))
+            .toList();
+        final startPreview = startAvailable
+            .take(min(_railPreviewLimitStartHereSmall, _railPreviewLimitNormal))
+            .toList();
+        if (startPreview.isNotEmpty) {
+          usedIds.addAll(startPreview.map((m) => m.cocktail.id));
+          sections.add(
+            _RailSectionData(
+              rail: startHere,
+              railAvailable: startAvailable,
+              preview: startPreview,
+              minPreviewToRender: 1,
+            ),
+          );
+        }
+      }
+      for (final rail in rails) {
+        if (rail.id == 'start_here') continue;
+        final railAvailable = rail.matches
+            .where((m) => !usedIds.contains(m.cocktail.id))
+            .toList();
+        final preview = railAvailable.take(_railPreviewLimitSmall).toList();
+        if (preview.length < 2) continue;
+        usedIds.addAll(preview.map((m) => m.cocktail.id));
+        sections.add(
+          _RailSectionData(
+            rail: rail,
+            railAvailable: railAvailable,
+            preview: preview,
+            minPreviewToRender: 2,
+          ),
+        );
+      }
+    } else {
+      for (final rail in rails) {
+        final railAvailable = rail.matches
+            .where((m) => !usedIds.contains(m.cocktail.id))
+            .toList();
+        final preview = railAvailable.take(_railPreviewLimitNormal).toList();
+        if (preview.length < 2) continue;
+        usedIds.addAll(preview.map((m) => m.cocktail.id));
+        sections.add(
+          _RailSectionData(
+            rail: rail,
+            railAvailable: railAvailable,
+            preview: preview,
+            minPreviewToRender: 2,
+          ),
+        );
+      }
+
+      // Fallback: allow duplicates to preserve rail count.
+      if (sections.length < 7) {
+        sections.clear();
+        for (final rail in rails) {
+          final railAvailable = List<CocktailMatch>.from(rail.matches);
+          final preview = railAvailable.take(_railPreviewLimitNormal).toList();
+          if (preview.length < 2) continue;
+          sections.add(
+            _RailSectionData(
+              rail: rail,
+              railAvailable: railAvailable,
+              preview: preview,
+              minPreviewToRender: 2,
+            ),
+          );
+        }
+      }
+    }
+
+    final allMakeableSection = _allMakeableSectionData(matches);
+    if (allMakeableSection != null) {
+      sections.add(allMakeableSection);
+    }
+    return sections;
+  }
+
+  _RailSectionData? _allMakeableSectionData(List<CocktailMatch> matches) {
+    if (matches.isEmpty) return null;
+    final uniqueById = <int, CocktailMatch>{};
+    for (final m in matches) {
+      uniqueById[m.cocktail.id] = m;
+    }
+    final allUnique = uniqueById.values.toList()
+      ..sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
+    final preview = allUnique.take(_railPreviewLimitNormal).toList();
+    if (preview.isEmpty) return null;
+    final rail = _FinderRailBucket(
+      id: 'all_makeable',
+      title: 'All Makeable (${allUnique.length})',
+      family: _RailFamily.hybrid,
+      count: allUnique.length,
+      matches: allUnique,
+      score: 1000,
+    );
+    return _RailSectionData(
+      rail: rail,
+      railAvailable: allUnique,
+      preview: preview,
+      minPreviewToRender: 1,
+    );
+  }
+
+  // â”€â”€ Hero Header â”€â”€
   Widget _buildHeroHeader({
     required int readyCount,
-    required String activeBarName,
     required int oneAwayCount,
     required int allCount,
   }) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppTheme.surfaceDark, Color(0xFF252218)],
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppTheme.surfaceDark.withValues(alpha: 0.98),
+            const Color(0xFF222017),
+          ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.2)),
+        border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.22)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Semantics(
-                label: 'Active bar selector. Currently using $activeBarName',
-                button: true,
-                child: InkWell(
-                  onTap: _showBarSelectorSheet,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceLight.withValues(alpha: 0.28),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppTheme.surfaceLight.withValues(alpha: 0.9),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Using: ',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary.withValues(
-                              alpha: 0.85,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          activeBarName,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: AppTheme.accentGold,
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: widget.onNavigateToMyBar,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceLight.withValues(alpha: 0.34),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppTheme.surfaceLight.withValues(alpha: 0.9),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.liquor,
-                        color: AppTheme.accentGold,
-                        size: 13,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'My Bar ($_barCount)',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.accentGold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          Container(
+            height: 2,
+            width: double.infinity,
+            color: AppTheme.accentGold.withValues(alpha: 0.9),
+          ),
+          const SizedBox(height: 14),
+          BarSelectorDropdown(
+            currentBarName: _activeBar?.name ?? 'My Bar',
+            currentBarId: _activeBar?.id,
+            bars: _savedBars,
+            maxWidth: 320,
+            isCreateInProgress: _isCreatingBar,
+            onSelectBar: (barId) async {
+              if (barId == _activeBar?.id) return;
+              SavedBar? selectedBar;
+              for (final bar in _savedBars) {
+                if (bar.id == barId) {
+                  selectedBar = bar;
+                  break;
+                }
+              }
+              if (selectedBar == null) return;
+              await _switchActiveBar(selectedBar, allBars: _savedBars);
+            },
+            onCreateBar: () async {
+              await _createNewBar();
+            },
+            onClearBar: () async {
+              await _clearCurrentBarWithConfirm();
+            },
           ),
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.auto_awesome,
-                  size: 14,
-                  color: AppTheme.accentGold.withValues(alpha: 0.8),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '$readyCount cocktails available with $activeBarName',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          Text(
+            '$readyCount cocktails ready',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary.withValues(alpha: 0.95),
+              height: 1.25,
             ),
           ),
           const SizedBox(height: 10),
@@ -521,32 +724,91 @@ class FinderScreenState extends State<FinderScreen>
             oneAwayCount: oneAwayCount,
             allCount: allCount,
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _buildMiniStat(
-                '${_exactMatches.length}',
-                'Ready',
-                AppTheme.accentGold,
-              ),
-              _buildMiniStat(
-                '${_missing1.length}',
-                'One Away',
-                const Color(0xFFE8A838),
-              ),
-              _buildMiniStat(
-                '${_missing2Plus.length}',
-                'Close',
-                const Color(0xFF888888),
-              ),
-              _buildSubsToggle(),
-            ],
-          ),
+          const SizedBox(height: 10),
+          Align(alignment: Alignment.centerRight, child: _buildViewToggle()),
         ],
       ),
+    );
+  }
+
+  Widget _buildViewToggle() {
+    Widget chip({
+      required _FinderViewMode mode,
+      required String label,
+      required IconData icon,
+      required bool enabled,
+    }) {
+      final selected = _viewMode == mode;
+      return GestureDetector(
+        onTap: enabled
+            ? () => setState(() {
+                _viewMode = mode;
+                _refreshDerivedCaches();
+              })
+            : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.accentGold.withValues(alpha: 0.2)
+                : AppTheme.surfaceDark.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? AppTheme.accentGold.withValues(alpha: 0.45)
+                  : AppTheme.surfaceLight.withValues(alpha: 0.7),
+            ),
+          ),
+          child: Opacity(
+            opacity: enabled ? 1.0 : 0.45,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 14,
+                  color: selected
+                      ? AppTheme.accentGold
+                      : AppTheme.textSecondary.withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? AppTheme.accentGold
+                        : AppTheme.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final tilesEnabled = _mode == _FinderMode.canMake;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        chip(
+          mode: _FinderViewMode.tiles,
+          label: 'Tiles',
+          icon: Icons.grid_view_rounded,
+          enabled: tilesEnabled,
+        ),
+        const SizedBox(width: 6),
+        chip(
+          mode: _FinderViewMode.list,
+          label: 'List',
+          icon: Icons.view_agenda_outlined,
+          enabled: true,
+        ),
+      ],
     );
   }
 
@@ -563,30 +825,56 @@ class FinderScreenState extends State<FinderScreen>
           button: true,
           selected: selected,
           child: GestureDetector(
-            onTap: () => setState(() => _mode = mode),
-            child: Container(
-              height: 34,
+            onTap: () => setState(() {
+              _mode = mode;
+              if (_mode != _FinderMode.canMake &&
+                  _viewMode == _FinderViewMode.tiles) {
+                _viewMode = _FinderViewMode.list;
+              }
+              _refreshDerivedCaches();
+            }),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              height: 40,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected
-                    ? AppTheme.accentGold.withValues(alpha: 0.18)
-                    : AppTheme.surfaceDark.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(9),
+                    ? AppTheme.accentGold
+                    : AppTheme.surfaceDark.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: selected
-                      ? AppTheme.accentGold.withValues(alpha: 0.5)
-                      : AppTheme.surfaceLight.withValues(alpha: 0.8),
+                      ? AppTheme.accentGold
+                      : AppTheme.surfaceLight.withValues(alpha: 0.45),
                 ),
               ),
-              child: Text(
-                '$label  $count',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected
-                      ? AppTheme.accentGold
-                      : AppTheme.textSecondary,
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: selected
+                          ? AppTheme.primaryDark
+                          : AppTheme.textSecondary.withValues(alpha: 0.9),
+                    ),
+                  ),
+                  if (selected) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primaryDark.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -605,297 +893,54 @@ class FinderScreenState extends State<FinderScreen>
     );
   }
 
-  Widget _buildMiniStat(String value, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.8)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubsToggle() {
-    return GestureDetector(
-      onTap: () {
-        setState(() => _showSubstitutions = !_showSubstitutions);
-        _snapshotCache.clear();
-        _barStats.clear();
-        loadBarAndMatch();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: _showSubstitutions
-              ? AppTheme.accentGold.withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: _showSubstitutions
-                ? AppTheme.accentGold
-                : AppTheme.surfaceLight,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.swap_horiz,
-              size: 14,
-              color: _showSubstitutions
-                  ? AppTheme.accentGold
-                  : AppTheme.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Subs',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _showSubstitutions
-                    ? AppTheme.accentGold
-                    : AppTheme.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showBarSelectorSheet() async {
-    final totalIngredients = _ingredientMap.length;
-    if (_savedBars.isEmpty) return;
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: AppTheme.surfaceDark,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'SELECT BAR',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-                color: AppTheme.accentGold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ..._savedBars.map((bar) {
-              final active = _activeBar?.id == bar.id;
-              final stats = _barStats[bar.id];
-              final stockedCount = stats?.stockedCount ?? 0;
-              final stockedPct = stats?.stockedPct ?? 0.0;
-              final canMake = stats?.canMakeCount ?? 0;
-              final pctText = totalIngredients == 0
-                  ? '0%'
-                  : '${(stockedPct * 100).round()}% stocked';
-              return Semantics(
-                label:
-                    'Use ${bar.name}, $pctText, $canMake cocktails available',
-                button: true,
-                child: InkWell(
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _switchActiveBar(bar);
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 11,
-                    ),
-                    decoration: BoxDecoration(
-                      color: active
-                          ? AppTheme.accentGold.withValues(alpha: 0.12)
-                          : AppTheme.primaryDark.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: active
-                            ? AppTheme.accentGold.withValues(alpha: 0.35)
-                            : AppTheme.surfaceLight.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          active
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          size: 16,
-                          color: active
-                              ? AppTheme.accentGold
-                              : AppTheme.textSecondary,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                bar.name,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: active
-                                      ? AppTheme.accentGold
-                                      : AppTheme.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '$stockedCount ingredients • $pctText • $canMake can make',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppTheme.textSecondary.withValues(
-                                    alpha: 0.78,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _switchActiveBar(SavedBar bar) async {
-    if (_activeBar?.id == bar.id) return;
-
-    setState(() => _isSwitchingBar = true);
-    await (widget.database.update(widget.database.savedBars)
-          ..where((b) => b.isDefault.equals(true)))
-        .write(const SavedBarsCompanion(isDefault: Value(false)));
-    await (widget.database.update(
-      widget.database.savedBars,
-    )..where((b) => b.id.equals(bar.id))).write(
-      SavedBarsCompanion(
-        isDefault: const Value(true),
-        lastUsed: Value(DateTime.now()),
-      ),
-    );
-
-    final snapshot = await _snapshotForBar(bar);
-    _sortList(snapshot.exact);
-    _sortList(snapshot.missing1);
-    _sortList(snapshot.missing2Plus);
-
-    final bars = await (widget.database.select(
-      widget.database.savedBars,
-    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-    final stockedPct = _ingredientMap.isEmpty
-        ? 0.0
-        : (snapshot.barIngredientCount / _ingredientMap.length).clamp(0.0, 1.0);
-
-    if (!mounted) return;
-    setState(() {
-      _activeBar = bar;
-      _savedBars = bars;
-      _barCount = snapshot.barIngredientCount;
-      _exactMatches = snapshot.exact;
-      _missing1 = snapshot.missing1;
-      _missing2Plus = snapshot.missing2Plus;
-      _barStats[bar.id] = _BarQuickStats(
-        stockedCount: snapshot.barIngredientCount,
-        stockedPct: stockedPct,
-        canMakeCount: snapshot.exact.length,
-      );
-      _isSwitchingBar = false;
-      _mode = _FinderMode.canMake;
-    });
-    _prefetchBars(bars, activeBarId: bar.id);
-  }
-
-  // ── Search Row ──
+  // â”€â”€ Search Row â”€â”€
   Widget _buildSearchRow() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: Row(
         children: [
           Expanded(
             child: SizedBox(
-              height: 40,
+              height: 42,
               child: TextField(
                 controller: _searchController,
-                onChanged: (v) => setState(() => _searchQuery = v),
+                onChanged: _setSearchQueryDebounced,
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 13,
+                  fontSize: 14,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Search cocktails...',
                   hintStyle: const TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 12,
+                    fontSize: 13,
                   ),
                   prefixIcon: const Icon(
                     Icons.search,
                     color: AppTheme.textSecondary,
-                    size: 18,
+                    size: 19,
                   ),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(
                             Icons.clear,
                             color: AppTheme.textSecondary,
-                            size: 16,
+                            size: 17,
                           ),
                           onPressed: () {
                             _searchController.clear();
-                            setState(() => _searchQuery = '');
+                            _setSearchQueryDebounced('');
                           },
                         )
                       : null,
                   filled: true,
                   fillColor: AppTheme.surfaceDark,
                   contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                    horizontal: 13,
+                    vertical: 9,
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(11),
                     borderSide: BorderSide.none,
                   ),
                 ),
@@ -904,14 +949,17 @@ class FinderScreenState extends State<FinderScreen>
           ),
           const SizedBox(width: 8),
           _buildFilterButton(),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           PopupMenuButton<String>(
             icon: Container(
-              width: 36,
-              height: 36,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 color: AppTheme.surfaceDark,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                  color: AppTheme.surfaceLight.withValues(alpha: 0.8),
+                ),
               ),
               child: const Icon(
                 Icons.sort,
@@ -921,15 +969,17 @@ class FinderScreenState extends State<FinderScreen>
             ),
             color: AppTheme.surfaceDark,
             onSelected: (v) {
-              setState(() => _sortBy = v);
-              _sortList(_exactMatches);
-              _sortList(_missing1);
-              _sortList(_missing2Plus);
-              setState(() {});
+              setState(() {
+                _sortBy = v;
+                _sortList(_exactMatches);
+                _sortList(_missing1);
+                _sortList(_missing2Plus);
+                _refreshDerivedCaches();
+              });
             },
             itemBuilder: (_) => [
               _sortItem('match', 'Best Match'),
-              _sortItem('name', 'A — Z'),
+              _sortItem('name', 'A - Z'),
               _sortItem('difficulty', 'Difficulty'),
             ],
           ),
@@ -943,12 +993,14 @@ class FinderScreenState extends State<FinderScreen>
     return GestureDetector(
       onTap: _showSpiritFilterSheet,
       child: Container(
-        height: 36,
+        height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: hasFilter ? AppTheme.accentGold : AppTheme.surfaceDark,
-          borderRadius: BorderRadius.circular(10),
-          border: hasFilter ? null : Border.all(color: AppTheme.surfaceLight),
+          borderRadius: BorderRadius.circular(11),
+          border: hasFilter
+              ? null
+              : Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.8)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -972,7 +1024,10 @@ class FinderScreenState extends State<FinderScreen>
             if (hasFilter) ...[
               const SizedBox(width: 4),
               GestureDetector(
-                onTap: () => setState(() => _spiritFilter = 'All'),
+                onTap: () => setState(() {
+                  _spiritFilter = 'All';
+                  _refreshDerivedCaches();
+                }),
                 child: const Icon(
                   Icons.close,
                   size: 14,
@@ -986,7 +1041,337 @@ class FinderScreenState extends State<FinderScreen>
     );
   }
 
+  Future<List<SavedBar>> _loadBarsOrdered() {
+    return (widget.database.select(
+      widget.database.savedBars,
+    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+  }
+
+  Future<void> _setDefaultBar(int barId) async {
+    await _barService.setDefaultBar(barId);
+  }
+
+  void _applyActiveBarSnapshot(
+    SavedBar bar,
+    _FinderSnapshot snapshot, {
+    required List<SavedBar> allBars,
+    bool prefetch = true,
+  }) {
+    final stockedPct = _ingredientMap.isEmpty
+        ? 0.0
+        : (snapshot.barIngredientCount / _ingredientMap.length).clamp(0.0, 1.0);
+
+    if (!mounted) return;
+    _markCreateSetState('_applyActiveBarSnapshot');
+    setState(() {
+      _activeBar = bar;
+      _savedBars = List<SavedBar>.from(allBars)
+        ..sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
+      _barCount = snapshot.barIngredientCount;
+      _exactMatches = snapshot.exact;
+      _missing1 = snapshot.missing1;
+      _missing2Plus = snapshot.missing2Plus;
+      _activeRailId = null;
+      _activeRailTitle = null;
+      _activeRailPredicate = null;
+      _viewMode = _FinderViewMode.tiles;
+      _barStats[bar.id] = _BarQuickStats(
+        stockedCount: snapshot.barIngredientCount,
+        stockedPct: stockedPct,
+        canMakeCount: snapshot.exact.length,
+      );
+      _refreshDerivedCaches();
+    });
+
+    widget.onBarSwitched?.call(bar.id);
+    if (prefetch) {
+      _prefetchBars(allBars, activeBarId: bar.id);
+    }
+  }
+
+  void _scheduleDeferredBarRefresh(
+    SavedBar bar, {
+    required List<SavedBar> allBars,
+    BarCreateDiagnosticsFlow? diagnostics,
+  }) {
+    _pendingDeferredRefreshBar = bar;
+    _pendingDeferredRefreshBars = allBars;
+    _pendingDeferredRefreshDiagnostics = diagnostics;
+    if (_deferredBarRefreshScheduled) return;
+    _deferredBarRefreshScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _deferredBarRefreshScheduled = false;
+      final refreshBar = _pendingDeferredRefreshBar;
+      final refreshBars = _pendingDeferredRefreshBars;
+      final flow = _pendingDeferredRefreshDiagnostics;
+      _pendingDeferredRefreshBar = null;
+      _pendingDeferredRefreshBars = const [];
+      _pendingDeferredRefreshDiagnostics = null;
+      if (!mounted || refreshBar == null) {
+        flow?.finish(result: 'aborted');
+        if (identical(_createDiagnostics, flow)) {
+          _createDiagnostics = null;
+        }
+        return;
+      }
+
+      final sw = Stopwatch()..start();
+      try {
+        flow?.step('phaseB:postFrameStart');
+        await _delayForImeSettleIfNeeded();
+        flow?.step('phaseB:imeSettleDone');
+        final snapshot = await _snapshotForBar(refreshBar);
+        flow?.step('phaseB:snapshotForBarDone');
+        _sortList(snapshot.exact);
+        _sortList(snapshot.missing1);
+        _sortList(snapshot.missing2Plus);
+        flow?.step('phaseB:sortDone');
+        _applyActiveBarSnapshot(
+          refreshBar,
+          snapshot,
+          allBars: refreshBars,
+          prefetch: false,
+        );
+        flow?.step('phaseB:applySnapshotDone');
+        Future<void>.delayed(const Duration(milliseconds: 280), () {
+          if (!mounted || _activeBar?.id != refreshBar.id) return;
+          _prefetchBars(refreshBars, activeBarId: refreshBar.id);
+        });
+        flow?.step('phaseB:prefetchDeferred');
+      } finally {
+        flow?.step('phaseB:finally');
+        if (kDebugMode) {
+          debugPrint(
+            'Finder create Phase B (deferred hydration) ${sw.elapsedMilliseconds}ms',
+          );
+        }
+        if (mounted) {
+          _markCreateSetState('phaseB:complete');
+          setState(() => _isCreatingBar = false);
+        }
+        _finishCreateDiagnostics(result: 'completed');
+      }
+    });
+  }
+
+  Future<void> _createNewBar() async {
+    if (_isCreatingBar) return;
+    final flow = BarCreateDiagnosticsFlow.start('Finder');
+    _createDiagnostics = flow;
+    flow.step('tapHandler');
+    if (mounted) {
+      _markCreateSetState('create:start');
+      setState(() => _isCreatingBar = true);
+    }
+    final phaseASw = Stopwatch()..start();
+    try {
+      final now = DateTime.now();
+      final trimmedName = _nextAutoBarName(_savedBars);
+      flow.step('phaseA:autoName:$trimmedName');
+      final newBarId = await widget.database
+          .into(widget.database.savedBars)
+          .insert(
+            SavedBarsCompanion.insert(
+              name: trimmedName,
+              isDefault: const Value(true),
+              lastUsed: Value(now),
+            ),
+          );
+      flow.step('phaseA:insertBar');
+      await _setDefaultBar(newBarId);
+      flow.step('phaseA:setDefaultBar');
+      final bars = await _loadBarsOrdered();
+      flow.step('phaseA:loadBarsOrdered');
+      if (!mounted) {
+        _finishCreateDiagnostics(result: 'unmounted');
+        return;
+      }
+
+      SavedBar? selectedBar;
+      for (final bar in bars) {
+        if (bar.id == newBarId) {
+          selectedBar = bar;
+          break;
+        }
+      }
+      selectedBar ??= SavedBar(
+        id: newBarId,
+        name: trimmedName,
+        isDefault: true,
+        createdAt: now,
+        lastUsed: now,
+      );
+      final SavedBar createdBar = selectedBar;
+
+      _markCreateSetState('phaseA:optimisticUi');
+      setState(() {
+        _savedBars = bars;
+        _activeBar = createdBar;
+        _barCount = 0;
+        _exactMatches = [];
+        _missing1 = [];
+        _missing2Plus = [];
+        _activeRailId = null;
+        _activeRailTitle = null;
+        _activeRailPredicate = null;
+        _viewMode = _FinderViewMode.tiles;
+        _refreshDerivedCaches();
+      });
+      flow.step('phaseA:setStateDone');
+
+      if (kDebugMode) {
+        debugPrint(
+          'Finder create Phase A (immediate UI) ${phaseASw.elapsedMilliseconds}ms',
+        );
+      }
+
+      _scheduleDeferredBarRefresh(createdBar, allBars: bars, diagnostics: flow);
+      flow.step('phaseA:scheduleDeferredHydration');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Created "${createdBar.name}"'),
+            action: SnackBarAction(
+              label: 'Rename',
+              onPressed: () {
+                _showRenameBarDialog(createdBar);
+              },
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      flow.step('error');
+      if (!mounted) {
+        _finishCreateDiagnostics(result: 'unmounted_error');
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not create bar. Please try again.'),
+        ),
+      );
+      _markCreateSetState('create:error');
+      setState(() => _isCreatingBar = false);
+      _finishCreateDiagnostics(result: 'error');
+    }
+  }
+
+  Future<void> _showRenameBarDialog(SavedBar bar) async {
+    final controller = TextEditingController(text: bar.name);
+    final renamed = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'Rename Bar',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: const InputDecoration(
+            hintText: 'Bar name',
+            hintStyle: TextStyle(color: AppTheme.textSecondary),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx, name);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || renamed == null || renamed.trim().isEmpty) return;
+
+    final name = renamed.trim();
+    await (widget.database.update(widget.database.savedBars)
+          ..where((b) => b.id.equals(bar.id)))
+        .write(SavedBarsCompanion(name: Value(name)));
+    final bars = await _loadBarsOrdered();
+    if (!mounted) return;
+    _markCreateSetState('rename:setState');
+    setState(() {
+      _savedBars = bars;
+      if (_activeBar?.id == bar.id) {
+        _activeBar = _activeBar!.copyWith(name: name);
+      }
+    });
+  }
+
+  Future<void> _clearCurrentBarWithConfirm() async {
+    if (_activeBar == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'Clear Current Bar',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          'Remove all ingredients from "${_activeBar!.name}"?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Clear', style: TextStyle(color: Colors.red.shade300)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || _activeBar == null) return;
+
+    await (widget.database.delete(
+      widget.database.savedBarIngredients,
+    )..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
+
+    if (!mounted) return;
+    await loadBarAndMatch();
+  }
+
+  Future<void> _switchActiveBar(
+    SavedBar bar, {
+    required List<SavedBar> allBars,
+  }) async {
+    _createDiagnostics?.incrementCounter(
+      '_switchActiveBar',
+      stackTrace: StackTrace.current,
+    );
+    if (_activeBar?.id == bar.id) return;
+
+    await _setDefaultBar(bar.id);
+    final latestBars = await _loadBarsOrdered();
+    final barsForUi = latestBars.isEmpty ? allBars : latestBars;
+
+    final snapshot = await _snapshotForBar(bar);
+    _sortList(snapshot.exact);
+    _sortList(snapshot.missing1);
+    _sortList(snapshot.missing2Plus);
+    _applyActiveBarSnapshot(bar, snapshot, allBars: barsForUi);
+    // mounted guard is inside _applyActiveBarSnapshot
+  }
+
   void _showSpiritFilterSheet() {
+    if (_isSpiritFilterOpen) return;
+    _isSpiritFilterOpen = true;
     final spirits = [
       'All',
       'Gin',
@@ -1028,7 +1413,10 @@ class FinderScreenState extends State<FinderScreen>
                 final sel = _spiritFilter == s;
                 return GestureDetector(
                   onTap: () {
-                    setState(() => _spiritFilter = s);
+                    setState(() {
+                      _spiritFilter = s;
+                      _refreshDerivedCaches();
+                    });
                     Navigator.pop(context);
                   },
                   child: Container(
@@ -1063,7 +1451,7 @@ class FinderScreenState extends State<FinderScreen>
           ],
         ),
       ),
-    );
+    ).whenComplete(() => _isSpiritFilterOpen = false);
   }
 
   PopupMenuItem<String> _sortItem(String value, String label) {
@@ -1082,7 +1470,7 @@ class FinderScreenState extends State<FinderScreen>
     );
   }
 
-  // ── Empty State ──
+  // â”€â”€ Empty State â”€â”€
   Widget _buildEmptyBarState() {
     return Center(
       child: Padding(
@@ -1178,8 +1566,11 @@ class FinderScreenState extends State<FinderScreen>
     );
   }
 
-  // ── Results ──
+  // â”€â”€ Results â”€â”€
   Widget _buildResultsForMode(List<CocktailMatch> matches) {
+    if (_barCount == 0) {
+      return _buildFinderPurposeEmptyState();
+    }
     if (matches.isEmpty) {
       return Center(
         child: Column(
@@ -1203,6 +1594,7 @@ class FinderScreenState extends State<FinderScreen>
                   setState(() {
                     _searchQuery = '';
                     _spiritFilter = 'All';
+                    _refreshDerivedCaches();
                   });
                 },
                 child: const Text(
@@ -1216,81 +1608,212 @@ class FinderScreenState extends State<FinderScreen>
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.only(top: 12, bottom: 100),
-      children: [
-        if (_mode == _FinderMode.canMake)
-          _sectionHeader(
-            'READY TO MAKE',
-            matches.length,
-            AppTheme.accentGold,
-            Icons.check_circle_outline,
-          ),
-        if (_mode == _FinderMode.oneAway)
-          _sectionHeader(
-            'ONE AWAY',
-            matches.length,
-            const Color(0xFFE8A838),
-            Icons.add_circle_outline,
-          ),
-        if (_mode == _FinderMode.all)
-          _sectionHeader(
-            'ALL MATCHES',
-            matches.length,
-            AppTheme.textSecondary,
-            Icons.local_bar_outlined,
-          ),
-        ...matches.map((m) {
-          final isExact = m.missingCount == 0;
-          final accent = isExact
-              ? AppTheme.accentGold
-              : (m.missingCount == 1
-                    ? const Color(0xFFE8A838)
-                    : const Color(0xFF888888));
-          return _cocktailCard(m, accent, isExact);
-        }),
-      ],
+    if (_mode == _FinderMode.canMake && _viewMode == _FinderViewMode.tiles) {
+      return _buildTilesResults(matches);
+    }
+    return _buildListResults(matches);
+  }
+
+  Widget _buildListResults(List<CocktailMatch> matches) {
+    final filtered =
+        (_mode == _FinderMode.canMake &&
+            _activeRailPredicate != null &&
+            _viewMode == _FinderViewMode.list)
+        ? matches.where((m) => _activeRailPredicate!(m)).toList()
+        : matches;
+    final showRailFilterHeader =
+        _mode == _FinderMode.canMake &&
+        _activeRailId != null &&
+        _activeRailTitle != null &&
+        _viewMode == _FinderViewMode.list;
+    final list = ListView.builder(
+      controller: _resultsScrollController,
+      padding: const EdgeInsets.fromLTRB(0, 14, 0, 100),
+      itemCount: filtered.length + (showRailFilterHeader ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (showRailFilterHeader && index == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGold.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: AppTheme.accentGold.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Filtered: $_activeRailTitle',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.accentGold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _activeRailId = null;
+                            _activeRailTitle = null;
+                            _activeRailPredicate = null;
+                            _viewMode = _FinderViewMode.tiles;
+                            _refreshDerivedCaches();
+                          });
+                        },
+                        child: const Icon(
+                          Icons.close,
+                          size: 14,
+                          color: AppTheme.accentGold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final dataIndex = index - (showRailFilterHeader ? 1 : 0);
+        final m = filtered[dataIndex];
+        final isExact = m.missingCount == 0;
+        final accent = isExact
+            ? AppTheme.accentGold
+            : (m.missingCount == 1
+                  ? const Color(0xFFE8A838)
+                  : const Color(0xFF888888));
+        return _cocktailCard(m, accent, isExact);
+      },
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _mode == _FinderMode.canMake
+            ? AppTheme.accentGold.withValues(alpha: 0.035)
+            : Colors.transparent,
+      ),
+      child: list,
     );
   }
 
-  Widget _sectionHeader(String title, int count, Color color, IconData icon) {
+  Widget _buildTilesResults(List<CocktailMatch> matches) {
+    if (_cachedTileSections.isEmpty) {
+      return _buildListResults(matches);
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.accentGold.withValues(alpha: 0.03),
+      ),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 100),
+        itemCount: _cachedTileSections.length,
+        itemBuilder: (context, index) {
+          final s = _cachedTileSections[index];
+          return _buildRailSection(
+            rail: s.rail,
+            railAvailable: s.railAvailable,
+            preview: s.preview,
+            minPreviewToRender: s.minPreviewToRender,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRailSection({
+    required _FinderRailBucket rail,
+    required List<CocktailMatch> railAvailable,
+    required List<CocktailMatch> preview,
+    int minPreviewToRender = 3,
+  }) {
+    if (preview.length < minPreviewToRender) {
+      return const SizedBox.shrink();
+    }
+    final availableCount = railAvailable.length;
+    final shownCount = preview.length;
+    final canSeeAll = availableCount > shownCount;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 4,
-            height: 16,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(2),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    rail.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                if (canSeeAll)
+                  GestureDetector(
+                    onTap: () {
+                      if (_isRailTransitioning) return;
+                      _isRailTransitioning = true;
+                      final ids = railAvailable
+                          .map((m) => m.cocktail.id)
+                          .toSet();
+                      setState(() {
+                        _viewMode = _FinderViewMode.list;
+                        _activeRailId = rail.id;
+                        _activeRailTitle = rail.title;
+                        _activeRailPredicate = (m) =>
+                            ids.contains(m.cocktail.id);
+                      });
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!_resultsScrollController.hasClients) return;
+                        _resultsScrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                        );
+                      });
+                      Future<void>.delayed(
+                        const Duration(milliseconds: 250),
+                      ).then((_) {
+                        _isRailTransitioning = false;
+                      });
+                    },
+                    child: Text(
+                      'See all ($availableCount)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.accentGold,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: color,
+          SizedBox(
+            height: _railTileHeight,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: preview.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (_, i) => _FinderRailTile(
+                match: preview[i],
+                database: widget.database,
+                width: 138,
               ),
             ),
           ),
@@ -1299,9 +1822,561 @@ class FinderScreenState extends State<FinderScreen>
     );
   }
 
+  List<_FinderRailBucket> _buildFinderRails(List<CocktailMatch> matches) {
+    if (matches.isEmpty) return const [];
+    final total = matches.length;
+    int minLow;
+    int minHigh;
+    if (total <= 20) {
+      minLow = 2;
+      minHigh = 3;
+    } else if (total <= 60) {
+      minLow = 2;
+      minHigh = 4;
+    } else {
+      minLow = 4;
+      minHigh = 6;
+    }
+
+    final byId = {for (final m in matches) m.cocktail.id: m};
+    final metas = <int, _CocktailMeta>{};
+    for (final m in matches) {
+      final meta = _cocktailMetaById[m.cocktail.id];
+      if (meta != null) {
+        metas[m.cocktail.id] = meta;
+      }
+    }
+
+    final today = DateTime.now();
+    final barId = _activeBar?.id ?? -1;
+    final seed = _stableSeed(
+      '${today.year}-${today.month}-${today.day}-$barId',
+    );
+    final startHere = _buildStartHereRail(
+      matches: matches,
+      metas: metas,
+      random: Random(seed),
+    );
+
+    final candidates = <_FinderRailBucket>[];
+    for (final def in _railDefinitions) {
+      final effectiveMin = def.family == _RailFamily.taste
+          ? def.minCount
+          : def.minCount.clamp(minLow, minHigh);
+      var accepted = <CocktailMatch>[];
+      for (final m in matches) {
+        final meta = metas[m.cocktail.id];
+        if (meta != null && def.predicate(m.cocktail, meta)) {
+          accepted.add(m);
+        }
+      }
+      if (accepted.length < effectiveMin && total >= 2) {
+        accepted = _fallbackRailMatches(def.id, matches, metas);
+      }
+      if (accepted.length < effectiveMin) continue;
+      accepted.sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
+      final score =
+          accepted.length +
+          (def.family == _RailFamily.taste ? 0.9 : 0.0) +
+          (def.family == _RailFamily.hybrid ? 0.35 : 0.0) +
+          (def.family == _RailFamily.spirit ? 0.18 : 0.0) +
+          (def.family == _RailFamily.method ? 0.12 : 0.0);
+      candidates.add(
+        _FinderRailBucket(
+          id: def.id,
+          title: def.title,
+          family: def.family,
+          count: accepted.length,
+          matches: accepted,
+          score: score,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) {
+      final c = b.score.compareTo(a.score);
+      if (c != 0) return c;
+      final familyOrder = <_RailFamily, int>{
+        _RailFamily.taste: 0,
+        _RailFamily.method: 1,
+        _RailFamily.difficulty: 2,
+        _RailFamily.glass: 3,
+        _RailFamily.spirit: 4,
+        _RailFamily.hybrid: 5,
+      };
+      final fa = familyOrder[a.family] ?? 99;
+      final fb = familyOrder[b.family] ?? 99;
+      final fc = fa.compareTo(fb);
+      return fc != 0 ? fc : a.title.compareTo(b.title);
+    });
+
+    final caps = <_RailFamily, int>{
+      _RailFamily.taste: 8,
+      _RailFamily.spirit: 2,
+      _RailFamily.method: 2,
+      _RailFamily.glass: 1,
+      _RailFamily.difficulty: 1,
+      _RailFamily.hybrid: 2,
+    };
+
+    final selected = <_FinderRailBucket>[];
+    final familyCounts = <_RailFamily, int>{};
+    final target = total < 12
+        ? 6
+        : total <= 20
+        ? 7
+        : total <= 35
+        ? 8
+        : total <= 60
+        ? 10
+        : 10; // + Start Here => typically 8-10 rails for 20-60
+
+    for (final c in candidates) {
+      if (selected.length >= target) break;
+      var current = familyCounts[c.family] ?? 0;
+      final cap = caps[c.family] ?? 99;
+      if (current >= cap) continue;
+      final conflicts = selected
+          .where((s) => _railOverlapRatio(s, c) > 0.88)
+          .toList();
+      if (conflicts.isNotEmpty) {
+        final replaceable = conflicts.firstWhere(
+          (s) =>
+              c.family == _RailFamily.taste &&
+              (s.family == _RailFamily.spirit ||
+                  s.family == _RailFamily.method),
+          orElse: () => const _FinderRailBucket(
+            id: '',
+            title: '',
+            family: _RailFamily.hybrid,
+            count: 0,
+            matches: [],
+            score: 0,
+          ),
+        );
+        if (replaceable.id.isNotEmpty) {
+          selected.removeWhere((s) => s.id == replaceable.id);
+          final prevCount = familyCounts[replaceable.family] ?? 0;
+          if (prevCount > 0) {
+            familyCounts[replaceable.family] = prevCount - 1;
+          }
+          current = familyCounts[c.family] ?? 0;
+        } else {
+          continue;
+        }
+      }
+      selected.add(c);
+      familyCounts[c.family] = current + 1;
+    }
+    if (selected.length < target) {
+      for (final c in candidates) {
+        if (selected.length >= target) break;
+        if (selected.any((s) => s.id == c.id)) continue;
+        selected.add(c);
+      }
+    }
+
+    final rails = <_FinderRailBucket>[];
+    if (startHere.matches.isNotEmpty) {
+      rails.add(startHere);
+    }
+    rails.addAll(selected);
+
+    // Ensure references are still from current filtered set.
+    return rails
+        .map(
+          (r) => _FinderRailBucket(
+            id: r.id,
+            title: r.title,
+            family: r.family,
+            count: r.matches.length,
+            matches: r.matches
+                .where((m) => byId.containsKey(m.cocktail.id))
+                .toList(),
+            score: r.score,
+          ),
+        )
+        .where((r) => r.matches.isNotEmpty)
+        .toList();
+  }
+
+  List<CocktailMatch> _fallbackRailMatches(
+    String railId,
+    List<CocktailMatch> matches,
+    Map<int, _CocktailMeta> metas,
+  ) {
+    final fallback = <CocktailMatch>[];
+    for (final m in matches) {
+      final meta = metas[m.cocktail.id];
+      if (meta == null) continue;
+      var include = false;
+      switch (railId) {
+        case 'smooth_balanced':
+          include = meta.difficulty <= 3 || meta.method == 'build';
+          break;
+        case 'bold_spirit_forward':
+          include = meta.method == 'stir' || meta.difficulty >= 3;
+          break;
+        case 'bright_fresh':
+          include =
+              _hasTasteTag(meta, const {'citrus', 'refreshing', 'fresh'}) ||
+              meta.method == 'shake';
+          break;
+        case 'rich_decadent':
+          include =
+              _hasTasteTag(meta, const {
+                'sweet',
+                'creamy',
+                'dessert',
+                'rich',
+              }) ||
+              meta.difficulty >= 3;
+          break;
+        case 'after_hours':
+          include =
+              _hasTasteTag(meta, const {
+                'bitter',
+                'herbal',
+                'smoky',
+                'spiced',
+              }) ||
+              (meta.method == 'stir' && meta.difficulty >= 2);
+          break;
+      }
+      if (include) fallback.add(m);
+    }
+    if (fallback.length < 2) {
+      return matches
+          .take(min(_railPreviewLimitNormal, matches.length))
+          .toList();
+    }
+    return fallback;
+  }
+
+  double _railOverlapRatio(_FinderRailBucket a, _FinderRailBucket b) {
+    if (a.matches.isEmpty || b.matches.isEmpty) return 0.0;
+    final aIds = a.matches.map((m) => m.cocktail.id).toSet();
+    final bIds = b.matches.map((m) => m.cocktail.id).toSet();
+    final intersection = aIds.intersection(bIds).length;
+    final base = min(aIds.length, bIds.length);
+    if (base == 0) return 0.0;
+    return intersection / base;
+  }
+
+  _FinderRailBucket _buildStartHereRail({
+    required List<CocktailMatch> matches,
+    required Map<int, _CocktailMeta> metas,
+    required Random random,
+  }) {
+    final tagFreq = <String, int>{};
+    for (final m in matches) {
+      final tags = metas[m.cocktail.id]?.tags ?? const <String>{};
+      for (final t in tags) {
+        tagFreq[t] = (tagFreq[t] ?? 0) + 1;
+      }
+    }
+    final topTags = tagFreq.keys.toList()
+      ..sort((a, b) => (tagFreq[b] ?? 0).compareTo(tagFreq[a] ?? 0));
+    final focusTags = topTags.take(8).toList();
+
+    final pool = List<CocktailMatch>.from(matches)
+      ..sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
+    final selected = <CocktailMatch>[];
+    final selectedIds = <int>{};
+    final usedSpirit = <String, int>{};
+    final usedMethod = <String, int>{};
+    final usedTag = <String, int>{};
+
+    while (selected.length < 6 && selected.length < pool.length) {
+      CocktailMatch? best;
+      double bestScore = -1;
+      for (final m in pool) {
+        if (selectedIds.contains(m.cocktail.id)) continue;
+        final meta = metas[m.cocktail.id];
+        if (meta == null) continue;
+        var score = random.nextDouble() * 0.03;
+        final spiritSeen = usedSpirit[meta.spirit] ?? 0;
+        score += spiritSeen == 0 ? 2.2 : 0.2 / (spiritSeen + 1);
+        final methodSeen = usedMethod[meta.method] ?? 0;
+        score += methodSeen == 0 ? 1.5 : 0.15 / (methodSeen + 1);
+        for (final t in focusTags) {
+          if (!meta.tags.contains(t)) continue;
+          final seen = usedTag[t] ?? 0;
+          score += seen == 0 ? 0.85 : 0.07 / (seen + 1);
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = m;
+        }
+      }
+      if (best == null) break;
+      final meta = metas[best.cocktail.id]!;
+      selected.add(best);
+      selectedIds.add(best.cocktail.id);
+      usedSpirit[meta.spirit] = (usedSpirit[meta.spirit] ?? 0) + 1;
+      usedMethod[meta.method] = (usedMethod[meta.method] ?? 0) + 1;
+      for (final t in focusTags) {
+        if (meta.tags.contains(t)) {
+          usedTag[t] = (usedTag[t] ?? 0) + 1;
+        }
+      }
+    }
+
+    return _FinderRailBucket(
+      id: 'start_here',
+      title: 'Built for Tonight',
+      family: _RailFamily.hybrid,
+      count: selected.length,
+      matches: selected,
+      score: 999.0,
+    );
+  }
+
+  _CocktailMeta _metaFor(Cocktail c) => _CocktailMeta(
+    spirit: _normalizeSpirit(c.baseSpirit),
+    method: _normalizeMethod(c.method),
+    glass: _normalizeGlass(c.glass),
+    difficulty: c.difficulty,
+    tags: _parseTags(c.tags),
+  );
+
+  String _normalizeMethod(String raw) {
+    final v = raw.trim().toLowerCase();
+    if (v.contains('shake')) return 'shake';
+    if (v.contains('stir')) return 'stir';
+    if (v.contains('build')) return 'build';
+    if (v.contains('blend') || v.contains('frozen')) return 'blend';
+    return v;
+  }
+
+  String _normalizeSpirit(String raw) {
+    final v = raw.trim().toLowerCase();
+    if (v.contains('whiskey') || v.contains('whisky')) return 'whiskey';
+    if (v.contains('bourbon')) return 'bourbon';
+    if (v.contains('gin')) return 'gin';
+    if (v.contains('rum')) return 'rum';
+    if (v.contains('vodka')) return 'vodka';
+    if (v.contains('tequila')) return 'tequila';
+    if (v.contains('brandy')) return 'brandy';
+    if (v.contains('cognac')) return 'cognac';
+    return v;
+  }
+
+  String _normalizeGlass(String raw) {
+    final v = raw.trim().toLowerCase();
+    if (v.contains('old fashioned') || v.contains('rocks')) return 'rocks';
+    if (v.contains('highball') || v.contains('collins')) return 'highball';
+    if (v.contains('coupe')) return 'coupe';
+    if (v.contains('martini')) return 'martini';
+    if (v.contains('nick') || v.contains('nora')) return 'nick_nora';
+    return v;
+  }
+
+  Set<String> _parseTags(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const <String>{};
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded
+              .whereType<String>()
+              .map((e) => e.trim().toLowerCase())
+              .where((e) => e.isNotEmpty)
+              .toSet();
+        }
+      } catch (_) {}
+    }
+    return trimmed
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+  }
+
+  String _normalizeTagToken(String raw) {
+    return raw
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[_\s]+'), '-')
+        .replaceAll(RegExp(r'[^a-z0-9-]'), '')
+        .replaceAll(RegExp(r'-+'), '-');
+  }
+
+  bool _hasTasteTag(_CocktailMeta meta, Set<String> aliases) {
+    final normalizedTags = meta.tags.map(_normalizeTagToken).toSet();
+    final normalizedAliases = aliases.map(_normalizeTagToken).toSet();
+    for (final alias in normalizedAliases) {
+      if (alias.isEmpty) continue;
+      if (normalizedTags.contains(alias)) return true;
+      if (normalizedTags.any(
+        (t) => (t.contains(alias) || alias.contains(t)) && t.length >= 5,
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int _stableSeed(String input) {
+    var hash = 0;
+    for (final code in input.codeUnits) {
+      hash = ((hash * 31) + code) & 0x7fffffff;
+    }
+    return hash;
+  }
+
+  List<_FinderRailDefinition> get _railDefinitions => [
+    _FinderRailDefinition(
+      id: 'smooth_balanced',
+      title: 'Smooth & Balanced',
+      family: _RailFamily.taste,
+      minCount: 2,
+      predicate: (_, m) =>
+          _hasTasteTag(m, const {'smooth', 'balanced', 'velvety', 'round'}),
+    ),
+    _FinderRailDefinition(
+      id: 'bold_spirit_forward',
+      title: 'Bold & Spirit-Forward',
+      family: _RailFamily.taste,
+      minCount: 2,
+      predicate: (_, m) => _hasTasteTag(m, const {
+        'boozy',
+        'spirit-forward',
+        'spirit forward',
+        'strong',
+      }),
+    ),
+    _FinderRailDefinition(
+      id: 'bright_fresh',
+      title: 'Bright & Fresh',
+      family: _RailFamily.taste,
+      minCount: 2,
+      predicate: (_, m) => _hasTasteTag(m, const {
+        'citrus',
+        'refreshing',
+        'fresh',
+        'tart',
+        'floral',
+      }),
+    ),
+    _FinderRailDefinition(
+      id: 'rich_decadent',
+      title: 'Rich & Decadent',
+      family: _RailFamily.taste,
+      minCount: 2,
+      predicate: (_, m) => _hasTasteTag(m, const {
+        'sweet',
+        'creamy',
+        'rich',
+        'decadent',
+        'dessert',
+      }),
+    ),
+    _FinderRailDefinition(
+      id: 'after_hours',
+      title: 'After Hours',
+      family: _RailFamily.taste,
+      minCount: 2,
+      predicate: (_, m) => _hasTasteTag(m, const {
+        'bitter',
+        'smoky',
+        'herbal',
+        'spiced',
+        'boozy',
+      }),
+    ),
+  ];
+
+  Widget _buildFinderPurposeEmptyState() {
+    final barName = _activeBar?.name ?? 'My Bar';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(28, 10, 28, 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Container(
+              width: 78,
+              height: 78,
+              decoration: BoxDecoration(
+                color: AppTheme.accentGold.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppTheme.accentGold.withValues(alpha: 0.28),
+                ),
+              ),
+              child: const Icon(
+                Icons.search_rounded,
+                color: AppTheme.accentGold,
+                size: 34,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Finder uses "$barName" to\nshow cocktails you can make.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Add ingredients to your bar and Finder will instantly list cocktails that match your inventory.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary.withValues(alpha: 0.82),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 22),
+            Semantics(
+              button: true,
+              label: 'Go to My Bar to add ingredients',
+              child: GestureDetector(
+                onTap: widget.onNavigateToMyBar,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGold,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.liquor, color: AppTheme.primaryDark, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Add Ingredients in My Bar',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _cocktailCard(CocktailMatch match, Color accentColor, bool isExact) {
+    final showReadyStatus = isExact && _mode != _FinderMode.canMake;
+    final isCanMakeMode = _mode == _FinderMode.canMake;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -1316,15 +2391,17 @@ class FinderScreenState extends State<FinderScreen>
           ),
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
               color: AppTheme.surfaceDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isExact
-                    ? accentColor.withValues(alpha: 0.4)
-                    : AppTheme.surfaceLight,
-                width: isExact ? 1.5 : 1,
+                color: isCanMakeMode
+                    ? AppTheme.accentGold.withValues(alpha: 0.22)
+                    : (isExact
+                          ? accentColor.withValues(alpha: 0.4)
+                          : AppTheme.surfaceLight),
+                width: isCanMakeMode ? 1.0 : (isExact ? 1.5 : 1),
               ),
             ),
             child: Row(
@@ -1338,61 +2415,64 @@ class FinderScreenState extends State<FinderScreen>
                       Text(
                         match.cocktail.name,
                         style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
                           color: AppTheme.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      if (isExact)
+                      if (!isExact || showReadyStatus)
+                        const SizedBox(height: 4),
+                      if (showReadyStatus)
                         Row(
                           children: [
                             Text(
                               'Ready to make',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: accentColor,
+                                color: accentColor.withValues(alpha: 0.9),
                               ),
                             ),
                             if (match.substitutionsUsed.isNotEmpty) ...[
                               const SizedBox(width: 6),
                               Icon(
                                 Icons.swap_horiz,
-                                size: 12,
-                                color: accentColor,
+                                size: 11,
+                                color: accentColor.withValues(alpha: 0.8),
                               ),
                               const SizedBox(width: 2),
                               Text(
                                 'subs',
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 9,
                                   fontStyle: FontStyle.italic,
-                                  color: accentColor,
+                                  color: accentColor.withValues(alpha: 0.8),
                                 ),
                               ),
                             ],
                           ],
                         )
-                      else
+                      else if (!isExact)
                         Text(
                           'Need: ${match.missingIngredients.join(", ")}',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: accentColor,
+                            color: accentColor.withValues(alpha: 0.9),
                           ),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          overflow: TextOverflow.clip,
                         ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 7),
                       Row(
                         children: [
                           Text(
                             match.cocktail.baseSpirit,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: AppTheme.textSecondary,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary.withValues(
+                                alpha: 0.9,
+                              ),
                             ),
                           ),
                           Container(
@@ -1406,9 +2486,11 @@ class FinderScreenState extends State<FinderScreen>
                           ),
                           Text(
                             match.cocktail.method.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: AppTheme.textSecondary,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary.withValues(
+                                alpha: 0.9,
+                              ),
                             ),
                           ),
                           Container(
@@ -1422,9 +2504,11 @@ class FinderScreenState extends State<FinderScreen>
                           ),
                           Text(
                             match.cocktail.glass,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: AppTheme.textSecondary,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary.withValues(
+                                alpha: 0.9,
+                              ),
                             ),
                           ),
                         ],
@@ -1448,7 +2532,8 @@ class FinderScreenState extends State<FinderScreen>
 
 class _CocktailThumb extends StatefulWidget {
   final Cocktail cocktail;
-  const _CocktailThumb({required this.cocktail});
+  final double size;
+  const _CocktailThumb({required this.cocktail, this.size = 54});
   @override
   State<_CocktailThumb> createState() => _CocktailThumbState();
 }
@@ -1476,8 +2561,8 @@ class _CocktailThumbState extends State<_CocktailThumb> {
       child: _imagePath != null
           ? Image.asset(
               _imagePath!,
-              width: 48,
-              height: 48,
+              width: widget.size,
+              height: widget.size,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => _fallback(),
             )
@@ -1486,14 +2571,306 @@ class _CocktailThumbState extends State<_CocktailThumb> {
   }
 
   Widget _fallback() => Container(
-    width: 48,
-    height: 48,
+    width: widget.size,
+    height: widget.size,
     decoration: BoxDecoration(
       color: AppTheme.surfaceLight,
       borderRadius: BorderRadius.circular(8),
     ),
     child: const Icon(Icons.local_bar, color: AppTheme.accentGold, size: 20),
   );
+}
+
+class _FinderRailTile extends StatefulWidget {
+  final CocktailMatch match;
+  final AppDatabase database;
+  final double? width;
+  const _FinderRailTile({
+    required this.match,
+    required this.database,
+    this.width,
+  });
+
+  @override
+  State<_FinderRailTile> createState() => _FinderRailTileState();
+}
+
+class _FinderRailTileState extends State<_FinderRailTile> {
+  bool _pressed = false;
+  bool _openingDetail = false;
+
+  String _shortTastingNotes(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+
+    var lowered = raw.toLowerCase();
+    const separators = <String>[
+      ' with ',
+      ' and ',
+      ' & ',
+      ';',
+      '—',
+      '-',
+      '.',
+      '!',
+      '?',
+    ];
+    for (final s in separators) {
+      lowered = lowered.replaceAll(s, ',');
+    }
+    const phraseBreaks = <String>[
+      'notes of',
+      'note of',
+      'hint of',
+      'hints of',
+      'finish',
+      'upfront',
+      'underneath',
+    ];
+    for (final p in phraseBreaks) {
+      lowered = lowered.replaceAll(p, ',');
+    }
+
+    final fillers = <String>{
+      'notes',
+      'softened',
+      'delicate',
+      'lightly',
+      'fresh',
+      'smooth',
+      'rich',
+      'unapologetically',
+      'intensely',
+      'deeply',
+      'seriously',
+      'truly',
+      'perfectly',
+      'beautifully',
+      'boldly',
+      'brightly',
+      'very',
+      'really',
+      'super',
+      'quite',
+      'balanced',
+      'classic',
+    };
+
+    final descriptors = <String>[];
+    final seenStems = <String>{};
+    for (final token in lowered.split(',')) {
+      var chunk = token.trim();
+      if (chunk.isEmpty) continue;
+      chunk = chunk.replaceAll(
+        RegExp(r'\b(a|the)\b\s*', caseSensitive: false),
+        ' ',
+      );
+      for (final word in fillers) {
+        final pattern = '\\b${RegExp.escape(word)}\\b';
+        chunk = chunk.replaceAll(RegExp(pattern, caseSensitive: false), ' ');
+      }
+      chunk = chunk.replaceAll(RegExp(r'[^\w\s-]'), ' ');
+      chunk = chunk.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (chunk.isEmpty) continue;
+
+      final words = chunk.split(' ').where((w) => w.trim().isNotEmpty).toList();
+      if (words.isEmpty) continue;
+      final candidate = words.length <= 2
+          ? words.join(' ')
+          : words.take(2).join(' ');
+      if (candidate.length < 4) continue;
+
+      final title =
+          candidate[0].toUpperCase() + candidate.substring(1).toLowerCase();
+      final stem = title.toLowerCase();
+      final stemKey = stem.length >= 5 ? stem.substring(0, 5) : stem;
+      if (seenStems.contains(stemKey)) continue;
+
+      seenStems.add(stemKey);
+      descriptors.add(title);
+      if (descriptors.length == 3) break;
+    }
+
+    if (descriptors.isEmpty) return '';
+    return descriptors.take(3).join(' - ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tileNotesRaw = widget.match.cocktail.tilesNotes;
+    final tasting = (tileNotesRaw != null && tileNotesRaw.trim().isNotEmpty)
+        ? tileNotesRaw.trim()
+        : _shortTastingNotes(widget.match.cocktail.tastingNotes);
+    return GestureDetector(
+      onTapDown: (_) {
+        if (_openingDetail || !mounted) return;
+        setState(() => _pressed = true);
+      },
+      onTapUp: (_) {
+        if (!mounted) return;
+        setState(() => _pressed = false);
+      },
+      onTapCancel: () {
+        if (!mounted) return;
+        setState(() => _pressed = false);
+      },
+      onTap: () async {
+        if (_openingDetail || !mounted) return;
+        _openingDetail = true;
+        try {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CocktailDetailScreen(
+                cocktail: widget.match.cocktail,
+                database: widget.database,
+              ),
+            ),
+          );
+        } finally {
+          if (mounted) {
+            _openingDetail = false;
+          }
+        }
+      },
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 140),
+        scale: _pressed ? 0.98 : 1.0,
+        curve: Curves.easeOutCubic,
+        child: Container(
+          height: 220,
+          width: widget.width,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppTheme.accentGold.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 92,
+                child: Center(
+                  child: _CocktailThumb(
+                    cocktail: widget.match.cocktail,
+                    size: 92,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 98,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.match.cocktail.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (tasting.isNotEmpty)
+                      Text(
+                        tasting,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textPrimary.withValues(alpha: 0.85),
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 15),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${widget.match.cocktail.baseSpirit} - ${widget.match.cocktail.method}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.86),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _RailFamily { taste, spirit, method, glass, difficulty, hybrid }
+
+class _CocktailMeta {
+  final String spirit;
+  final String method;
+  final String glass;
+  final int difficulty;
+  final Set<String> tags;
+  const _CocktailMeta({
+    required this.spirit,
+    required this.method,
+    required this.glass,
+    required this.difficulty,
+    required this.tags,
+  });
+}
+
+class _FinderRailDefinition {
+  final String id;
+  final String title;
+  final _RailFamily family;
+  final int minCount;
+  final bool Function(Cocktail cocktail, _CocktailMeta meta) predicate;
+  const _FinderRailDefinition({
+    required this.id,
+    required this.title,
+    required this.family,
+    required this.minCount,
+    required this.predicate,
+  });
+}
+
+class _FinderRailBucket {
+  final String id;
+  final String title;
+  final _RailFamily family;
+  final int count;
+  final List<CocktailMatch> matches;
+  final double score;
+  const _FinderRailBucket({
+    required this.id,
+    required this.title,
+    required this.family,
+    required this.count,
+    required this.matches,
+    required this.score,
+  });
+}
+
+class _RailSectionData {
+  final _FinderRailBucket rail;
+  final List<CocktailMatch> railAvailable;
+  final List<CocktailMatch> preview;
+  final int minPreviewToRender;
+  const _RailSectionData({
+    required this.rail,
+    required this.railAvailable,
+    required this.preview,
+    required this.minPreviewToRender,
+  });
 }
 
 class CocktailMatch {
