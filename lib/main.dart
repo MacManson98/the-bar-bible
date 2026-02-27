@@ -8,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'core/services/bar_service.dart';
 import 'core/utils/image_utils.dart';
 import 'data/database.dart';
+import 'services/content_sync_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/cocktail_detail_screen.dart';
 import 'screens/finder_screen.dart';
@@ -16,27 +17,27 @@ import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   final database = await initDatabase();
-  
+
   runApp(CocktailSpecsApp(database: database));
 }
 
 Future<AppDatabase> initDatabase() async {
   final dbFolder = await getApplicationDocumentsDirectory();
   final dbPath = p.join(dbFolder.path, 'cocktails.db');
-  
+
   if (!await File(dbPath).exists()) {
     final data = await rootBundle.load('assets/databases/cocktails.db');
     await File(dbPath).writeAsBytes(data.buffer.asUint8List());
   }
-  
+
   return AppDatabase();
 }
 
 class CocktailSpecsApp extends StatelessWidget {
   final AppDatabase database;
-  
+
   const CocktailSpecsApp({super.key, required this.database});
 
   @override
@@ -54,7 +55,7 @@ class CocktailSpecsApp extends StatelessWidget {
 
 class MainNavigationScreen extends StatefulWidget {
   final AppDatabase database;
-  
+
   const MainNavigationScreen({super.key, required this.database});
 
   @override
@@ -70,17 +71,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = _homeTabIndex;
   String _activeBarName = 'My Bar';
   late final BarService _barService;
-  
+
   // GlobalKeys to reach tab states for cross-tab refresh
   final _finderKey = GlobalKey<FinderScreenState>();
   final _myBarKey = GlobalKey<MyBarScreenState>();
   Timer? _barChangedDebounceTimer;
-  
+
   @override
   void initState() {
     super.initState();
     _barService = BarService(widget.database);
     _loadActiveBarName();
+    _startContentSync();
+  }
+
+  void _startContentSync() {
+    unawaited(ContentSyncService(widget.database).syncIfNeeded());
   }
 
   List<Widget> _buildScreens() {
@@ -167,10 +173,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _buildScreens(),
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _buildScreens()),
       extendBody: true,
       bottomNavigationBar: _buildBottomNavBar(),
     );
@@ -213,9 +216,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             fontWeight: FontWeight.bold,
             letterSpacing: 0.5,
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-          ),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
           items: const [
             BottomNavigationBarItem(
               icon: Padding(
@@ -283,7 +284,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
 class CocktailsListScreen extends StatefulWidget {
   final AppDatabase database;
-  
+
   const CocktailsListScreen({super.key, required this.database});
 
   @override
@@ -294,14 +295,23 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
   List<Cocktail> allCocktails = [];
   List<Cocktail> filteredCocktails = [];
   bool isLoading = true;
-  
+
   String searchQuery = '';
   Set<String> selectedSpirits = {};
   Set<String> selectedMethods = {};
   Set<int> selectedDifficulties = {};
   String sortBy = 'alphabetical';
-  
-  final List<String> spirits = ['Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Brandy', 'Cognac', 'Other'];
+
+  final List<String> spirits = [
+    'Gin',
+    'Vodka',
+    'Rum',
+    'Bourbon',
+    'Whiskey',
+    'Brandy',
+    'Cognac',
+    'Other',
+  ];
   final List<String> methods = ['shake', 'stir', 'build'];
 
   @override
@@ -311,7 +321,9 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
   }
 
   Future<void> _loadCocktails() async {
-    final cocktails = await widget.database.select(widget.database.cocktails).get();
+    final cocktails = await widget.database
+        .select(widget.database.cocktails)
+        .get();
     setState(() {
       allCocktails = cocktails;
       filteredCocktails = cocktails;
@@ -347,7 +359,9 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
           filteredCocktails.sort((a, b) => a.name.compareTo(b.name));
           break;
         case 'difficulty':
-          filteredCocktails.sort((a, b) => a.difficulty.compareTo(b.difficulty));
+          filteredCocktails.sort(
+            (a, b) => a.difficulty.compareTo(b.difficulty),
+          );
           break;
       }
     });
@@ -370,7 +384,9 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
       selectedDifficulties.isNotEmpty;
 
   int _getActiveFilterCount() {
-    return selectedSpirits.length + selectedMethods.length + selectedDifficulties.length;
+    return selectedSpirits.length +
+        selectedMethods.length +
+        selectedDifficulties.length;
   }
 
   void _showFiltersSheet() {
@@ -395,26 +411,112 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
             children: [
               Row(
                 children: [
-                  const Text('FILTERS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                  const Text(
+                    'FILTERS',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                   const Spacer(),
-                  if (tempSpirits.isNotEmpty || tempMethods.isNotEmpty || tempDifficulties.isNotEmpty)
+                  if (tempSpirits.isNotEmpty ||
+                      tempMethods.isNotEmpty ||
+                      tempDifficulties.isNotEmpty)
                     TextButton(
-                      onPressed: () => setModalState(() { tempSpirits.clear(); tempMethods.clear(); tempDifficulties.clear(); }),
-                      child: const Text('CLEAR ALL', style: TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold)),
+                      onPressed: () => setModalState(() {
+                        tempSpirits.clear();
+                        tempMethods.clear();
+                        tempDifficulties.clear();
+                      }),
+                      child: const Text(
+                        'CLEAR ALL',
+                        style: TextStyle(
+                          color: AppTheme.accentGold,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                 ],
               ),
               const SizedBox(height: 20),
-              _FilterSection(label: 'SPIRIT', children: spirits.map((s) => _FilterChipMulti(label: s, isSelected: tempSpirits.contains(s), onTap: () => setModalState(() => tempSpirits.contains(s) ? tempSpirits.remove(s) : tempSpirits.add(s)))).toList()),
+              _FilterSection(
+                label: 'SPIRIT',
+                children: spirits
+                    .map(
+                      (s) => _FilterChipMulti(
+                        label: s,
+                        isSelected: tempSpirits.contains(s),
+                        onTap: () => setModalState(
+                          () => tempSpirits.contains(s)
+                              ? tempSpirits.remove(s)
+                              : tempSpirits.add(s),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
               const SizedBox(height: 16),
-              _FilterSection(label: 'METHOD', children: methods.map((m) => _FilterChipMulti(label: m.toUpperCase(), isSelected: tempMethods.contains(m), onTap: () => setModalState(() => tempMethods.contains(m) ? tempMethods.remove(m) : tempMethods.add(m)))).toList()),
+              _FilterSection(
+                label: 'METHOD',
+                children: methods
+                    .map(
+                      (m) => _FilterChipMulti(
+                        label: m.toUpperCase(),
+                        isSelected: tempMethods.contains(m),
+                        onTap: () => setModalState(
+                          () => tempMethods.contains(m)
+                              ? tempMethods.remove(m)
+                              : tempMethods.add(m),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
               const SizedBox(height: 16),
-              _FilterSection(label: 'DIFFICULTY', children: [1,2,3,4,5].map((d) => _FilterChipMulti(label: '$d\u2605', isSelected: tempDifficulties.contains(d), onTap: () => setModalState(() => tempDifficulties.contains(d) ? tempDifficulties.remove(d) : tempDifficulties.add(d)))).toList()),
+              _FilterSection(
+                label: 'DIFFICULTY',
+                children: [1, 2, 3, 4, 5]
+                    .map(
+                      (d) => _FilterChipMulti(
+                        label: '$d\u2605',
+                        isSelected: tempDifficulties.contains(d),
+                        onTap: () => setModalState(
+                          () => tempDifficulties.contains(d)
+                              ? tempDifficulties.remove(d)
+                              : tempDifficulties.add(d),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () { setState(() { selectedSpirits = tempSpirits; selectedMethods = tempMethods; selectedDifficulties = tempDifficulties; }); _applyFilters(); Navigator.pop(context); },
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentGold, foregroundColor: AppTheme.primaryDark, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                child: const Text('APPLY FILTERS', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                onPressed: () {
+                  setState(() {
+                    selectedSpirits = tempSpirits;
+                    selectedMethods = tempMethods;
+                    selectedDifficulties = tempDifficulties;
+                  });
+                  _applyFilters();
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentGold,
+                  foregroundColor: AppTheme.primaryDark,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'APPLY FILTERS',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
             ],
@@ -435,17 +537,47 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1))),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Theme.of(context).dividerColor,
+                          width: 1,
+                        ),
+                      ),
+                    ),
                     child: const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(children: [
-                          Icon(Icons.menu_book, color: AppTheme.accentGold, size: 32),
-                          SizedBox(width: 12),
-                          Text('BROWSE', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                        ]),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.menu_book,
+                              color: AppTheme.accentGold,
+                              size: 32,
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              'BROWSE',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ],
+                        ),
                         SizedBox(height: 4),
-                        Padding(padding: EdgeInsets.only(left: 44), child: Text('Cocktail Reference Library', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, letterSpacing: 1))),
+                        Padding(
+                          padding: EdgeInsets.only(left: 44),
+                          child: Text(
+                            'Cocktail Reference Library',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -457,9 +589,20 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                           decoration: InputDecoration(
                             hintText: 'Search cocktails...',
                             prefixIcon: const Icon(Icons.search),
-                            suffixIcon: searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () { setState(() => searchQuery = ''); _applyFilters(); }) : null,
+                            suffixIcon: searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      setState(() => searchQuery = '');
+                                      _applyFilters();
+                                    },
+                                  )
+                                : null,
                           ),
-                          onChanged: (value) { searchQuery = value; _applyFilters(); },
+                          onChanged: (value) {
+                            searchQuery = value;
+                            _applyFilters();
+                          },
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -467,58 +610,167 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                             ElevatedButton(
                               onPressed: _showFiltersSheet,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: hasActiveFilters ? AppTheme.accentGold : AppTheme.surfaceDark,
-                                foregroundColor: hasActiveFilters ? AppTheme.primaryDark : AppTheme.textPrimary,
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: hasActiveFilters ? AppTheme.accentGold : AppTheme.surfaceLight)),
+                                backgroundColor: hasActiveFilters
+                                    ? AppTheme.accentGold
+                                    : AppTheme.surfaceDark,
+                                foregroundColor: hasActiveFilters
+                                    ? AppTheme.primaryDark
+                                    : AppTheme.textPrimary,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: hasActiveFilters
+                                        ? AppTheme.accentGold
+                                        : AppTheme.surfaceLight,
+                                  ),
+                                ),
                               ),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.filter_list, size: 20),
-                                const SizedBox(width: 8),
-                                Text(hasActiveFilters ? 'FILTERS (${_getActiveFilterCount()})' : 'FILTERS', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                              ]),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.filter_list, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    hasActiveFilters
+                                        ? 'FILTERS (${_getActiveFilterCount()})'
+                                        : 'FILTERS',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const Spacer(),
                             DropdownButton<String>(
-                              value: sortBy, dropdownColor: AppTheme.surfaceDark,
-                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                              underline: Container(), icon: const Icon(Icons.sort, color: AppTheme.textSecondary, size: 18),
-                              items: const [DropdownMenuItem(value: 'alphabetical', child: Text('A\u2013Z')), DropdownMenuItem(value: 'difficulty', child: Text('Difficulty'))],
-                              onChanged: (value) { setState(() => sortBy = value!); _applyFilters(); },
+                              value: sortBy,
+                              dropdownColor: AppTheme.surfaceDark,
+                              style: const TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 12,
+                              ),
+                              underline: Container(),
+                              icon: const Icon(
+                                Icons.sort,
+                                color: AppTheme.textSecondary,
+                                size: 18,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'alphabetical',
+                                  child: Text('A\u2013Z'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'difficulty',
+                                  child: Text('Difficulty'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                setState(() => sortBy = value!);
+                                _applyFilters();
+                              },
                             ),
                           ],
                         ),
                         if (hasActiveFilters) ...[
                           const SizedBox(height: 12),
-                          Wrap(spacing: 8, runSpacing: 8, children: [
-                            ...selectedSpirits.map((s) => _ActiveFilterPill(label: s, onRemove: () { setState(() => selectedSpirits.remove(s)); _applyFilters(); })),
-                            ...selectedMethods.map((m) => _ActiveFilterPill(label: m.toUpperCase(), onRemove: () { setState(() => selectedMethods.remove(m)); _applyFilters(); })),
-                            ...selectedDifficulties.map((d) => _ActiveFilterPill(label: '$d\u2605', onRemove: () { setState(() => selectedDifficulties.remove(d)); _applyFilters(); })),
-                          ]),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              ...selectedSpirits.map(
+                                (s) => _ActiveFilterPill(
+                                  label: s,
+                                  onRemove: () {
+                                    setState(() => selectedSpirits.remove(s));
+                                    _applyFilters();
+                                  },
+                                ),
+                              ),
+                              ...selectedMethods.map(
+                                (m) => _ActiveFilterPill(
+                                  label: m.toUpperCase(),
+                                  onRemove: () {
+                                    setState(() => selectedMethods.remove(m));
+                                    _applyFilters();
+                                  },
+                                ),
+                              ),
+                              ...selectedDifficulties.map(
+                                (d) => _ActiveFilterPill(
+                                  label: '$d\u2605',
+                                  onRemove: () {
+                                    setState(
+                                      () => selectedDifficulties.remove(d),
+                                    );
+                                    _applyFilters();
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ],
                     ),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(children: [
-                      Container(width: 4, height: 16, color: AppTheme.accentGold),
-                      const SizedBox(width: 12),
-                      Text('${filteredCocktails.length} ${filteredCocktails.length == 1 ? 'Cocktail' : 'Cocktails'}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 1)),
-                    ]),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 16,
+                          color: AppTheme.accentGold,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '${filteredCocktails.length} ${filteredCocktails.length == 1 ? 'Cocktail' : 'Cocktails'}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Expanded(
                     child: filteredCocktails.isEmpty
-                        ? _EmptyState(hasFilters: hasActiveFilters, onClear: _clearFilters)
+                        ? _EmptyState(
+                            hasFilters: hasActiveFilters,
+                            onClear: _clearFilters,
+                          )
                         : ListView.builder(
-                            padding: const EdgeInsets.only(left: 20, right: 20, top: 8, bottom: 100),
+                            padding: const EdgeInsets.only(
+                              left: 20,
+                              right: 20,
+                              top: 8,
+                              bottom: 100,
+                            ),
                             itemCount: filteredCocktails.length,
                             itemBuilder: (context, index) {
                               final cocktail = filteredCocktails[index];
-                              return _CocktailCard(cocktail: cocktail, onTap: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => CocktailDetailScreen(database: widget.database, cocktail: cocktail)));
-                              });
+                              return _CocktailCard(
+                                cocktail: cocktail,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CocktailDetailScreen(
+                                        database: widget.database,
+                                        cocktail: cocktail,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
                             },
                           ),
                   ),
@@ -537,11 +789,22 @@ class _FilterSection extends StatelessWidget {
   const _FilterSection({required this.label, required this.children});
   @override
   Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: AppTheme.accentGold)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: children),
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+            color: AppTheme.accentGold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: children),
+      ],
+    );
   }
 }
 
@@ -549,15 +812,34 @@ class _FilterChipMulti extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  const _FilterChipMulti({required this.label, required this.isSelected, required this.onTap});
+  const _FilterChipMulti({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap, borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(color: isSelected ? AppTheme.accentGold : AppTheme.surfaceDark, borderRadius: BorderRadius.circular(8), border: Border.all(color: isSelected ? AppTheme.accentGold : AppTheme.surfaceLight, width: 1.5)),
-        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? AppTheme.primaryDark : AppTheme.textPrimary)),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.accentGold : AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppTheme.accentGold : AppTheme.surfaceLight,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? AppTheme.primaryDark : AppTheme.textPrimary,
+          ),
+        ),
       ),
     );
   }
@@ -571,12 +853,32 @@ class _ActiveFilterPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: AppTheme.accentGold, borderRadius: BorderRadius.circular(6)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryDark)),
-        const SizedBox(width: 6),
-        InkWell(onTap: onRemove, child: const Icon(Icons.close, size: 14, color: AppTheme.primaryDark)),
-      ]),
+      decoration: BoxDecoration(
+        color: AppTheme.accentGold,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primaryDark,
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: onRemove,
+            child: const Icon(
+              Icons.close,
+              size: 14,
+              color: AppTheme.primaryDark,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -596,11 +898,15 @@ class _CocktailCardState extends State<_CocktailCard> {
     super.initState();
     _resolveImagePath();
   }
+
   Future<void> _resolveImagePath() async {
-    final basePath = widget.cocktail.imagePath ?? ImageUtils.generateBasePathFromName(widget.cocktail.name);
+    final basePath =
+        widget.cocktail.imagePath ??
+        ImageUtils.generateBasePathFromName(widget.cocktail.name);
     final resolved = await ImageUtils.findCocktailImage(basePath);
     if (mounted) setState(() => _resolvedImagePath = resolved);
   }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -608,43 +914,131 @@ class _CocktailCardState extends State<_CocktailCard> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: widget.onTap, borderRadius: BorderRadius.circular(12),
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: AppTheme.surfaceDark, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.surfaceLight)),
-            child: Row(children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _resolvedImagePath != null
-                    ? Image.asset(_resolvedImagePath!, width: 60, height: 60, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imageFallback())
-                    : _imageFallback(),
-              ),
-              const SizedBox(width: 12),
-              Container(width: 4, height: 60, decoration: BoxDecoration(color: AppTheme.accentGold, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(width: 16),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.cocktail.name.toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Text(widget.cocktail.baseSpirit.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.accentGold, letterSpacing: 0.5)),
-                  Container(margin: const EdgeInsets.symmetric(horizontal: 8), width: 3, height: 3, decoration: const BoxDecoration(color: AppTheme.textSecondary, shape: BoxShape.circle)),
-                  Expanded(child: Text(widget.cocktail.method.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
-                ]),
-                const SizedBox(height: 4),
-                Text(widget.cocktail.glass, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-              ])),
-              Column(children: [
-                Text('\u2605' * widget.cocktail.difficulty, style: const TextStyle(fontSize: 14, color: AppTheme.accentGold)),
-                const SizedBox(height: 8),
-                const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textSecondary),
-              ]),
-            ]),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceDark,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.surfaceLight),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: _resolvedImagePath != null
+                      ? Image.asset(
+                          _resolvedImagePath!,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _imageFallback(),
+                        )
+                      : _imageFallback(),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  width: 4,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGold,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.cocktail.name.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text(
+                            widget.cocktail.baseSpirit.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.accentGold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            width: 3,
+                            height: 3,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.textSecondary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              widget.cocktail.method.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                                letterSpacing: 0.5,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.cocktail.glass,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  children: [
+                    Text(
+                      '\u2605' * widget.cocktail.difficulty,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.accentGold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-  Widget _imageFallback() => Container(width: 60, height: 60, decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.local_bar, color: AppTheme.accentGold));
+
+  Widget _imageFallback() => Container(
+    width: 60,
+    height: 60,
+    decoration: BoxDecoration(
+      color: AppTheme.surfaceLight,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: const Icon(Icons.local_bar, color: AppTheme.accentGold),
+  );
 }
 
 class _EmptyState extends StatelessWidget {
@@ -653,12 +1047,26 @@ class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.hasFilters, required this.onClear});
   @override
   Widget build(BuildContext context) {
-    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      const Icon(Icons.search_off, size: 64, color: AppTheme.textSecondary),
-      const SizedBox(height: 16),
-      const Text('NO COCKTAILS FOUND', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
-      if (hasFilters) ...[const SizedBox(height: 16), TextButton(onPressed: onClear, child: const Text('CLEAR FILTERS'))],
-    ]));
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.search_off, size: 64, color: AppTheme.textSecondary),
+          const SizedBox(height: 16),
+          const Text(
+            'NO COCKTAILS FOUND',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+          if (hasFilters) ...[
+            const SizedBox(height: 16),
+            TextButton(onPressed: onClear, child: const Text('CLEAR FILTERS')),
+          ],
+        ],
+      ),
+    );
   }
 }
-

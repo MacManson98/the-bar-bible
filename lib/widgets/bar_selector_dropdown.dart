@@ -7,6 +7,7 @@ import '../data/database.dart';
 
 typedef BarSelectCallback = FutureOr<void> Function(int barId);
 typedef BarActionCallback = FutureOr<void> Function();
+typedef BarDeleteCallback = FutureOr<void> Function(SavedBar bar);
 
 class BarSelectorDropdown extends StatelessWidget {
   final String currentBarName;
@@ -15,6 +16,7 @@ class BarSelectorDropdown extends StatelessWidget {
   final BarSelectCallback onSelectBar;
   final BarActionCallback onCreateBar;
   final BarActionCallback onClearBar;
+  final BarDeleteCallback onDeleteBar;
   final double maxWidth;
   final bool isCreateInProgress;
 
@@ -26,6 +28,7 @@ class BarSelectorDropdown extends StatelessWidget {
     required this.onSelectBar,
     required this.onCreateBar,
     required this.onClearBar,
+    required this.onDeleteBar,
     this.maxWidth = 230,
     this.isCreateInProgress = false,
   });
@@ -99,6 +102,37 @@ class BarSelectorDropdown extends StatelessWidget {
             style: TextStyle(color: Colors.red.shade300),
           ),
         ),
+        MenuItemButton(
+          onPressed: sortedBars.length <= 1
+              ? null
+              : () async {
+                  final selectedBar = await showModalBottomSheet<SavedBar>(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) => _DeleteBarPickerSheet(
+                      bars: sortedBars,
+                      currentBarId: currentBarId,
+                    ),
+                  );
+                  if (selectedBar == null) return;
+                  await onDeleteBar(selectedBar);
+                },
+          leadingIcon: Icon(
+            Icons.delete_forever_rounded,
+            size: 16,
+            color: sortedBars.length <= 1
+                ? AppTheme.textSecondary.withValues(alpha: 0.5)
+                : Colors.red.shade300,
+          ),
+          child: Text(
+            'Delete Bar...',
+            style: TextStyle(
+              color: sortedBars.length <= 1
+                  ? AppTheme.textSecondary.withValues(alpha: 0.6)
+                  : Colors.red.shade300,
+            ),
+          ),
+        ),
       ],
       style: MenuStyle(
         backgroundColor: WidgetStateProperty.all(AppTheme.surfaceDark),
@@ -160,6 +194,109 @@ class BarSelectorDropdown extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _DeleteBarPickerSheet extends StatelessWidget {
+  final List<SavedBar> bars;
+  final int? currentBarId;
+
+  const _DeleteBarPickerSheet({
+    required this.bars,
+    required this.currentBarId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceLight,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'DELETE BAR',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.4,
+              color: Colors.red.shade300,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Choose a bar to delete.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...bars.map((bar) {
+            final isCurrent = bar.id == currentBarId;
+            return InkWell(
+              onTap: () => Navigator.pop(context, bar),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.surfaceLight.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: Colors.red.shade300,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        bar.name,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isCurrent)
+                      const Text(
+                        'ACTIVE',
+                        style: TextStyle(
+                          color: AppTheme.accentGold,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 }

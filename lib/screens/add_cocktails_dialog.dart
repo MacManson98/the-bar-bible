@@ -32,10 +32,19 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
   Set<int> selectedDifficulties = {};
 
   // Track newly selected cocktails this session (not existing ones)
-  Set<int> _pendingAdded = {};
-  Set<int> _pendingRemoved = {};
+  final Set<int> _pendingAdded = {};
+  final Set<int> _pendingRemoved = {};
 
-  final List<String> spirits = ['Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Brandy', 'Cognac', 'Other'];
+  final List<String> spirits = [
+    'Gin',
+    'Vodka',
+    'Rum',
+    'Bourbon',
+    'Whiskey',
+    'Brandy',
+    'Cognac',
+    'Other',
+  ];
   final List<String> methods = ['shake', 'stir', 'build'];
 
   @override
@@ -51,13 +60,16 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
             !cocktail.name.toLowerCase().contains(searchQuery.toLowerCase())) {
           return false;
         }
-        if (selectedSpirits.isNotEmpty && !selectedSpirits.contains(cocktail.baseSpirit)) {
+        if (selectedSpirits.isNotEmpty &&
+            !selectedSpirits.contains(cocktail.baseSpirit)) {
           return false;
         }
-        if (selectedMethods.isNotEmpty && !selectedMethods.contains(cocktail.method)) {
+        if (selectedMethods.isNotEmpty &&
+            !selectedMethods.contains(cocktail.method)) {
           return false;
         }
-        if (selectedDifficulties.isNotEmpty && !selectedDifficulties.contains(cocktail.difficulty)) {
+        if (selectedDifficulties.isNotEmpty &&
+            !selectedDifficulties.contains(cocktail.difficulty)) {
           return false;
         }
         return true;
@@ -99,7 +111,9 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                     ),
                   ),
                   const Spacer(),
-                  if (tempSpirits.isNotEmpty || tempMethods.isNotEmpty || tempDifficulties.isNotEmpty)
+                  if (tempSpirits.isNotEmpty ||
+                      tempMethods.isNotEmpty ||
+                      tempDifficulties.isNotEmpty)
                     TextButton(
                       onPressed: () {
                         setModalState(() {
@@ -121,53 +135,65 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
               const SizedBox(height: 20),
               _FilterSection(
                 label: 'SPIRIT',
-                children: spirits.map((spirit) => _FilterChipMulti(
-                  label: spirit,
-                  isSelected: tempSpirits.contains(spirit),
-                  onTap: () {
-                    setModalState(() {
-                      if (tempSpirits.contains(spirit)) {
-                        tempSpirits.remove(spirit);
-                      } else {
-                        tempSpirits.add(spirit);
-                      }
-                    });
-                  },
-                )).toList(),
+                children: spirits
+                    .map(
+                      (spirit) => _FilterChipMulti(
+                        label: spirit,
+                        isSelected: tempSpirits.contains(spirit),
+                        onTap: () {
+                          setModalState(() {
+                            if (tempSpirits.contains(spirit)) {
+                              tempSpirits.remove(spirit);
+                            } else {
+                              tempSpirits.add(spirit);
+                            }
+                          });
+                        },
+                      ),
+                    )
+                    .toList(),
               ),
               const SizedBox(height: 16),
               _FilterSection(
                 label: 'METHOD',
-                children: methods.map((method) => _FilterChipMulti(
-                  label: method.toUpperCase(),
-                  isSelected: tempMethods.contains(method),
-                  onTap: () {
-                    setModalState(() {
-                      if (tempMethods.contains(method)) {
-                        tempMethods.remove(method);
-                      } else {
-                        tempMethods.add(method);
-                      }
-                    });
-                  },
-                )).toList(),
+                children: methods
+                    .map(
+                      (method) => _FilterChipMulti(
+                        label: method.toUpperCase(),
+                        isSelected: tempMethods.contains(method),
+                        onTap: () {
+                          setModalState(() {
+                            if (tempMethods.contains(method)) {
+                              tempMethods.remove(method);
+                            } else {
+                              tempMethods.add(method);
+                            }
+                          });
+                        },
+                      ),
+                    )
+                    .toList(),
               ),
               const SizedBox(height: 16),
               _FilterSection(
                 label: 'DIFFICULTY',
-                children: [1, 2, 3, 4, 5].map((diff) => _FilterChipMulti(
-                  label: '$diff★',
-                  isSelected: tempDifficulties.contains(diff),
-                  onTap: () {
-                    setModalState(() {
-                      if (tempDifficulties.contains(diff)) {
-                        tempDifficulties.remove(diff);
-                      } else {
-                        tempDifficulties.add(diff);
-                      }
-                    });
-                  },
-                )).toList(),
+                children: [1, 2, 3, 4, 5]
+                    .map(
+                      (diff) => _FilterChipMulti(
+                        label: '$diff★',
+                        isSelected: tempDifficulties.contains(diff),
+                        onTap: () {
+                          setModalState(() {
+                            if (tempDifficulties.contains(diff)) {
+                              tempDifficulties.remove(diff);
+                            } else {
+                              tempDifficulties.add(diff);
+                            }
+                          });
+                        },
+                      ),
+                    )
+                    .toList(),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -207,13 +233,16 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final hasActiveFilters = searchQuery.isNotEmpty ||
+    final hasActiveFilters =
+        searchQuery.isNotEmpty ||
         selectedSpirits.isNotEmpty ||
         selectedMethods.isNotEmpty ||
         selectedDifficulties.isNotEmpty;
 
     final count = _newSelectionCount;
-    final buttonLabel = count == 0 ? 'Cancel' : 'Add $count Cocktail${count == 1 ? '' : 's'}';
+    final buttonLabel = count == 0
+        ? 'Cancel'
+        : 'Add $count Cocktail${count == 1 ? '' : 's'}';
     final buttonIsAction = count > 0;
 
     return Dialog(
@@ -262,7 +291,11 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, size: 20, color: AppTheme.textSecondary),
+                  icon: const Icon(
+                    Icons.close,
+                    size: 20,
+                    color: AppTheme.textSecondary,
+                  ),
                   onPressed: () {
                     Navigator.pop(context);
                     widget.onClose();
@@ -288,11 +321,21 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                       ),
                     ),
                     child: TextField(
-                      style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textPrimary,
+                      ),
                       decoration: const InputDecoration(
                         hintText: 'Search cocktails…',
-                        hintStyle: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-                        prefixIcon: Icon(Icons.search, size: 17, color: AppTheme.textSecondary),
+                        hintStyle: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          size: 17,
+                          color: AppTheme.textSecondary,
+                        ),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(vertical: 10),
                         isDense: true,
@@ -326,7 +369,9 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                         Icon(
                           Icons.filter_list,
                           size: 16,
-                          color: hasActiveFilters ? AppTheme.accentGold : AppTheme.textSecondary,
+                          color: hasActiveFilters
+                              ? AppTheme.accentGold
+                              : AppTheme.textSecondary,
                         ),
                         if (hasActiveFilters) ...[
                           const SizedBox(width: 4),
@@ -355,28 +400,36 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
               itemCount: filteredCocktails.length,
               itemBuilder: (context, index) {
                 final cocktail = filteredCocktails[index];
-                final isInCollection = widget.existingCocktailIds.contains(cocktail.id);
+                final isInCollection = widget.existingCocktailIds.contains(
+                  cocktail.id,
+                );
 
                 return _PickerRow(
                   cocktail: cocktail,
                   isInCollection: isInCollection,
                   onTap: () async {
                     if (isInCollection) {
-                      await (widget.database.delete(widget.database.collectionCocktails)
-                        ..where((tbl) {
-                          return tbl.collectionId.equals(widget.collection.id) &
-                              tbl.cocktailId.equals(cocktail.id);
-                        })).go();
+                      await (widget.database.delete(
+                            widget.database.collectionCocktails,
+                          )..where((tbl) {
+                            return tbl.collectionId.equals(
+                                  widget.collection.id,
+                                ) &
+                                tbl.cocktailId.equals(cocktail.id);
+                          }))
+                          .go();
                       widget.existingCocktailIds.remove(cocktail.id);
                       _pendingAdded.remove(cocktail.id);
                       _pendingRemoved.add(cocktail.id);
                     } else {
-                      await widget.database.into(widget.database.collectionCocktails).insert(
-                        CollectionCocktailsCompanion.insert(
-                          collectionId: widget.collection.id,
-                          cocktailId: cocktail.id,
-                        ),
-                      );
+                      await widget.database
+                          .into(widget.database.collectionCocktails)
+                          .insert(
+                            CollectionCocktailsCompanion.insert(
+                              collectionId: widget.collection.id,
+                              cocktailId: cocktail.id,
+                            ),
+                          );
                       widget.existingCocktailIds.add(cocktail.id);
                       _pendingAdded.add(cocktail.id);
                       _pendingRemoved.remove(cocktail.id);
@@ -423,7 +476,9 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                       side: buttonIsAction
                           ? BorderSide.none
                           : BorderSide(
-                              color: AppTheme.surfaceLight.withValues(alpha: 0.6),
+                              color: AppTheme.surfaceLight.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                     ),
                   ),
@@ -433,7 +488,9 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.2,
-                      color: buttonIsAction ? AppTheme.primaryDark : AppTheme.textSecondary,
+                      color: buttonIsAction
+                          ? AppTheme.primaryDark
+                          : AppTheme.textSecondary,
                     ),
                   ),
                 ),
@@ -461,9 +518,10 @@ class _PickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = [cocktail.baseSpirit, cocktail.method]
-        .where((v) => v.trim().isNotEmpty)
-        .join(' · ');
+    final meta = [
+      cocktail.baseSpirit,
+      cocktail.method,
+    ].where((v) => v.trim().isNotEmpty).join(' · ');
 
     return GestureDetector(
       onTap: onTap,
@@ -517,7 +575,9 @@ class _PickerRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isInCollection ? AppTheme.textPrimary : AppTheme.textPrimary,
+                      color: isInCollection
+                          ? AppTheme.textPrimary
+                          : AppTheme.textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -545,7 +605,8 @@ class _PickerRow extends StatelessWidget {
             // Premium selection badge
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+              transitionBuilder: (child, anim) =>
+                  ScaleTransition(scale: anim, child: child),
               child: isInCollection
                   ? Container(
                       key: const ValueKey('checked'),
@@ -593,10 +654,7 @@ class _FilterSection extends StatelessWidget {
   final String label;
   final List<Widget> children;
 
-  const _FilterSection({
-    required this.label,
-    required this.children,
-  });
+  const _FilterSection({required this.label, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -613,11 +671,7 @@ class _FilterSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: children,
-        ),
+        Wrap(spacing: 8, runSpacing: 8, children: children),
       ],
     );
   }

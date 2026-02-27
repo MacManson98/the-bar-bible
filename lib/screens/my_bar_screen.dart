@@ -1355,6 +1355,102 @@ class MyBarScreenState extends State<MyBarScreen>
     await _refreshAnalytics();
   }
 
+  Future<void> _deleteBarWithConfirm(SavedBar bar) async {
+    if (_savedBars.length <= 1) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You need at least one bar.')),
+      );
+      return;
+    }
+
+    final deletingActive = _activeBar?.id == bar.id;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'Delete Bar',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          deletingActive
+              ? 'Delete "${bar.name}"? This is your active bar, so another bar will be selected automatically.'
+              : 'Delete "${bar.name}" and all of its ingredients?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: Colors.red.shade300),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await (widget.database.delete(
+      widget.database.savedBarIngredients,
+    )..where((row) => row.savedBarId.equals(bar.id))).go();
+
+    await (widget.database.delete(
+      widget.database.savedBars,
+    )..where((row) => row.id.equals(bar.id))).go();
+
+    var remainingBars = await (widget.database.select(
+      widget.database.savedBars,
+    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+    if (remainingBars.isEmpty || !mounted) return;
+
+    final activeBarStillExists =
+        _activeBar != null && remainingBars.any((b) => b.id == _activeBar!.id);
+    final hasDefault = remainingBars.any((b) => b.isDefault);
+
+    if (deletingActive || !activeBarStillExists || !hasDefault) {
+      await _barService.setDefaultBar(remainingBars.first.id);
+      remainingBars = await (widget.database.select(
+        widget.database.savedBars,
+      )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+    }
+
+    if (!mounted || remainingBars.isEmpty) return;
+
+    if (deletingActive || !activeBarStillExists) {
+      await _switchToBar(remainingBars.first.id);
+    } else {
+      final active = remainingBars.firstWhere(
+        (b) => b.id == _activeBar!.id,
+        orElse: () => remainingBars.first,
+      );
+      final ingredients = await widget.database.getSavedBarIngredients(active.id);
+      if (!mounted) return;
+      setState(() {
+        _activeBar = active;
+        _savedBars = remainingBars;
+        _barIngredientIds = ingredients.map((i) => i.id).toSet();
+        _recomputeSeriousnessCaches(changedByAdd: false);
+      });
+      widget.onBarChanged?.call();
+      await _refreshAnalytics();
+    }
+
+    if (!mounted) return;
+    final activeId = _activeBar?.id;
+    if (activeId != null && widget.onBarSwitched != null) {
+      widget.onBarSwitched!(activeId);
+    } else {
+      widget.onBarChanged?.call();
+    }
+  }
+
   void _activateCategoryFilter(String category) {
     if (_activeShelfCategory == category) return;
     setState(() {
@@ -1439,6 +1535,9 @@ class MyBarScreenState extends State<MyBarScreen>
                   },
                   onClearBar: () async {
                     await _clearCurrentBarWithConfirm();
+                  },
+                  onDeleteBar: (bar) async {
+                    await _deleteBarWithConfirm(bar);
                   },
                 ),
               ),

@@ -707,6 +707,9 @@ class FinderScreenState extends State<FinderScreen>
             onClearBar: () async {
               await _clearCurrentBarWithConfirm();
             },
+            onDeleteBar: (bar) async {
+              await _deleteBarWithConfirm(bar);
+            },
           ),
           const SizedBox(height: 12),
           Text(
@@ -1345,6 +1348,92 @@ class FinderScreenState extends State<FinderScreen>
 
     if (!mounted) return;
     await loadBarAndMatch();
+  }
+
+  Future<void> _deleteBarWithConfirm(SavedBar bar) async {
+    if (_savedBars.length <= 1) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You need at least one bar.')),
+      );
+      return;
+    }
+
+    final deletingActive = _activeBar?.id == bar.id;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'Delete Bar',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          deletingActive
+              ? 'Delete "${bar.name}"? This is your active bar, so another bar will be selected automatically.'
+              : 'Delete "${bar.name}" and all of its ingredients?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: Colors.red.shade300),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await (widget.database.delete(
+      widget.database.savedBarIngredients,
+    )..where((row) => row.savedBarId.equals(bar.id))).go();
+
+    await (widget.database.delete(
+      widget.database.savedBars,
+    )..where((row) => row.id.equals(bar.id))).go();
+
+    var remainingBars = await _loadBarsOrdered();
+    if (remainingBars.isEmpty || !mounted) return;
+
+    final activeBarStillExists =
+        _activeBar != null && remainingBars.any((b) => b.id == _activeBar!.id);
+    final hasDefault = remainingBars.any((b) => b.isDefault);
+
+    if (deletingActive || !activeBarStillExists || !hasDefault) {
+      await _setDefaultBar(remainingBars.first.id);
+      remainingBars = await _loadBarsOrdered();
+    }
+
+    if (!mounted || remainingBars.isEmpty) return;
+
+    if (deletingActive || !activeBarStillExists) {
+      final nextActive = remainingBars.first;
+      final snapshot = await _snapshotForBar(nextActive);
+      _sortList(snapshot.exact);
+      _sortList(snapshot.missing1);
+      _sortList(snapshot.missing2Plus);
+      _applyActiveBarSnapshot(nextActive, snapshot, allBars: remainingBars);
+      return;
+    }
+
+    _markCreateSetState('delete:refreshBarsOnly');
+    setState(() {
+      _savedBars = remainingBars;
+      _refreshDerivedCaches();
+    });
+
+    final activeId = _activeBar?.id;
+    if (activeId != null) {
+      widget.onBarSwitched?.call(activeId);
+    }
   }
 
   Future<void> _switchActiveBar(
