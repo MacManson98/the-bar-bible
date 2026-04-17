@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,128 +15,9 @@ import 'cocktail_detail_screen.dart';
 
 typedef BarChangedCallback = void Function();
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  SHELF CONFIG
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _AchievementMilestone {
-  final String key;
-  final String title;
-  final int threshold;
-
-  const _AchievementMilestone(this.key, this.title, this.threshold);
-}
-
-const List<_AchievementMilestone> _ingredientAchievements = [
-  _AchievementMilestone('first_pour', 'First Pour', 1),
-  _AchievementMilestone('getting_started', 'Getting Started', 5),
-  _AchievementMilestone('home_bartender', 'Home Bartender', 16),
-  _AchievementMilestone('well_stocked', 'Well Stocked', 30),
-  _AchievementMilestone('professional', 'Professional', 40),
-];
-
-enum _BottleShape { tallSlim, squat, round, dropper, wedge, jar, cup, box }
-
-/// Each bottle entry: shape + individual size tweak (height multiplier).
-/// This creates organic height variation within a category.
-class _BottleSpec {
-  final _BottleShape shape;
-  final double heightScale; // 0.85–1.15 range
-  final double hMargin; // horizontal margin (px)
-
-  const _BottleSpec(this.shape, {this.heightScale = 1.0, this.hMargin = 1.0});
-}
-
-const Map<String, List<_BottleSpec>> _categoryBottles = {
-  'Spirits': [
-    _BottleSpec(_BottleShape.tallSlim, heightScale: 1.0, hMargin: 0.5),
-    _BottleSpec(_BottleShape.squat, heightScale: 1.0, hMargin: 0.5),
-    _BottleSpec(_BottleShape.tallSlim, heightScale: 1.1, hMargin: 0.5),
-    _BottleSpec(_BottleShape.tallSlim, heightScale: 0.92, hMargin: 0.5),
-  ],
-  'Liqueurs': [
-    _BottleSpec(_BottleShape.squat, heightScale: 1.0, hMargin: 0.5),
-    _BottleSpec(_BottleShape.round, heightScale: 1.08, hMargin: 1.0),
-    _BottleSpec(_BottleShape.squat, heightScale: 0.9, hMargin: 0.5),
-  ],
-  'Citrus': [
-    _BottleSpec(_BottleShape.wedge, heightScale: 1.0, hMargin: 1.5),
-    _BottleSpec(_BottleShape.wedge, heightScale: 0.88, hMargin: 1.5),
-  ],
-  'Juices': [
-    _BottleSpec(_BottleShape.round, heightScale: 1.0, hMargin: 1.0),
-    _BottleSpec(_BottleShape.round, heightScale: 0.92, hMargin: 1.0),
-  ],
-  'Sweeteners': [
-    _BottleSpec(_BottleShape.jar, heightScale: 1.0, hMargin: 1.0),
-    _BottleSpec(_BottleShape.jar, heightScale: 0.88, hMargin: 1.0),
-  ],
-  'Mixers': [
-    _BottleSpec(_BottleShape.tallSlim, heightScale: 1.0, hMargin: 0.5),
-    _BottleSpec(_BottleShape.tallSlim, heightScale: 0.93, hMargin: 0.5),
-  ],
-  'Bitters': [
-    _BottleSpec(_BottleShape.dropper, heightScale: 1.0, hMargin: 1.5),
-    _BottleSpec(_BottleShape.dropper, heightScale: 0.9, hMargin: 1.5),
-  ],
-  'Coffee': [_BottleSpec(_BottleShape.cup, heightScale: 1.0, hMargin: 0.0)],
-  'Other': [_BottleSpec(_BottleShape.box, heightScale: 1.0, hMargin: 0.0)],
-};
-
-const Map<String, double> _seriousnessCategoryWeights = {
-  IngredientCategory.spirits: 1.0,
-  IngredientCategory.liqueurs: 0.78,
-  IngredientCategory.bitters: 0.56,
-  IngredientCategory.citrus: 0.42,
-  IngredientCategory.juices: 0.38,
-  IngredientCategory.sweeteners: 0.34,
-  IngredientCategory.mixers: 0.30,
-  IngredientCategory.coffee: 0.24,
-  IngredientCategory.other: 0.16,
-};
-
-const double _seriousnessSmallCountFactor = 0.18;
-const bool _debugShowBackbarBounds = false;
-
-class _BackbarDensityConfig {
-  final int bottleCount;
-  final int backRowCount;
-  final double spacingTightness;
-  final double fillLevel;
-
-  const _BackbarDensityConfig({
-    required this.bottleCount,
-    required this.backRowCount,
-    required this.spacingTightness,
-    required this.fillLevel,
-  });
-
-  const _BackbarDensityConfig.empty()
-    : bottleCount = 6,
-      backRowCount = 0,
-      spacingTightness = 0.0,
-      fillLevel = 0.08;
-
-  int get frontRowCount => max(0, bottleCount - backRowCount);
-}
-
-class _SeriousnessSnapshot {
-  final Map<String, int> categoryCounts;
-  final int stockedCount;
-  final double index;
-  final _BackbarDensityConfig density;
-
-  const _SeriousnessSnapshot({
-    required this.categoryCounts,
-    required this.stockedCount,
-    required this.index,
-    required this.density,
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 //  MAIN SCREEN
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class MyBarScreen extends StatefulWidget {
   final AppDatabase database;
@@ -159,8 +39,7 @@ class MyBarScreen extends StatefulWidget {
   State<MyBarScreen> createState() => MyBarScreenState();
 }
 
-class MyBarScreenState extends State<MyBarScreen>
-    with TickerProviderStateMixin {
+class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin {
   List<Ingredient> _allIngredients = [];
   Set<int> _barIngredientIds = {};
   SavedBar? _activeBar;
@@ -169,20 +48,16 @@ class MyBarScreenState extends State<MyBarScreen>
 
   bool _isLoading = true;
   String _searchQuery = '';
-  String? _activeShelfCategory;
+  // null = overview; set = category detail
+  String? _activeCategoryFilter;
+
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
+  final ScrollController _listScrollController = ScrollController(keepScrollOffset: false);
 
-  final ScrollController _listScrollController = ScrollController(
-    keepScrollOffset: false,
-  );
-  final Map<String, GlobalKey> _categoryKeys = {};
-  int _suggestionMode = 0;
-  static const _suggestionLabels = [
-    'Closest unlock',
-    'Biggest unlock',
-    'Finish a set',
-  ];
+  // Per-ingredient unlock deltas, populated when entering a category detail view
+  Map<int, int> _unlockDeltaCache = {};
+  bool _deltaLoading = false;
 
   late AnimationController _headerAnimController;
   late Animation<double> _headerFade;
@@ -195,7 +70,6 @@ class MyBarScreenState extends State<MyBarScreen>
   late AnimationController _counterAnimController;
   late BarAnalytics _barAnalytics;
   late final BarService _barService;
-  Set<String> _earnedAchievementKeys = {};
   List<Cocktail> _allCocktailsCache = [];
   Map<int, Set<String>> _requiredCanonicalsByCocktail = {};
   bool _matchDataLoaded = false;
@@ -215,12 +89,6 @@ class MyBarScreenState extends State<MyBarScreen>
   Timer? _searchDebounceTimer;
   Timer? _unlockDebounceTimer;
   DateTime? _suppressUnlockSheetUntil;
-  Map<String, int> _categoryCountsCache = const {};
-  int _totalStockedCountCache = 0;
-  double _seriousnessIndexCache = 0.0;
-  _BackbarDensityConfig _backbarDensityCache =
-      const _BackbarDensityConfig.empty();
-  bool _lastHeroChangeWasAdd = false;
 
   @override
   void initState() {
@@ -228,39 +96,21 @@ class MyBarScreenState extends State<MyBarScreen>
     _barAnalytics = BarAnalytics(widget.database);
     _barService = BarService(widget.database);
 
-    _headerAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _headerFade = CurvedAnimation(
-      parent: _headerAnimController,
-      curve: Curves.easeOut,
-    );
+    _headerAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _headerFade = CurvedAnimation(parent: _headerAnimController, curve: Curves.easeOut);
 
-    _unlockAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
+    _unlockAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
     _unlockFade = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 20),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 50),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
     ]).animate(_unlockAnimController);
-    _unlockSlide =
-        Tween<Offset>(
-          begin: const Offset(0, 0.3),
-          end: const Offset(0, -0.5),
-        ).animate(
-          CurvedAnimation(
-            parent: _unlockAnimController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
+    _unlockSlide = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: const Offset(0, -0.5),
+    ).animate(CurvedAnimation(parent: _unlockAnimController, curve: Curves.easeOutCubic));
 
-    _counterAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
+    _counterAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
 
     _loadData();
   }
@@ -283,55 +133,33 @@ class MyBarScreenState extends State<MyBarScreen>
   Future<void> loadData() => _loadData();
 
   Future<void> _loadData() async {
-    final ingredients = await widget.database
-        .select(widget.database.ingredients)
-        .get();
+    final ingredients = await widget.database.select(widget.database.ingredients).get();
     final bars = await widget.database.select(widget.database.savedBars).get();
 
     SavedBar? activeBar = await widget.database.getDefaultSavedBar();
     if (activeBar == null && bars.isEmpty) {
-      final id = await widget.database
-          .into(widget.database.savedBars)
-          .insert(
-            SavedBarsCompanion.insert(
-              name: 'My Bar',
-              isDefault: const Value(true),
-            ),
-          );
-      activeBar = await (widget.database.select(
-        widget.database.savedBars,
-      )..where((b) => b.id.equals(id))).getSingle();
+      final id = await widget.database.into(widget.database.savedBars).insert(
+        SavedBarsCompanion.insert(name: 'My Bar', isDefault: const Value(true)),
+      );
+      activeBar = await (widget.database.select(widget.database.savedBars)
+            ..where((b) => b.id.equals(id)))
+          .getSingle();
     }
     activeBar ??= bars.first;
 
-    final barIngredients = await widget.database.getSavedBarIngredients(
-      activeBar.id,
-    );
+    final barIngredients = await widget.database.getSavedBarIngredients(activeBar.id);
     final barIds = barIngredients.map((i) => i.id).toSet();
     final analytics = await _barAnalytics.compute();
-    final seriousness = _computeSeriousnessSnapshot(
-      ingredients: ingredients,
-      stockedIds: barIds,
-    );
 
     if (!mounted) return;
     setState(() {
       _allIngredients = ingredients;
       _activeBar = activeBar;
-      _savedBars = List<SavedBar>.from(bars)
-          ..sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
+      _savedBars = List<SavedBar>.from(bars)..sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
       _barIngredientIds = barIds;
       _analytics = analytics;
-      _categoryCountsCache = seriousness.categoryCounts;
-      _totalStockedCountCache = seriousness.stockedCount;
-      _seriousnessIndexCache = seriousness.index;
-      _backbarDensityCache = seriousness.density;
-      _lastHeroChangeWasAdd = false;
       _isLoading = false;
     });
-    _earnedAchievementKeys = _earnedAchievementSetForCount(
-      _barIngredientIds.length,
-    );
 
     _headerAnimController.forward();
     _scrollIngredientListToTop();
@@ -341,11 +169,7 @@ class MyBarScreenState extends State<MyBarScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_listScrollController.hasClients) return;
       if (_listScrollController.offset <= 0.5) return;
-      _listScrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+      _listScrollController.animateTo(0.0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
     });
   }
 
@@ -354,14 +178,53 @@ class MyBarScreenState extends State<MyBarScreen>
     if (value.isEmpty) {
       if (_searchQuery.isEmpty) return;
       setState(() => _searchQuery = '');
-      _scrollIngredientListToTop();
       return;
     }
     _searchDebounceTimer = Timer(const Duration(milliseconds: 200), () {
       if (!mounted || value == _searchQuery) return;
       setState(() => _searchQuery = value);
-      _scrollIngredientListToTop();
     });
+  }
+
+  void _clearSearchInput() {
+    _searchController.clear();
+    _setSearchQuery('');
+  }
+
+  /// Opens a category detail view and pre-computes unlock deltas for all
+  /// missing ingredients in that category.
+  Future<void> _openCategory(String category) async {
+    setState(() {
+      _activeCategoryFilter = category;
+      _deltaLoading = true;
+      _unlockDeltaCache = {};
+    });
+    _scrollIngredientListToTop();
+
+    final missing = _allIngredients
+        .where((i) => i.category == category && !_barIngredientIds.contains(i.id))
+        .toList();
+
+    final deltas = <int, int>{};
+    for (final ingredient in missing) {
+      final delta = await _barAnalytics.computeUnlockDelta(ingredient.id, true);
+      deltas[ingredient.id] = delta;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _unlockDeltaCache = deltas;
+      _deltaLoading = false;
+    });
+  }
+
+  void _closeCategory() {
+    setState(() {
+      _activeCategoryFilter = null;
+      _unlockDeltaCache = {};
+      _deltaLoading = false;
+    });
+    _scrollIngredientListToTop();
   }
 
   Future<void> _delayForImeSettleIfNeeded() async {
@@ -371,9 +234,7 @@ class MyBarScreenState extends State<MyBarScreen>
     final elapsed = DateTime.now().difference(last);
     if (elapsed >= settleWindow) return;
     final wait = settleWindow - elapsed;
-    if (kDebugMode) {
-      debugPrint('MyBar IME settle delay ${wait.inMilliseconds}ms');
-    }
+    if (kDebugMode) debugPrint('MyBar IME settle delay ${wait.inMilliseconds}ms');
     await Future.delayed(wait);
   }
 
@@ -382,15 +243,11 @@ class MyBarScreenState extends State<MyBarScreen>
     const base = 'new bar';
     if (!names.contains(base)) return 'New Bar';
     var index = 2;
-    while (names.contains('$base $index')) {
-      index++;
-    }
+    while (names.contains('$base $index')) index++;
     return 'New Bar $index';
   }
 
-  void _markCreateSetState(String reason) {
-    _createDiagnostics?.incrementSetState(reason);
-  }
+  void _markCreateSetState(String reason) => _createDiagnostics?.incrementSetState(reason);
 
   void _finishCreateDiagnostics({required String result}) {
     _createDiagnostics?.finish(result: result);
@@ -404,9 +261,7 @@ class MyBarScreenState extends State<MyBarScreen>
     final canonical = suggestion.canonicalName;
     final now = DateTime.now();
     final last = _lastSuggestionAddAt;
-    if (last != null && now.difference(last).inMilliseconds < 150) {
-      return;
-    }
+    if (last != null && now.difference(last).inMilliseconds < 150) return;
     _lastSuggestionAddAt = now;
 
     if (_suggestionAddsInFlight.contains(canonical)) return;
@@ -435,253 +290,18 @@ class MyBarScreenState extends State<MyBarScreen>
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not add suggested ingredient. Please try again.',
-          ),
-        ),
+        const SnackBar(content: Text('Could not add suggested ingredient. Please try again.')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _suggestionAddsInFlight.remove(canonical));
-      }
+      if (mounted) setState(() => _suggestionAddsInFlight.remove(canonical));
     }
-  }
-
-  _SeriousnessSnapshot _computeSeriousnessSnapshot({
-    required List<Ingredient> ingredients,
-    required Set<int> stockedIds,
-  }) {
-    final categoryCounts = <String, int>{};
-    final allCategoryTotals = <String, int>{};
-
-    for (final ingredient in ingredients) {
-      allCategoryTotals[ingredient.category] =
-          (allCategoryTotals[ingredient.category] ?? 0) + 1;
-      if (stockedIds.contains(ingredient.id)) {
-        categoryCounts[ingredient.category] =
-            (categoryCounts[ingredient.category] ?? 0) + 1;
-      }
-    }
-
-    double seriousnessScore = 0.0;
-    double maxSeriousnessScore = 0.0;
-    for (final category in IngredientCategory.allCategories) {
-      final weight = _seriousnessCategoryWeights[category] ?? 0.2;
-      seriousnessScore += weight * (categoryCounts[category] ?? 0);
-      maxSeriousnessScore += weight * (allCategoryTotals[category] ?? 0);
-    }
-
-    final scoreNorm = maxSeriousnessScore > 0
-        ? (seriousnessScore / maxSeriousnessScore).clamp(0.0, 1.0)
-        : 0.0;
-    final totalNorm = ingredients.isNotEmpty
-        ? (stockedIds.length / ingredients.length).clamp(0.0, 1.0)
-        : 0.0;
-    final combined =
-        (scoreNorm + (_seriousnessSmallCountFactor * totalNorm)) /
-        (1.0 + _seriousnessSmallCountFactor);
-    final seriousnessIndex = combined.clamp(0.0, 1.0);
-
-    return _SeriousnessSnapshot(
-      categoryCounts: categoryCounts,
-      stockedCount: stockedIds.length,
-      index: seriousnessIndex,
-      density: _densityForSeriousnessIndex(seriousnessIndex),
-    );
-  }
-
-  _BackbarDensityConfig _densityForSeriousnessIndex(double index) {
-    int total;
-    double spacingTightness;
-    if (index < 0.2) {
-      final t = (index / 0.2).clamp(0.0, 1.0);
-      total = (6 + (2 * t)).round();
-      spacingTightness = 0.06;
-    } else if (index < 0.5) {
-      final t = ((index - 0.2) / 0.3).clamp(0.0, 1.0);
-      total = (10 + (4 * t)).round();
-      spacingTightness = 0.15;
-    } else if (index < 0.8) {
-      final t = ((index - 0.5) / 0.3).clamp(0.0, 1.0);
-      total = (16 + (6 * t)).round();
-      spacingTightness = 0.23;
-    } else {
-      final t = ((index - 0.8) / 0.2).clamp(0.0, 1.0);
-      total = (24 + (6 * t)).round();
-      spacingTightness = 0.30;
-    }
-    total = max(6, total);
-
-    final hasBackRow = index >= 0.5;
-    final backRatio = index >= 0.8 ? 0.40 : 0.32;
-    final backRow = hasBackRow ? (total * backRatio).round() : 0;
-    final fillLevel = (0.10 + (index * 0.86)).clamp(0.0, 1.0);
-
-    return _BackbarDensityConfig(
-      bottleCount: total,
-      backRowCount: backRow,
-      spacingTightness: spacingTightness,
-      fillLevel: fillLevel,
-    );
-  }
-
-  void _recomputeSeriousnessCaches({required bool changedByAdd}) {
-    _createDiagnostics?.incrementCounter(
-      '_recomputeSeriousnessCaches',
-      stackTrace: StackTrace.current,
-    );
-    final snapshot = _computeSeriousnessSnapshot(
-      ingredients: _allIngredients,
-      stockedIds: _barIngredientIds,
-    );
-    _categoryCountsCache = snapshot.categoryCounts;
-    _totalStockedCountCache = snapshot.stockedCount;
-    _seriousnessIndexCache = snapshot.index;
-    _backbarDensityCache = snapshot.density;
-    _lastHeroChangeWasAdd = changedByAdd;
   }
 
   Future<void> _refreshAnalytics() async {
     final analytics = await _barAnalytics.compute();
-    _checkForNewAchievements();
     if (mounted) {
       _counterAnimController.forward(from: 0);
       setState(() => _analytics = analytics);
-    }
-  }
-
-  Set<String> _earnedAchievementSetForCount(int ingredientCount) {
-    final set = <String>{};
-    for (final milestone in _ingredientAchievements) {
-      if (ingredientCount >= milestone.threshold) {
-        set.add(milestone.key);
-      }
-    }
-    if (_allIngredients.isNotEmpty &&
-        ingredientCount >= _allIngredients.length) {
-      set.add('completionist');
-    }
-    return set;
-  }
-
-  void _checkForNewAchievements() {
-    final current = _earnedAchievementSetForCount(_barIngredientIds.length);
-    final newlyEarned = current.difference(_earnedAchievementKeys);
-    _earnedAchievementKeys = current;
-
-    if (newlyEarned.isEmpty || !mounted) return;
-
-    final newest = _ingredientAchievements
-        .where((a) => newlyEarned.contains(a.key))
-        .fold<_AchievementMilestone?>(
-          null,
-          (best, item) =>
-              best == null || item.threshold > best.threshold ? item : best,
-        );
-
-    if (newest != null) {
-      _showAchievementPop(newest.title);
-    } else if (newlyEarned.contains('completionist')) {
-      _showAchievementPop('Completionist');
-    }
-  }
-
-  Future<void> _showAchievementPop(String title) async {
-    if (!mounted) return;
-    showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierLabel: 'achievement',
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 380),
-      pageBuilder: (_, __, ___) {
-        return SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 76),
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceDark.withValues(alpha: 0.96),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppTheme.accentGold.withValues(alpha: 0.28),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.accentGold.withValues(alpha: 0.18),
-                        blurRadius: 10,
-                        spreadRadius: 0.5,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.emoji_events_rounded,
-                        color: AppTheme.accentGold,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Achievement Unlocked',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.35,
-                              color: AppTheme.accentGold.withValues(
-                                alpha: 0.92,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (_, animation, __, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-        );
-        return FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-          child: ScaleTransition(
-            scale: Tween(begin: 0.92, end: 1.0).animate(curved),
-            child: child,
-          ),
-        );
-      },
-    );
-
-    await Future.delayed(const Duration(milliseconds: 1050));
-    if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
-      Navigator.of(context, rootNavigator: true).pop();
     }
   }
 
@@ -704,25 +324,16 @@ class MyBarScreenState extends State<MyBarScreen>
 
       if (_barIngredientIds.contains(ingredientId)) {
         await (widget.database.delete(widget.database.savedBarIngredients)
-              ..where(
-                (bi) =>
-                    bi.savedBarId.equals(_activeBar!.id) &
-                    bi.ingredientId.equals(ingredientId),
-              ))
+              ..where((bi) =>
+                  bi.savedBarId.equals(_activeBar!.id) & bi.ingredientId.equals(ingredientId)))
             .go();
-        setState(() {
-          _barIngredientIds.remove(ingredientId);
-          _recomputeSeriousnessCaches(changedByAdd: false);
-        });
+        setState(() => _barIngredientIds.remove(ingredientId));
       } else {
         await widget.database.addIngredientToSavedBar(
           savedBarId: _activeBar!.id,
           ingredientId: ingredientId,
         );
-        setState(() {
-          _barIngredientIds.add(ingredientId);
-          _recomputeSeriousnessCaches(changedByAdd: true);
-        });
+        setState(() => _barIngredientIds.add(ingredientId));
         exactAfter = await _computeExactMatchCocktailIds(_barIngredientIds);
       }
 
@@ -732,9 +343,7 @@ class MyBarScreenState extends State<MyBarScreen>
       }
       if (isAdding) {
         final newlyUnlockedIds = exactAfter.difference(exactBefore);
-        if (newlyUnlockedIds.isNotEmpty) {
-          _queueUnlockedCocktails(newlyUnlockedIds);
-        }
+        if (newlyUnlockedIds.isNotEmpty) _queueUnlockedCocktails(newlyUnlockedIds);
       }
 
       widget.onBarChanged?.call();
@@ -742,25 +351,17 @@ class MyBarScreenState extends State<MyBarScreen>
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not update ingredient. Please try again.'),
-        ),
+        const SnackBar(content: Text('Could not update ingredient. Please try again.')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _busyIngredientIds.remove(ingredientId));
-      }
+      if (mounted) setState(() => _busyIngredientIds.remove(ingredientId));
     }
   }
 
   Future<void> _ensureMatchDataLoaded() async {
     if (_matchDataLoaded) return;
-    final cocktails = await widget.database
-        .select(widget.database.cocktails)
-        .get();
-    final allCi = await widget.database
-        .select(widget.database.cocktailIngredients)
-        .get();
+    final cocktails = await widget.database.select(widget.database.cocktails).get();
+    final allCi = await widget.database.select(widget.database.cocktailIngredients).get();
     final ingredientNameById = {for (final i in _allIngredients) i.id: i.name};
     final required = <int, Set<String>>{};
     for (final ci in allCi) {
@@ -774,17 +375,13 @@ class MyBarScreenState extends State<MyBarScreen>
     _matchDataLoaded = true;
   }
 
-  Future<Set<int>> _computeExactMatchCocktailIds(
-    Set<int> barIngredientIds,
-  ) async {
+  Future<Set<int>> _computeExactMatchCocktailIds(Set<int> barIngredientIds) async {
     await _ensureMatchDataLoaded();
     final ingredientNameById = {for (final i in _allIngredients) i.id: i.name};
     final barCanonicals = <String>{};
     for (final id in barIngredientIds) {
       final name = ingredientNameById[id];
-      if (name != null) {
-        barCanonicals.add(IngredientEquivalence.normalise(name));
-      }
+      if (name != null) barCanonicals.add(IngredientEquivalence.normalise(name));
     }
     final barSubCanonicals = <String>{};
     for (final canon in barCanonicals) {
@@ -797,8 +394,7 @@ class MyBarScreenState extends State<MyBarScreen>
       if (required == null || required.isEmpty) continue;
       bool allMatched = true;
       for (final canon in required) {
-        if (!barCanonicals.contains(canon) &&
-            !barSubCanonicals.contains(canon)) {
+        if (!barCanonicals.contains(canon) && !barSubCanonicals.contains(canon)) {
           allMatched = false;
           break;
         }
@@ -812,12 +408,8 @@ class MyBarScreenState extends State<MyBarScreen>
     if (newlyUnlockedIds.isEmpty || !mounted) return;
     _pendingUnlockedCocktailIds.addAll(newlyUnlockedIds);
     _pendingUnlockCount = _pendingUnlockedCocktailIds.length;
-
     _unlockDebounceTimer?.cancel();
-    _unlockDebounceTimer = Timer(
-      const Duration(milliseconds: 900),
-      _flushPendingUnlocks,
-    );
+    _unlockDebounceTimer = Timer(const Duration(milliseconds: 900), _flushPendingUnlocks);
   }
 
   void _clearPendingUnlocks() {
@@ -827,39 +419,29 @@ class MyBarScreenState extends State<MyBarScreen>
 
   Future<void> _flushPendingUnlocks() async {
     if (!mounted || _pendingUnlockCount == 0) return;
-
     if (_unlockSheetOpen) {
       _unlockDebounceTimer?.cancel();
-      _unlockDebounceTimer = Timer(
-        const Duration(milliseconds: 350),
-        _flushPendingUnlocks,
-      );
+      _unlockDebounceTimer = Timer(const Duration(milliseconds: 350), _flushPendingUnlocks);
       return;
     }
-
     final suppressUntil = _suppressUnlockSheetUntil;
     if (suppressUntil != null && DateTime.now().isBefore(suppressUntil)) {
       _clearPendingUnlocks();
       return;
     }
-
     final idsToShow = Set<int>.from(_pendingUnlockedCocktailIds);
     _clearPendingUnlocks();
-
     final keepAddingSelected = await _showUnlockedCocktailsSheet(idsToShow);
     if (keepAddingSelected) {
-      _suppressUnlockSheetUntil = DateTime.now().add(
-        const Duration(seconds: 2),
-      );
+      _suppressUnlockSheetUntil = DateTime.now().add(const Duration(seconds: 2));
     }
   }
 
   Future<bool> _showUnlockedCocktailsSheet(Set<int> unlockedIds) async {
     if (!mounted || _unlockSheetOpen) return false;
     _unlockSheetOpen = true;
-    final unlocked =
-        _allCocktailsCache.where((c) => unlockedIds.contains(c.id)).toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
+    final unlocked = _allCocktailsCache.where((c) => unlockedIds.contains(c.id)).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     final keepAddingSelected = await showModalBottomSheet<bool>(
       context: context,
@@ -867,9 +449,7 @@ class MyBarScreenState extends State<MyBarScreen>
       isScrollControlled: true,
       builder: (ctx) {
         final single = unlocked.length == 1;
-        final title = single
-            ? unlocked.first.name
-            : '${unlocked.length} cocktails unlocked';
+        final title = single ? unlocked.first.name : '${unlocked.length} cocktails unlocked';
         final subtitle = single
             ? 'You can now make this in ${widget.activeBarName}.'
             : 'New recipes are now available in ${widget.activeBarName}.';
@@ -884,16 +464,8 @@ class MyBarScreenState extends State<MyBarScreen>
               ],
             ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(
-              color: AppTheme.surfaceLight.withValues(alpha: 0.35),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.36),
-                blurRadius: 22,
-                offset: const Offset(0, -6),
-              ),
-            ],
+            border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.35)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.36), blurRadius: 22, offset: const Offset(0, -6))],
           ),
           clipBehavior: Clip.antiAlias,
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
@@ -901,57 +473,24 @@ class MyBarScreenState extends State<MyBarScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                height: 2,
-                width: double.infinity,
-                color: AppTheme.accentGold.withValues(alpha: 0.92),
-              ),
+              Container(height: 2, width: double.infinity, color: AppTheme.accentGold.withValues(alpha: 0.92)),
               const SizedBox(height: 16),
               _AnimatedUnlockReveal(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'UNLOCKED',
-                      style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 1.2,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.accentGold.withValues(alpha: 0.95),
-                      ),
-                    ),
+                    Text('UNLOCKED', style: TextStyle(fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.95))),
                     const SizedBox(height: 6),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
+                    Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
                     const SizedBox(height: 6),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.9),
-                        height: 1.35,
-                      ),
-                    ),
+                    Text(subtitle, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.9), height: 1.35)),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
               if (single)
                 _AnimatedUnlockReveal(
-                  child: SizedBox(
-                    height: 212,
-                    width: double.infinity,
-                    child: _UnlockPreviewCard(
-                      cocktail: unlocked.first,
-                      showName: false,
-                    ),
-                  ),
+                  child: SizedBox(height: 212, width: double.infinity, child: _UnlockPreviewCard(cocktail: unlocked.first, showName: false)),
                 )
               else
                 SizedBox(
@@ -960,12 +499,7 @@ class MyBarScreenState extends State<MyBarScreen>
                     scrollDirection: Axis.horizontal,
                     itemCount: unlocked.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemBuilder: (_, index) => SizedBox(
-                      width: 156,
-                      child: _AnimatedUnlockReveal(
-                        child: _UnlockPreviewCard(cocktail: unlocked[index]),
-                      ),
-                    ),
+                    itemBuilder: (_, index) => SizedBox(width: 156, child: _AnimatedUnlockReveal(child: _UnlockPreviewCard(cocktail: unlocked[index]))),
                   ),
                 ),
               const SizedBox(height: 24),
@@ -976,9 +510,7 @@ class MyBarScreenState extends State<MyBarScreen>
                       onPressed: () => Navigator.pop(ctx, true),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.textPrimary,
-                        side: BorderSide(
-                          color: AppTheme.surfaceLight.withValues(alpha: 0.7),
-                        ),
+                        side: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.7)),
                         padding: const EdgeInsets.symmetric(vertical: 13),
                       ),
                       child: const Text('Keep Adding'),
@@ -996,15 +528,7 @@ class MyBarScreenState extends State<MyBarScreen>
                       onPressed: () {
                         Navigator.pop(ctx, false);
                         if (single) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CocktailDetailScreen(
-                                database: widget.database,
-                                cocktail: unlocked.first,
-                              ),
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => CocktailDetailScreen(database: widget.database, cocktail: unlocked.first)));
                         } else {
                           widget.onNavigateToFinder?.call();
                         }
@@ -1037,8 +561,7 @@ class MyBarScreenState extends State<MyBarScreen>
         animation: _unlockAnimController,
         builder: (context, child) => Positioned(
           right: 40,
-          top:
-              position.dy + size.height / 2 - 16 + (_unlockSlide.value.dy * 40),
+          top: position.dy + size.height / 2 - 16 + (_unlockSlide.value.dy * 40),
           child: Opacity(
             opacity: _unlockFade.value,
             child: Container(
@@ -1046,22 +569,9 @@ class MyBarScreenState extends State<MyBarScreen>
               decoration: BoxDecoration(
                 color: AppTheme.accentGold,
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.accentGold.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: AppTheme.accentGold.withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 2)],
               ),
-              child: Text(
-                '+$delta cocktail${delta != 1 ? 's' : ''}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primaryDark,
-                ),
-              ),
+              child: Text('+$delta cocktail${delta != 1 ? 's' : ''}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryDark)),
             ),
           ),
         ),
@@ -1075,20 +585,13 @@ class MyBarScreenState extends State<MyBarScreen>
   }
 
   Future<void> _switchToBar(int barId) async {
-    _createDiagnostics?.incrementCounter(
-      '_switchToBar',
-      stackTrace: StackTrace.current,
-    );
+    _createDiagnostics?.incrementCounter('_switchToBar', stackTrace: StackTrace.current);
     await _delayForImeSettleIfNeeded();
     await _barService.setDefaultBar(barId);
 
-    final active = await (widget.database.select(
-      widget.database.savedBars,
-    )..where((b) => b.id.equals(barId))).getSingle();
+    final active = await (widget.database.select(widget.database.savedBars)..where((b) => b.id.equals(barId))).getSingle();
     final ingredients = await widget.database.getSavedBarIngredients(barId);
-    final bars = await (widget.database.select(
-      widget.database.savedBars,
-    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+    final bars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
 
     if (!mounted) return;
     _markCreateSetState('_switchToBar:setState');
@@ -1096,21 +599,17 @@ class MyBarScreenState extends State<MyBarScreen>
       _activeBar = active;
       _savedBars = bars;
       _barIngredientIds = ingredients.map((i) => i.id).toSet();
-      _activeShelfCategory = null;
+      _activeCategoryFilter = null;
+      _unlockDeltaCache = {};
       _searchQuery = '';
       _searchController.clear();
-      _recomputeSeriousnessCaches(changedByAdd: false);
     });
     _scrollIngredientListToTop();
-
     widget.onBarChanged?.call();
     _refreshAnalytics();
   }
 
-  void _scheduleCreateHydration(
-    int barId, {
-    BarCreateDiagnosticsFlow? diagnostics,
-  }) {
+  void _scheduleCreateHydration(int barId, {BarCreateDiagnosticsFlow? diagnostics}) {
     _pendingCreateHydrationBarId = barId;
     _pendingCreateHydrationDiagnostics = diagnostics;
     if (_createHydrationScheduled) return;
@@ -1124,9 +623,7 @@ class MyBarScreenState extends State<MyBarScreen>
       _pendingCreateHydrationDiagnostics = null;
       if (!mounted || hydrationBarId == null) {
         flow?.finish(result: 'aborted');
-        if (identical(_createDiagnostics, flow)) {
-          _createDiagnostics = null;
-        }
+        if (identical(_createDiagnostics, flow)) _createDiagnostics = null;
         return;
       }
 
@@ -1136,10 +633,7 @@ class MyBarScreenState extends State<MyBarScreen>
         await _delayForImeSettleIfNeeded();
         flow?.step('phaseB:imeSettleDone');
         if (widget.onBarSwitched != null) {
-          flow?.incrementCounter(
-            '_switchToBar(delegate)',
-            stackTrace: StackTrace.current,
-          );
+          flow?.incrementCounter('_switchToBar(delegate)', stackTrace: StackTrace.current);
           widget.onBarSwitched!(hydrationBarId);
         } else {
           await _switchToBar(hydrationBarId);
@@ -1147,11 +641,7 @@ class MyBarScreenState extends State<MyBarScreen>
         flow?.step('phaseB:switchDone');
       } finally {
         flow?.step('phaseB:finally');
-        if (kDebugMode) {
-          debugPrint(
-            'MyBar create Phase B (deferred hydration) ${phaseBSw.elapsedMilliseconds}ms',
-          );
-        }
+        if (kDebugMode) debugPrint('MyBar create Phase B (deferred hydration) ${phaseBSw.elapsedMilliseconds}ms');
         if (mounted) {
           _markCreateSetState('phaseB:complete');
           setState(() => _isCreatingBar = false);
@@ -1176,15 +666,9 @@ class MyBarScreenState extends State<MyBarScreen>
       final now = DateTime.now();
       final trimmedName = _nextAutoBarName(_savedBars);
       flow.step('phaseA:autoName:$trimmedName');
-      final newBarId = await widget.database
-          .into(widget.database.savedBars)
-          .insert(
-            SavedBarsCompanion.insert(
-              name: trimmedName,
-              isDefault: const Value(true),
-              lastUsed: Value(now),
-            ),
-          );
+      final newBarId = await widget.database.into(widget.database.savedBars).insert(
+        SavedBarsCompanion.insert(name: trimmedName, isDefault: const Value(true), lastUsed: Value(now)),
+      );
       flow.step('phaseA:insertBar');
 
       if (!mounted) {
@@ -1192,13 +676,7 @@ class MyBarScreenState extends State<MyBarScreen>
         return;
       }
 
-      final optimisticBar = SavedBar(
-        id: newBarId,
-        name: trimmedName,
-        isDefault: true,
-        createdAt: now,
-        lastUsed: now,
-      );
+      final optimisticBar = SavedBar(id: newBarId, name: trimmedName, isDefault: true, createdAt: now, lastUsed: now);
       final existing = List<SavedBar>.from(_savedBars)
         ..removeWhere((b) => b.id == newBarId)
         ..insert(0, optimisticBar);
@@ -1208,24 +686,16 @@ class MyBarScreenState extends State<MyBarScreen>
         _savedBars = existing;
         _activeBar = optimisticBar;
         _barIngredientIds = {};
-        _activeShelfCategory = null;
+        _activeCategoryFilter = null;
+        _unlockDeltaCache = {};
         _searchQuery = '';
         _searchController.clear();
-        _categoryCountsCache = const {};
-        _totalStockedCountCache = 0;
-        _seriousnessIndexCache = 0.0;
-        _backbarDensityCache = const _BackbarDensityConfig.empty();
-        _lastHeroChangeWasAdd = false;
       });
       flow.step('phaseA:setStateDone');
       _scrollIngredientListToTop();
       flow.step('phaseA:scrollTopDone');
 
-      if (kDebugMode) {
-        debugPrint(
-          'MyBar create Phase A (immediate UI) ${phaseASw.elapsedMilliseconds}ms',
-        );
-      }
+      if (kDebugMode) debugPrint('MyBar create Phase A (immediate UI) ${phaseASw.elapsedMilliseconds}ms');
 
       _scheduleCreateHydration(newBarId, diagnostics: flow);
       flow.step('phaseA:scheduleDeferredHydration');
@@ -1233,12 +703,7 @@ class MyBarScreenState extends State<MyBarScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Created "${optimisticBar.name}"'),
-            action: SnackBarAction(
-              label: 'Rename',
-              onPressed: () {
-                _showRenameBarDialog(optimisticBar.id, optimisticBar.name);
-              },
-            ),
+            action: SnackBarAction(label: 'Rename', onPressed: () => _showRenameBarDialog(optimisticBar.id, optimisticBar.name)),
           ),
         );
       }
@@ -1248,11 +713,7 @@ class MyBarScreenState extends State<MyBarScreen>
         _finishCreateDiagnostics(result: 'unmounted_error');
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not create bar. Please try again.'),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not create bar. Please try again.')));
       _markCreateSetState('create:error');
       setState(() => _isCreatingBar = false);
       _finishCreateDiagnostics(result: 'error');
@@ -1265,24 +726,15 @@ class MyBarScreenState extends State<MyBarScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,
-        title: const Text(
-          'Rename Bar',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
+        title: const Text('Rename Bar', style: TextStyle(color: AppTheme.textPrimary)),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: const InputDecoration(
-            hintText: 'Bar name',
-            hintStyle: TextStyle(color: AppTheme.textSecondary),
-          ),
+          decoration: const InputDecoration(hintText: 'Bar name', hintStyle: TextStyle(color: AppTheme.textSecondary)),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () {
               final name = controller.text.trim();
@@ -1298,19 +750,14 @@ class MyBarScreenState extends State<MyBarScreen>
     if (!mounted || renamed == null || renamed.trim().isEmpty) return;
     final name = renamed.trim();
 
-    await (widget.database.update(widget.database.savedBars)
-          ..where((b) => b.id.equals(barId)))
+    await (widget.database.update(widget.database.savedBars)..where((b) => b.id.equals(barId)))
         .write(SavedBarsCompanion(name: Value(name)));
 
-    final bars = await (widget.database.select(
-      widget.database.savedBars,
-    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+    final bars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
     if (!mounted) return;
     setState(() {
       _savedBars = bars;
-      if (_activeBar?.id == barId) {
-        _activeBar = _activeBar!.copyWith(name: name);
-      }
+      if (_activeBar?.id == barId) _activeBar = _activeBar!.copyWith(name: name);
     });
   }
 
@@ -1320,37 +767,20 @@ class MyBarScreenState extends State<MyBarScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,
-        title: const Text(
-          'Clear Current Bar',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: Text(
-          'Remove all ingredients from "${_activeBar!.name}"?',
-          style: const TextStyle(color: AppTheme.textSecondary),
-        ),
+        title: const Text('Clear Current Bar', style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text('Remove all ingredients from "${_activeBar!.name}"?', style: const TextStyle(color: AppTheme.textSecondary)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Clear', style: TextStyle(color: Colors.red.shade300)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Clear', style: TextStyle(color: Colors.red.shade300))),
         ],
       ),
     );
     if (confirmed != true || !mounted || _activeBar == null) return;
 
-    await (widget.database.delete(
-      widget.database.savedBarIngredients,
-    )..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
+    await (widget.database.delete(widget.database.savedBarIngredients)..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
 
     if (!mounted) return;
-    setState(() {
-      _barIngredientIds.clear();
-      _recomputeSeriousnessCaches(changedByAdd: false);
-    });
+    setState(() => _barIngredientIds.clear());
     widget.onBarChanged?.call();
     await _refreshAnalytics();
   }
@@ -1358,9 +788,7 @@ class MyBarScreenState extends State<MyBarScreen>
   Future<void> _deleteBarWithConfirm(SavedBar bar) async {
     if (_savedBars.length <= 1) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need at least one bar.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You need at least one bar.')));
       return;
     }
 
@@ -1369,10 +797,7 @@ class MyBarScreenState extends State<MyBarScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,
-        title: const Text(
-          'Delete Bar',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
+        title: const Text('Delete Bar', style: TextStyle(color: AppTheme.textPrimary)),
         content: Text(
           deletingActive
               ? 'Delete "${bar.name}"? This is your active bar, so another bar will be selected automatically.'
@@ -1380,45 +805,26 @@ class MyBarScreenState extends State<MyBarScreen>
           style: const TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'Delete',
-              style: TextStyle(color: Colors.red.shade300),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Colors.red.shade300))),
         ],
       ),
     );
 
     if (confirmed != true || !mounted) return;
 
-    await (widget.database.delete(
-      widget.database.savedBarIngredients,
-    )..where((row) => row.savedBarId.equals(bar.id))).go();
+    await (widget.database.delete(widget.database.savedBarIngredients)..where((row) => row.savedBarId.equals(bar.id))).go();
+    await (widget.database.delete(widget.database.savedBars)..where((row) => row.id.equals(bar.id))).go();
 
-    await (widget.database.delete(
-      widget.database.savedBars,
-    )..where((row) => row.id.equals(bar.id))).go();
-
-    var remainingBars = await (widget.database.select(
-      widget.database.savedBars,
-    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+    var remainingBars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
     if (remainingBars.isEmpty || !mounted) return;
 
-    final activeBarStillExists =
-        _activeBar != null && remainingBars.any((b) => b.id == _activeBar!.id);
+    final activeBarStillExists = _activeBar != null && remainingBars.any((b) => b.id == _activeBar!.id);
     final hasDefault = remainingBars.any((b) => b.isDefault);
 
     if (deletingActive || !activeBarStillExists || !hasDefault) {
       await _barService.setDefaultBar(remainingBars.first.id);
-      remainingBars = await (widget.database.select(
-        widget.database.savedBars,
-      )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
+      remainingBars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
     }
 
     if (!mounted || remainingBars.isEmpty) return;
@@ -1426,17 +832,13 @@ class MyBarScreenState extends State<MyBarScreen>
     if (deletingActive || !activeBarStillExists) {
       await _switchToBar(remainingBars.first.id);
     } else {
-      final active = remainingBars.firstWhere(
-        (b) => b.id == _activeBar!.id,
-        orElse: () => remainingBars.first,
-      );
+      final active = remainingBars.firstWhere((b) => b.id == _activeBar!.id, orElse: () => remainingBars.first);
       final ingredients = await widget.database.getSavedBarIngredients(active.id);
       if (!mounted) return;
       setState(() {
         _activeBar = active;
         _savedBars = remainingBars;
         _barIngredientIds = ingredients.map((i) => i.id).toSet();
-        _recomputeSeriousnessCaches(changedByAdd: false);
       });
       widget.onBarChanged?.call();
       await _refreshAnalytics();
@@ -1451,1855 +853,379 @@ class MyBarScreenState extends State<MyBarScreen>
     }
   }
 
-  void _activateCategoryFilter(String category) {
-    if (_activeShelfCategory == category) return;
-    setState(() {
-      _activeShelfCategory = category;
-    });
-    _scrollIngredientListToTop();
+  // ─── Derived data ─────────────────────────────────────────────────────────
+
+  List<Ingredient> get _searchResults {
+    if (_searchQuery.isEmpty) return [];
+    final q = _searchQuery.toLowerCase();
+    return _allIngredients.where((i) => i.name.toLowerCase().contains(q)).toList()
+      ..sort((a, b) {
+        final aStocked = _barIngredientIds.contains(a.id) ? 0 : 1;
+        final bStocked = _barIngredientIds.contains(b.id) ? 0 : 1;
+        if (aStocked != bStocked) return aStocked - bStocked;
+        return a.name.compareTo(b.name);
+      });
   }
 
-  void _clearCategoryFilter() {
-    if (_activeShelfCategory == null) return;
-    setState(() => _activeShelfCategory = null);
-    _scrollIngredientListToTop();
+  List<Ingredient> _categoryIngredients(String category) {
+    final all = _allIngredients.where((i) => i.category == category).toList();
+    final stocked = all.where((i) => _barIngredientIds.contains(i.id)).toList()..sort((a, b) => a.name.compareTo(b.name));
+    final missing = all.where((i) => !_barIngredientIds.contains(i.id)).toList()..sort((a, b) => a.name.compareTo(b.name));
+    return [...stocked, ...missing];
   }
 
-  List<Ingredient> get _filteredIngredients {
-    var list = _allIngredients;
-    if (_activeShelfCategory != null) {
-      list = list.where((i) => i.category == _activeShelfCategory).toList();
-    }
-    if (_searchQuery.isNotEmpty) {
-      list = list
-          .where(
-            (i) => i.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-          )
-          .toList();
-    }
-    return list;
-  }
+  int _stockedCountForCategory(String category) =>
+      _allIngredients.where((i) => i.category == category && _barIngredientIds.contains(i.id)).length;
 
-  Map<String, List<Ingredient>> get _groupedIngredients {
-    final map = <String, List<Ingredient>>{};
-    for (final i in _filteredIngredients) {
-      map.putIfAbsent(i.category, () => []).add(i);
-    }
-    return map;
-  }
+  int _totalCountForCategory(String category) =>
+      _allIngredients.where((i) => i.category == category).length;
 
-  Map<String, int> get _categoryCounts {
-    return _categoryCountsCache;
-  }
+  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppTheme.primaryDark,
-        body: Center(
-          child: CircularProgressIndicator(color: AppTheme.accentGold),
-        ),
+        body: Center(child: CircularProgressIndicator(color: AppTheme.accentGold)),
       );
     }
 
-    final heroHeight = (MediaQuery.of(context).size.height * 0.32).clamp(
-      228.0,
-      320.0,
-    );
+    final analytics = _analytics ?? BarAnalyticsResult.empty();
+    final suggestion = analytics.suggestion;
+    final hasSuggestion = suggestion != null && _barIngredientIds.isNotEmpty;
+    final suggestionIsBusy = hasSuggestion &&
+        (_suggestionAddsInFlight.contains(suggestion!.canonicalName) ||
+            _allIngredients
+                .where((i) => IngredientEquivalence.normalise(i.name) == suggestion.canonicalName)
+                .map((i) => i.id)
+                .any(_busyIngredientIds.contains));
+
+    final inSearchMode = _searchQuery.isNotEmpty;
+    final inCategoryMode = _activeCategoryFilter != null && !inSearchMode;
 
     return Scaffold(
       backgroundColor: AppTheme.primaryDark,
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Center(
-                child: BarSelectorDropdown(
-                  currentBarName: _activeBar?.name ?? widget.activeBarName,
-                  currentBarId: _activeBar?.id,
-                  bars: _savedBars,
-                  maxWidth: 320,
-                  isCreateInProgress: _isCreatingBar,
-                  onSelectBar: (barId) async {
-                    if (barId == _activeBar?.id) return;
-                    if (widget.onBarSwitched != null) {
-                      widget.onBarSwitched!(barId);
-                      return;
-                    }
-                    await _switchToBar(barId);
-                  },
-                  onCreateBar: () async {
-                    await _createNewBar();
-                  },
-                  onClearBar: () async {
-                    await _clearCurrentBarWithConfirm();
-                  },
-                  onDeleteBar: (bar) async {
-                    await _deleteBarWithConfirm(bar);
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            // ── 1+2. Unified ambient hero shelf ──
-            FadeTransition(
-              opacity: _headerFade,
-              child: SizedBox(
-                height: heroHeight,
-                child: _MyBarHeroCard(
-                  stockedCount: _totalStockedCountCache,
-                  seriousnessIndex: _seriousnessIndexCache,
-                  density: _backbarDensityCache,
-                  showAddSheen: _lastHeroChangeWasAdd,
-                ),
-              ),
-            ),
-
-            // Clear separation: emotional hero vs functional controls.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Container(
-                height: 1,
-                color: AppTheme.surfaceLight.withValues(alpha: 0.35),
-              ),
-            ),
-
-            // ── 3. Search ──
-            _IngredientSearchField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              onChanged: _setSearchQuery,
-              onClear: () {
-                _searchController.clear();
-                _setSearchQuery('');
-              },
-              hasQuery: _searchQuery.isNotEmpty,
-            ),
-
-            // ── 4. Category chips ──
-            _CategoryFilterChips(
-              selectedCategory: _activeShelfCategory,
-              stockedCounts: _categoryCounts,
-              onSelect: (category) {
-                if (category == null) {
-                  _clearCategoryFilter();
+            _BarHeader(
+              activeBarName: _activeBar?.name ?? widget.activeBarName,
+              activeBarId: _activeBar?.id,
+              bars: _savedBars,
+              isCreatingBar: _isCreatingBar,
+              onSelectBar: (barId) async {
+                if (barId == _activeBar?.id) return;
+                if (widget.onBarSwitched != null) {
+                  widget.onBarSwitched!(barId);
                   return;
                 }
-                _activateCategoryFilter(category);
+                await _switchToBar(barId);
               },
+              onCreateBar: _createNewBar,
+              onClearBar: _clearCurrentBarWithConfirm,
+              onDeleteBar: _deleteBarWithConfirm,
             ),
-
-            // ── 5. Smart suggestion ──
-            if (_analytics?.suggestion != null && _barIngredientIds.isNotEmpty)
-              _InlineSuggestion(
-                suggestion: _analytics!.suggestion!,
-                modeLabel: _suggestionLabels[_suggestionMode],
-                isBusy:
-                    _suggestionAddsInFlight.contains(
-                      _analytics!.suggestion!.canonicalName,
-                    ) ||
-                    _allIngredients
-                        .where(
-                          (i) =>
-                              IngredientEquivalence.normalise(i.name) ==
-                              _analytics!.suggestion!.canonicalName,
-                        )
-                        .map((i) => i.id)
-                        .any(_busyIngredientIds.contains),
-                onAdd: _handleSuggestionAdd,
-                onCycleMode: () {
-                  setState(() {
-                    _suggestionMode = (_suggestionMode + 1) % 3;
-                  });
-                },
-              ),
-
-            // ── 6. Ingredient list ──
             Expanded(
-              child: _IngredientListSection(
-                groupedIngredients: _groupedIngredients,
-                barIngredientIds: _barIngredientIds,
-                busyIngredientIds: _busyIngredientIds,
-                onToggle: _toggleIngredient,
-                onTapWithContext: (ingredientId, ctx) {
-                  _ingredientRowContexts[ingredientId] = ctx;
-                },
-                scrollController: _listScrollController,
-                categoryKeys: _categoryKeys,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  1+2. BAR INTERIOR ZONE — unified header + rail in one ambient surface
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _MyBarHeroCard extends StatelessWidget {
-  final int stockedCount;
-  final double seriousnessIndex;
-  final _BackbarDensityConfig density;
-  final bool showAddSheen;
-
-  const _MyBarHeroCard({
-    required this.stockedCount,
-    required this.seriousnessIndex,
-    required this.density,
-    required this.showAddSheen,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final warmTint = Color.lerp(
-      const Color(0xFF1E1E1E),
-      const Color(0xFF2B2317),
-      seriousnessIndex * 0.6,
-    )!;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppTheme.accentGold.withValues(
-            alpha: 0.08 + seriousnessIndex * 0.1,
-          ),
-        ),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppTheme.surfaceDark, warmTint],
-        ),
-      ),
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: IgnorePointer(
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  painter: _StaticGrainPainter(
-                    seed: 31,
-                    opacity: 0.028,
-                    step: 4,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Your bar is growing',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Stocking spirits and essentials builds a serious backbar.',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.84),
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Backbar density',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.25,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.74),
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                width: double.infinity,
-                height: 146,
-                child: _BackbarShelfStage(
-                  targetFillLevel: density.fillLevel,
-                  bottleCount: density.bottleCount,
-                  backRowCount: density.backRowCount,
-                  spacingTightness: density.spacingTightness,
-                  showAddSheen: showAddSheen,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Backbar: $stockedCount stocked',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.84),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BackbarShelfStage extends StatefulWidget {
-  final double targetFillLevel;
-  final int bottleCount;
-  final int backRowCount;
-  final double spacingTightness;
-  final bool showAddSheen;
-
-  const _BackbarShelfStage({
-    required this.targetFillLevel,
-    required this.bottleCount,
-    required this.backRowCount,
-    required this.spacingTightness,
-    required this.showAddSheen,
-  });
-
-  @override
-  State<_BackbarShelfStage> createState() => _BackbarShelfStageState();
-}
-
-class _BackbarShelfStageState extends State<_BackbarShelfStage>
-    with TickerProviderStateMixin {
-  late AnimationController _fillController;
-  late Animation<double> _fillAnimation;
-  late AnimationController _sheenController;
-  late Animation<double> _sheenSweep;
-  late Animation<double> _sheenOpacity;
-  double _currentFill = 0.10;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentFill = widget.targetFillLevel.clamp(0.0, 1.0);
-    _fillController = AnimationController(vsync: this, value: 1.0);
-    _fillAnimation = AlwaysStoppedAnimation<double>(_currentFill);
-    _sheenController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 420),
-    );
-    _sheenSweep = Tween<double>(begin: -0.8, end: 1.2).animate(
-      CurvedAnimation(parent: _sheenController, curve: Curves.easeOutCubic),
-    );
-    _sheenOpacity = TweenSequence<double>(
-      [
-        TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.26), weight: 34),
-        TweenSequenceItem(tween: Tween(begin: 0.26, end: 0.0), weight: 66),
-      ],
-    ).animate(CurvedAnimation(parent: _sheenController, curve: Curves.easeOut));
-  }
-
-  @override
-  void didUpdateWidget(covariant _BackbarShelfStage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final nextFill = widget.targetFillLevel.clamp(0.0, 1.0);
-    final increasing = nextFill > _currentFill;
-    final duration = increasing
-        ? const Duration(milliseconds: 460)
-        : const Duration(milliseconds: 320);
-    final curve = increasing ? Curves.easeOutCubic : Curves.easeInOutCubic;
-
-    _fillController.duration = duration;
-    _fillAnimation = Tween<double>(
-      begin: _currentFill,
-      end: nextFill,
-    ).animate(CurvedAnimation(parent: _fillController, curve: curve));
-    _currentFill = nextFill;
-    _fillController.forward(from: 0.0);
-
-    if (increasing && widget.showAddSheen) {
-      _sheenController.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _fillController.dispose();
-    _sheenController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stageSize = Size(constraints.maxWidth, constraints.maxHeight);
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  _fillController,
-                  _sheenController,
-                ]),
-                builder: (context, child) {
-                  return CustomPaint(
-                    size: stageSize,
-                    painter: _BackbarShelfPainter(
-                      fillLevel: _fillAnimation.value,
-                      bottleCount: widget.bottleCount,
-                      backRowCount: widget.backRowCount,
-                      spacingTightness: widget.spacingTightness,
-                      sheenX: _sheenSweep.value,
-                      sheenOpacity: _sheenOpacity.value,
-                    ),
-                  );
-                },
-              ),
-            ),
-            if (kDebugMode && _debugShowBackbarBounds)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: AppTheme.accentGold.withValues(alpha: 0.45),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _BackbarShelfPainter extends CustomPainter {
-  final double fillLevel;
-  final int bottleCount;
-  final int backRowCount;
-  final double spacingTightness;
-  final double sheenX;
-  final double sheenOpacity;
-
-  _BackbarShelfPainter({
-    required this.fillLevel,
-    required this.bottleCount,
-    required this.backRowCount,
-    required this.spacingTightness,
-    required this.sheenX,
-    required this.sheenOpacity,
-  });
-
-  static final List<Path> _templates = _BottleTemplateLibrary.templates;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stageRect = Offset.zero & size;
-    final top = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          AppTheme.surfaceDark.withValues(alpha: 0.72),
-          const Color(0xFF1E1A14).withValues(alpha: 0.94),
-        ],
-      ).createShader(stageRect);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(stageRect, const Radius.circular(10)),
-      top,
-    );
-
-    final shelfY = size.height - 18;
-    final shelfGlow = Paint()
-      ..color = AppTheme.accentGold.withValues(alpha: 0.24)
-      ..strokeWidth = 1.2;
-    final shelfBase = Paint()
-      ..color = AppTheme.surfaceLight.withValues(alpha: 0.58)
-      ..strokeWidth = 3.0;
-    canvas.drawLine(
-      Offset(4, shelfY),
-      Offset(size.width - 4, shelfY),
-      shelfGlow,
-    );
-    canvas.drawLine(
-      Offset(4, shelfY + 1.6),
-      Offset(size.width - 4, shelfY + 1.6),
-      shelfBase,
-    );
-
-    final frontCount = max(0, bottleCount - backRowCount);
-    _paintRow(
-      canvas: canvas,
-      size: size,
-      count: max(0, backRowCount),
-      isBackRow: true,
-      baselineY: shelfY - 6,
-      fillLevel: fillLevel * 0.92,
-      spacingTightness: spacingTightness,
-    );
-    _paintRow(
-      canvas: canvas,
-      size: size,
-      count: max(6, frontCount),
-      isBackRow: false,
-      baselineY: shelfY,
-      fillLevel: fillLevel,
-      spacingTightness: spacingTightness,
-    );
-  }
-
-  void _paintRow({
-    required Canvas canvas,
-    required Size size,
-    required int count,
-    required bool isBackRow,
-    required double baselineY,
-    required double fillLevel,
-    required double spacingTightness,
-  }) {
-    if (count <= 0) return;
-    final rowInset = isBackRow ? 18.0 : 10.0;
-    final rowWidth = max(1.0, size.width - rowInset * 2);
-    final normSpacing = count > 1 ? rowWidth / (count - 1) : rowWidth;
-    final compressed = normSpacing * (1.0 - spacingTightness.clamp(0.0, 0.35));
-    final rowSpan = compressed * (count - 1);
-    final leftStart = (size.width - rowSpan) / 2;
-
-    for (int i = 0; i < count; i++) {
-      final template =
-          _templates[(i * 7 + (isBackRow ? 3 : 11)) % _templates.length];
-      final jitter = (((i * 19 + (isBackRow ? 5 : 13)) % 7) - 3) * 0.7;
-      final x = leftStart + (compressed * i) + jitter;
-      final width = (isBackRow ? 12.0 : 14.5) + ((i % 4) * 0.8);
-      final height = (isBackRow ? 40.0 : 54.0) + (((i * 11) % 5) * 2.4);
-      final rect = Rect.fromLTWH(
-        x - (width / 2),
-        baselineY - height,
-        width,
-        height,
-      );
-      _paintBottle(
-        canvas: canvas,
-        template: template,
-        rect: rect,
-        fillLevel: fillLevel,
-        backRow: isBackRow,
-      );
-    }
-  }
-
-  void _paintBottle({
-    required Canvas canvas,
-    required Path template,
-    required Rect rect,
-    required double fillLevel,
-    required bool backRow,
-  }) {
-    final matrix = Matrix4.identity()
-      ..translateByDouble(rect.left, rect.top, 0.0, 1.0)
-      ..scaleByDouble(rect.width, rect.height, 1.0, 1.0);
-    final path = template.transform(matrix.storage);
-
-    final glassOutline = Paint()
-      ..color =
-          (backRow
-                  ? AppTheme.surfaceLight.withValues(alpha: 0.52)
-                  : AppTheme.surfaceLight.withValues(alpha: 0.66))
-              .withValues(alpha: backRow ? 0.50 : 0.64)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = backRow ? 0.9 : 1.1;
-    final glassBody = Paint()
-      ..color = backRow
-          ? Colors.white.withValues(alpha: 0.045)
-          : Colors.white.withValues(alpha: 0.065)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(path, glassBody);
-    canvas.drawPath(path, glassOutline);
-
-    final inner = path.getBounds().deflate(max(0.5, rect.width * 0.07));
-    final clampedFill = fillLevel.clamp(0.0, 1.0);
-    final liquidTop = inner.bottom - (inner.height * clampedFill);
-    final liquidRect = Rect.fromLTRB(
-      inner.left,
-      liquidTop,
-      inner.right,
-      inner.bottom + 1,
-    );
-    final liquid = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          AppTheme.accentGold.withValues(alpha: backRow ? 0.26 : 0.34),
-          AppTheme.accentGold.withValues(alpha: backRow ? 0.42 : 0.54),
-        ],
-      ).createShader(liquidRect);
-
-    canvas.save();
-    canvas.clipPath(path);
-    canvas.drawRect(liquidRect, liquid);
-
-    final highlightX = inner.left + (inner.width * 0.23);
-    final highlight = Paint()
-      ..color = Colors.white.withValues(alpha: backRow ? 0.06 : 0.09);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          highlightX,
-          inner.top + 2,
-          max(1.0, inner.width * 0.10),
-          max(4.0, inner.height * 0.70),
-        ),
-        const Radius.circular(2),
-      ),
-      highlight,
-    );
-
-    if (sheenOpacity > 0.0 && clampedFill > 0.12) {
-      final sheen = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment(sheenX - 0.22, -1),
-          end: Alignment(sheenX + 0.10, 1),
-          colors: [
-            Colors.transparent,
-            Colors.white.withValues(alpha: sheenOpacity),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(inner);
-      canvas.drawRect(inner, sheen);
-    }
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _BackbarShelfPainter oldDelegate) {
-    return fillLevel != oldDelegate.fillLevel ||
-        bottleCount != oldDelegate.bottleCount ||
-        backRowCount != oldDelegate.backRowCount ||
-        spacingTightness != oldDelegate.spacingTightness ||
-        sheenX != oldDelegate.sheenX ||
-        sheenOpacity != oldDelegate.sheenOpacity;
-  }
-}
-
-class _BottleTemplateLibrary {
-  static final List<Path> templates = <Path>[
-    _tallClassic(),
-    _bourgogne(),
-    _roundShoulder(),
-    _flaskSlim(),
-    _apothecary(),
-  ];
-
-  static Path _tallClassic() {
-    return Path()
-      ..moveTo(0.40, 0.0)
-      ..lineTo(0.60, 0.0)
-      ..lineTo(0.60, 0.16)
-      ..cubicTo(0.76, 0.25, 0.84, 0.37, 0.84, 0.54)
-      ..lineTo(0.84, 1.0)
-      ..lineTo(0.16, 1.0)
-      ..lineTo(0.16, 0.54)
-      ..cubicTo(0.16, 0.37, 0.24, 0.25, 0.40, 0.16)
-      ..close();
-  }
-
-  static Path _bourgogne() {
-    return Path()
-      ..moveTo(0.38, 0.0)
-      ..lineTo(0.62, 0.0)
-      ..lineTo(0.62, 0.13)
-      ..cubicTo(0.83, 0.24, 0.92, 0.42, 0.88, 0.60)
-      ..lineTo(0.84, 1.0)
-      ..lineTo(0.16, 1.0)
-      ..lineTo(0.12, 0.60)
-      ..cubicTo(0.08, 0.42, 0.17, 0.24, 0.38, 0.13)
-      ..close();
-  }
-
-  static Path _roundShoulder() {
-    return Path()
-      ..moveTo(0.42, 0.0)
-      ..lineTo(0.58, 0.0)
-      ..lineTo(0.58, 0.16)
-      ..cubicTo(0.80, 0.23, 0.93, 0.40, 0.90, 0.62)
-      ..lineTo(0.86, 1.0)
-      ..lineTo(0.14, 1.0)
-      ..lineTo(0.10, 0.62)
-      ..cubicTo(0.07, 0.40, 0.20, 0.23, 0.42, 0.16)
-      ..close();
-  }
-
-  static Path _flaskSlim() {
-    return Path()
-      ..moveTo(0.44, 0.0)
-      ..lineTo(0.56, 0.0)
-      ..lineTo(0.56, 0.17)
-      ..lineTo(0.70, 0.30)
-      ..lineTo(0.72, 1.0)
-      ..lineTo(0.28, 1.0)
-      ..lineTo(0.30, 0.30)
-      ..lineTo(0.44, 0.17)
-      ..close();
-  }
-
-  static Path _apothecary() {
-    return Path()
-      ..moveTo(0.35, 0.0)
-      ..lineTo(0.65, 0.0)
-      ..lineTo(0.65, 0.11)
-      ..lineTo(0.78, 0.22)
-      ..lineTo(0.82, 1.0)
-      ..lineTo(0.18, 1.0)
-      ..lineTo(0.22, 0.22)
-      ..lineTo(0.35, 0.11)
-      ..close();
-  }
-}
-
-class _UnlockPreviewCard extends StatelessWidget {
-  final Cocktail cocktail;
-  final bool showName;
-
-  const _UnlockPreviewCard({required this.cocktail, this.showName = true});
-
-  @override
-  Widget build(BuildContext context) {
-    final basePath =
-        cocktail.imagePath ??
-        ImageUtils.generateBasePathFromName(cocktail.name);
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.primaryDark,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppTheme.surfaceLight.withValues(alpha: 0.65),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.accentGold.withValues(alpha: 0.18),
-            blurRadius: 20,
-            spreadRadius: 0.6,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: FutureBuilder<String?>(
-              future: ImageUtils.findCocktailImage(basePath),
-              builder: (context, snapshot) {
-                final path = snapshot.data;
-                if (path == null) {
-                  return Container(
-                    color: AppTheme.surfaceLight.withValues(alpha: 0.2),
-                    child: const Center(
-                      child: Icon(
-                        Icons.local_bar_rounded,
-                        color: AppTheme.textSecondary,
-                        size: 22,
-                      ),
-                    ),
-                  );
-                }
-                return Image.asset(
-                  path,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                );
-              },
-            ),
-          ),
-          if (showName)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                cocktail.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AnimatedUnlockReveal extends StatelessWidget {
-  final Widget child;
-
-  const _AnimatedUnlockReveal({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutCubic,
-      tween: Tween<double>(begin: 0.97, end: 1.0),
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.scale(scale: value, child: child),
-        );
-      },
-      child: child,
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  RAIL CELL — one category shelf section
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _RailCell extends StatefulWidget {
-  final String category;
-  final int stocked;
-  final int target;
-  final bool isActive;
-  final bool justCompleted;
-  final double warmth;
-
-  const _RailCell({
-    required this.category,
-    required this.stocked,
-    required this.target,
-    required this.isActive,
-    required this.justCompleted,
-    required this.warmth,
-  });
-
-  @override
-  State<_RailCell> createState() => _RailCellState();
-}
-
-class _RailCellState extends State<_RailCell>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseScale;
-  late Animation<double> _glowOpacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _pulseScale =
-        TweenSequence<double>([
-          TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.04), weight: 30),
-          TweenSequenceItem(tween: Tween(begin: 1.04, end: 1.0), weight: 70),
-        ]).animate(
-          CurvedAnimation(parent: _pulseController, curve: Curves.easeOutCubic),
-        );
-    _glowOpacity = TweenSequence<double>(
-      [
-        TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.5), weight: 25),
-        TweenSequenceItem(tween: Tween(begin: 0.5, end: 0.0), weight: 75),
-      ],
-    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
-  }
-
-  @override
-  void didUpdateWidget(covariant _RailCell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.justCompleted && !oldWidget.justCompleted) {
-      _pulseController.forward(from: 0);
-      HapticFeedback.mediumImpact();
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isFull = widget.stocked >= widget.target;
-    final isEmpty = widget.stocked == 0;
-    final bottles =
-        _categoryBottles[widget.category] ??
-        [const _BottleSpec(_BottleShape.box)];
-    final filledCount = min(widget.stocked, widget.target);
-
-    // Shelf surface color evolves with warmth + completion
-    final shelfColor = isFull
-        ? Color.lerp(
-            AppTheme.accentGold.withValues(alpha: 0.30),
-            AppTheme.accentGold.withValues(alpha: 0.45),
-            widget.warmth,
-          )!
-        : Color.lerp(
-            AppTheme.surfaceLight.withValues(alpha: 0.35),
-            AppTheme.surfaceLight.withValues(alpha: 0.50),
-            widget.warmth,
-          )!;
-
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final activeScale = widget.isActive ? 1.015 : 1.0;
-        return Transform.scale(
-          scale: widget.isActive
-              ? _pulseScale.value *
-                    activeScale // active cells sit forward
-              : _pulseScale.value,
-          child: Container(
-            width: 72,
-            padding: const EdgeInsets.only(top: 2, bottom: 2),
-            decoration: BoxDecoration(
-              // Active state stays visibly forward at a glance.
-              color: widget.isActive
-                  ? AppTheme.accentGold.withValues(alpha: 0.075)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: widget.isActive
-                    ? AppTheme.accentGold.withValues(alpha: 0.24)
-                    : Colors.transparent,
-                width: 1,
-              ),
-              boxShadow: [
-                if (_pulseController.isAnimating)
-                  BoxShadow(
-                    color: AppTheme.accentGold.withValues(
-                      alpha: _glowOpacity.value * 0.25,
-                    ),
-                    blurRadius: 16,
-                    spreadRadius: 1,
-                  ),
-                // Active under-glow (always, not just on pulse)
-                if (widget.isActive)
-                  BoxShadow(
-                    color: AppTheme.accentGold.withValues(alpha: 0.12),
-                    blurRadius: 10,
-                    spreadRadius: 0.5,
-                    offset: const Offset(0, 3),
-                  ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Recessed alcove creates clear depth behind bottles.
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Container(
-                          margin: const EdgeInsets.fromLTRB(3, 2, 3, 3),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.16),
-                                Colors.black.withValues(alpha: 0.24),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.035),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (isFull)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: Container(
-                              margin: const EdgeInsets.fromLTRB(5, 5, 5, 6),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                gradient: RadialGradient(
-                                  center: const Alignment(0, 0.28),
-                                  radius: 0.95,
-                                  colors: [
-                                    AppTheme.accentGold.withValues(alpha: 0.09),
-                                    AppTheme.accentGold.withValues(alpha: 0.0),
+              child: FadeTransition(
+                opacity: _headerFade,
+                child: inCategoryMode
+                    ? _CategoryDetailView(
+                        category: _activeCategoryFilter!,
+                        ingredients: _categoryIngredients(_activeCategoryFilter!),
+                        barIngredientIds: _barIngredientIds,
+                        busyIngredientIds: _busyIngredientIds,
+                        unlockDeltas: _unlockDeltaCache,
+                        deltaLoading: _deltaLoading,
+                        stockedCount: _stockedCountForCategory(_activeCategoryFilter!),
+                        totalCount: _totalCountForCategory(_activeCategoryFilter!),
+                        onToggle: _toggleIngredient,
+                        onTapWithContext: (id, ctx) => _ingredientRowContexts[id] = ctx,
+                        onBack: _closeCategory,
+                      )
+                    : CustomScrollView(
+                        controller: _listScrollController,
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (!inSearchMode) ...[
+                                    _StatCard(
+                                      cocktailCount: analytics.exactMatchCount,
+                                      stockedCount: _barIngredientIds.length,
+                                      totalCount: _allIngredients.length,
+                                      onTap: widget.onNavigateToFinder,
+                                    ),
+                                    const SizedBox(height: 10),
                                   ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: _BottleRow(
-                            specs: bottles,
-                            filledCount: filledCount,
-                            isFull: isFull,
-                            isEmpty: isEmpty,
-                            warmth: widget.warmth,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                if (isFull)
-                  Container(
-                    height: 1,
-                    margin: const EdgeInsets.fromLTRB(5, 0, 5, 1.5),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(1),
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          AppTheme.accentGold.withValues(alpha: 0.42),
-                          Colors.transparent,
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.accentGold.withValues(alpha: 0.18),
-                          blurRadius: 4,
-                          spreadRadius: 0.2,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Shelf ledge reads as a physical edge.
-                _ShelfLedge(color: shelfColor),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Three-layer shelf ledge: highlight, surface, shadow.
-class _ShelfLedge extends StatelessWidget {
-  final Color color;
-  const _ShelfLedge({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Top highlight (light catch)
-        Container(
-          height: 1,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          color: color.withValues(alpha: min(color.a + 0.18, 1.0)),
-        ),
-        // Surface
-        Container(
-          height: 3.2,
-          margin: const EdgeInsets.symmetric(horizontal: 2.5),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(0.7),
-          ),
-        ),
-        // Under-shadow
-        Container(
-          height: 1.4,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.28),
-            borderRadius: BorderRadius.circular(0.7),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Deterministic static grain for subtle tactile depth in the bar interior.
-class _StaticGrainPainter extends CustomPainter {
-  final int seed;
-  final double opacity;
-  final int step;
-
-  const _StaticGrainPainter({
-    required this.seed,
-    required this.opacity,
-    this.step = 4,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final dark = Paint()..color = Colors.black.withValues(alpha: opacity);
-    final light = Paint()
-      ..color = Colors.white.withValues(alpha: opacity * 0.45);
-
-    for (int y = 0; y < size.height.toInt(); y += step) {
-      for (int x = 0; x < size.width.toInt(); x += step) {
-        final hash = _hash2D(x, y, seed);
-        if ((hash & 31) == 0) {
-          canvas.drawRect(
-            Rect.fromLTWH(x.toDouble(), y.toDouble(), 1, 1),
-            dark,
-          );
-        } else if ((hash & 63) == 0) {
-          canvas.drawRect(
-            Rect.fromLTWH(x.toDouble(), y.toDouble(), 1, 1),
-            light,
-          );
-        }
-      }
-    }
-  }
-
-  int _hash2D(int x, int y, int seed) {
-    int h = x * 374761393 + y * 668265263 + seed * 1442695041;
-    h = (h ^ (h >> 13)) * 1274126177;
-    return h ^ (h >> 16);
-  }
-
-  @override
-  bool shouldRepaint(covariant _StaticGrainPainter oldDelegate) {
-    return seed != oldDelegate.seed ||
-        opacity != oldDelegate.opacity ||
-        step != oldDelegate.step;
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  BOTTLE ROW — organic spacing via per-bottle specs
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _BottleRow extends StatelessWidget {
-  final List<_BottleSpec> specs;
-  final int filledCount;
-  final bool isFull;
-  final bool isEmpty;
-  final double warmth;
-
-  const _BottleRow({
-    required this.specs,
-    required this.filledCount,
-    required this.isFull,
-    required this.isEmpty,
-    required this.warmth,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: List.generate(specs.length, (i) {
-        final spec = specs[i];
-        final isFilled = i < filledCount;
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: spec.hMargin),
-          child: _AnimatedBottle(
-            spec: spec,
-            isFilled: isFilled,
-            isCategoryFull: isFull,
-            index: i,
-            warmth: warmth,
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _AnimatedBottle extends StatefulWidget {
-  final _BottleSpec spec;
-  final bool isFilled;
-  final bool isCategoryFull;
-  final int index;
-  final double warmth;
-
-  const _AnimatedBottle({
-    required this.spec,
-    required this.isFilled,
-    required this.isCategoryFull,
-    required this.index,
-    required this.warmth,
-  });
-
-  @override
-  State<_AnimatedBottle> createState() => _AnimatedBottleState();
-}
-
-class _AnimatedBottleState extends State<_AnimatedBottle>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _placementY;
-  late Animation<double> _presence;
-  late Animation<double> _shimmerSweep;
-  late Animation<double> _shimmerOpacity;
-  bool _wasFilledBefore = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _wasFilledBefore = widget.isFilled;
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 340 + widget.index * 25),
-    );
-
-    // Bottle physically rises from below the shelf, overshoots, then settles.
-    _placementY = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 10.0,
-          end: -2.0,
-        ).chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 80,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: -2.0,
-          end: 0.0,
-        ).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 20,
-      ),
-    ]).animate(_controller);
-    _presence = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.42, curve: Curves.easeOut),
-    );
-    _shimmerSweep = Tween<double>(begin: -0.7, end: 1.3).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.34, 0.92, curve: Curves.easeOutCubic),
-      ),
-    );
-    _shimmerOpacity =
-        TweenSequence<double>([
-          TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.38), weight: 35),
-          TweenSequenceItem(tween: Tween(begin: 0.38, end: 0.0), weight: 65),
-        ]).animate(
-          CurvedAnimation(
-            parent: _controller,
-            curve: const Interval(0.34, 1.0, curve: Curves.easeOut),
-          ),
-        );
-
-    if (widget.isFilled) {
-      _controller.value = 1.0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _AnimatedBottle oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isFilled && !_wasFilledBefore) {
-      _controller.forward(from: 0);
-      _wasFilledBefore = true;
-    } else if (!widget.isFilled && _wasFilledBefore) {
-      _controller.value = 0;
-      _wasFilledBefore = false;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final baseSize = _baseBottleSize(widget.spec.shape);
-    final size = Size(
-      baseSize.width,
-      baseSize.height * widget.spec.heightScale,
-    );
-
-    // Filled bottle color warms subtly with overall bar warmth
-    final filledColor = widget.isCategoryFull
-        ? Color.lerp(
-            AppTheme.accentGold.withValues(alpha: 0.65),
-            AppTheme.accentGold.withValues(alpha: 0.85),
-            widget.warmth,
-          )!
-        : Color.lerp(
-            AppTheme.textSecondary.withValues(alpha: 0.40),
-            AppTheme.textSecondary.withValues(alpha: 0.55),
-            widget.warmth,
-          )!;
-
-    return SizedBox(
-      width: size.width,
-      height: size.height + 2, // +2 for base shadow
-      child: ClipRect(
-        child: Stack(
-          alignment: Alignment.bottomCenter,
-          children: [
-            // Ghost slot
-            Positioned(
-              bottom: 2,
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  size: size,
-                  painter: _BottlePainter(
-                    shape: widget.spec.shape,
-                    color: AppTheme.surfaceLight.withValues(alpha: 0.15),
-                  ),
-                ),
-              ),
-            ),
-
-            // Filled bottle placement + one-time shimmer sweep.
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                final visible = widget.isFilled || _controller.value > 0.0;
-                if (!visible) return const SizedBox.shrink();
-
-                return Transform.translate(
-                  offset: Offset(0, _placementY.value),
-                  child: Opacity(
-                    opacity: _presence.value,
-                    child: SizedBox(
-                      width: size.width,
-                      height: size.height + 2,
-                      child: Stack(
-                        alignment: Alignment.bottomCenter,
-                        children: [
-                          Positioned(
-                            bottom: 2,
-                            child: RepaintBoundary(
-                              child: CustomPaint(
-                                size: size,
-                                painter: _BottlePainter(
-                                  shape: widget.spec.shape,
-                                  color: filledColor,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 2,
-                            child: Opacity(
-                              opacity: _shimmerOpacity.value,
-                              child: ShaderMask(
-                                blendMode: BlendMode.srcATop,
-                                shaderCallback: (bounds) {
-                                  return LinearGradient(
-                                    begin: Alignment(
-                                      _shimmerSweep.value - 0.25,
-                                      -1,
-                                    ),
-                                    end: Alignment(
-                                      _shimmerSweep.value + 0.12,
-                                      1,
-                                    ),
-                                    colors: [
-                                      Colors.transparent,
-                                      Colors.white.withValues(alpha: 0.95),
-                                      Colors.transparent,
-                                    ],
-                                    stops: const [0.0, 0.5, 1.0],
-                                  ).createShader(bounds);
-                                },
-                                child: CustomPaint(
-                                  size: size,
-                                  painter: _BottlePainter(
-                                    shape: widget.spec.shape,
-                                    color: Colors.white,
+                                  _IngredientSearchField(
+                                    controller: _searchController,
+                                    focusNode: _searchFocusNode,
+                                    onChanged: _setSearchQuery,
+                                    onClear: _clearSearchInput,
                                   ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            child: Container(
-                              width: size.width + 2,
-                              height: 2,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(1),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.25),
-                                    blurRadius: 2,
-                                    offset: const Offset(0, 0.5),
-                                  ),
+                                  if (!inSearchMode && hasSuggestion) ...[
+                                    const SizedBox(height: 10),
+                                    _SuggestionNudge(
+                                      suggestion: suggestion!,
+                                      isBusy: suggestionIsBusy,
+                                      onAdd: _handleSuggestionAdd,
+                                    ),
+                                  ],
+                                  const SizedBox(height: 12),
                                 ],
                               ),
                             ),
                           ),
+                          if (inSearchMode)
+                            _SearchResultsSliver(
+                              results: _searchResults,
+                              barIngredientIds: _barIngredientIds,
+                              busyIngredientIds: _busyIngredientIds,
+                              onToggle: _toggleIngredient,
+                              onTapWithContext: (id, ctx) => _ingredientRowContexts[id] = ctx,
+                            )
+                          else
+                            _CategoryGridSliver(
+                              allIngredients: _allIngredients,
+                              barIngredientIds: _barIngredientIds,
+                              onTapCategory: _openCategory,
+                            ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 24)),
                         ],
                       ),
-                    ),
-                  ),
-                );
-              },
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Size _baseBottleSize(_BottleShape shape) {
-    switch (shape) {
-      case _BottleShape.tallSlim:
-        return const Size(10, 30);
-      case _BottleShape.squat:
-        return const Size(12, 22);
-      case _BottleShape.round:
-        return const Size(12, 20);
-      case _BottleShape.dropper:
-        return const Size(8, 24);
-      case _BottleShape.wedge:
-        return const Size(12, 16);
-      case _BottleShape.jar:
-        return const Size(12, 18);
-      case _BottleShape.cup:
-        return const Size(14, 16);
-      case _BottleShape.box:
-        return const Size(14, 18);
-    }
+// ═══════════════════════════════════════════════════════════════════════════
+//  BAR HEADER
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _BarHeader extends StatelessWidget {
+  final String activeBarName;
+  final int? activeBarId;
+  final List<SavedBar> bars;
+  final bool isCreatingBar;
+  final Future<void> Function(int) onSelectBar;
+  final Future<void> Function() onCreateBar;
+  final Future<void> Function() onClearBar;
+  final Future<void> Function(SavedBar) onDeleteBar;
+
+  const _BarHeader({
+    required this.activeBarName,
+    required this.activeBarId,
+    required this.bars,
+    required this.isCreatingBar,
+    required this.onSelectBar,
+    required this.onCreateBar,
+    required this.onClearBar,
+    required this.onDeleteBar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      color: AppTheme.primaryDark.withValues(alpha: 0.92),
+      child: BarSelectorDropdown(
+        key: const ValueKey('bar-selector'),
+        currentBarName: activeBarName,
+        currentBarId: activeBarId,
+        bars: bars,
+        maxWidth: 280,
+        isCreateInProgress: isCreatingBar,
+        onSelectBar: onSelectBar,
+        onCreateBar: onCreateBar,
+        onClearBar: onClearBar,
+        onDeleteBar: onDeleteBar,
+      ),
+    );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  BOTTLE SILHOUETTE PAINTER
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  STAT CARD
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _BottlePainter extends CustomPainter {
-  final _BottleShape shape;
-  final Color color;
+class _StatCard extends StatelessWidget {
+  final int cocktailCount;
+  final int stockedCount;
+  final int totalCount;
+  final VoidCallback? onTap;
 
-  _BottlePainter({required this.shape, required this.color});
+  const _StatCard({
+    required this.cocktailCount,
+    required this.stockedCount,
+    required this.totalCount,
+    this.onTap,
+  });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final w = size.width;
-    final h = size.height;
-
-    switch (shape) {
-      case _BottleShape.tallSlim:
-        _drawTallSlim(canvas, paint, w, h);
-      case _BottleShape.squat:
-        _drawSquat(canvas, paint, w, h);
-      case _BottleShape.round:
-        _drawRound(canvas, paint, w, h);
-      case _BottleShape.dropper:
-        _drawDropper(canvas, paint, w, h);
-      case _BottleShape.wedge:
-        _drawWedge(canvas, paint, w, h);
-      case _BottleShape.jar:
-        _drawJar(canvas, paint, w, h);
-      case _BottleShape.cup:
-        _drawCup(canvas, paint, w, h);
-      case _BottleShape.box:
-        _drawBox(canvas, paint, w, h);
-    }
-  }
-
-  void _drawTallSlim(Canvas canvas, Paint paint, double w, double h) {
-    final path = Path()
-      ..moveTo(w * 0.35, 0)
-      ..lineTo(w * 0.65, 0)
-      ..lineTo(w * 0.65, h * 0.15)
-      ..lineTo(w * 0.85, h * 0.28)
-      ..lineTo(w * 0.85, h)
-      ..lineTo(w * 0.15, h)
-      ..lineTo(w * 0.15, h * 0.28)
-      ..lineTo(w * 0.35, h * 0.15)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawSquat(Canvas canvas, Paint paint, double w, double h) {
-    final path = Path()
-      ..moveTo(w * 0.35, 0)
-      ..lineTo(w * 0.65, 0)
-      ..lineTo(w * 0.65, h * 0.12)
-      ..lineTo(w * 0.9, h * 0.3)
-      ..lineTo(w * 0.9, h)
-      ..lineTo(w * 0.1, h)
-      ..lineTo(w * 0.1, h * 0.3)
-      ..lineTo(w * 0.35, h * 0.12)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawRound(Canvas canvas, Paint paint, double w, double h) {
-    final path = Path()
-      ..moveTo(w * 0.35, 0)
-      ..lineTo(w * 0.65, 0)
-      ..lineTo(w * 0.65, h * 0.15)
-      ..quadraticBezierTo(w, h * 0.35, w * 0.9, h * 0.6)
-      ..lineTo(w * 0.85, h)
-      ..lineTo(w * 0.15, h)
-      ..lineTo(w * 0.1, h * 0.6)
-      ..quadraticBezierTo(0, h * 0.35, w * 0.35, h * 0.15)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawDropper(Canvas canvas, Paint paint, double w, double h) {
-    final path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(w * 0.2, 0, w * 0.6, h * 0.12),
-          const Radius.circular(1.5),
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.accentGold.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.32)),
         ),
-      )
-      ..moveTo(w * 0.3, h * 0.12)
-      ..lineTo(w * 0.7, h * 0.12)
-      ..lineTo(w * 0.7, h * 0.25)
-      ..lineTo(w * 0.8, h * 0.32)
-      ..lineTo(w * 0.8, h)
-      ..lineTo(w * 0.2, h)
-      ..lineTo(w * 0.2, h * 0.32)
-      ..lineTo(w * 0.3, h * 0.25)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawWedge(Canvas canvas, Paint paint, double w, double h) {
-    final path = Path()
-      ..moveTo(w * 0.5, h * 0.1)
-      ..quadraticBezierTo(w * 0.95, h * 0.2, w * 0.9, h * 0.7)
-      ..quadraticBezierTo(w * 0.7, h, w * 0.5, h)
-      ..quadraticBezierTo(w * 0.3, h, w * 0.1, h * 0.7)
-      ..quadraticBezierTo(w * 0.05, h * 0.2, w * 0.5, h * 0.1)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawJar(Canvas canvas, Paint paint, double w, double h) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.1, 0, w * 0.8, h * 0.15),
-        const Radius.circular(2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$cocktailCount',
+                    style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: AppTheme.textPrimary, height: 1.0, letterSpacing: -1),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'COCKTAILS AVAILABLE',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.9, color: AppTheme.accentGold.withValues(alpha: 0.8)),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '$stockedCount stocked',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.55)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${totalCount - stockedCount} to add',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+                ),
+                if (onTap != null) ...[
+                  const SizedBox(height: 6),
+                  Icon(Icons.arrow_forward_ios_rounded, size: 11, color: AppTheme.accentGold.withValues(alpha: 0.5)),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
-      paint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.05, h * 0.15, w * 0.9, h * 0.85),
-        const Radius.circular(3),
-      ),
-      paint,
     );
   }
-
-  void _drawCup(Canvas canvas, Paint paint, double w, double h) {
-    final path = Path()
-      ..moveTo(w * 0.1, h * 0.15)
-      ..lineTo(w * 0.7, h * 0.15)
-      ..lineTo(w * 0.65, h)
-      ..lineTo(w * 0.15, h)
-      ..close();
-    canvas.drawPath(path, paint);
-    final handlePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawArc(
-      Rect.fromLTWH(w * 0.65, h * 0.25, w * 0.3, h * 0.45),
-      -1.2,
-      2.4,
-      false,
-      handlePaint,
-    );
-  }
-
-  void _drawBox(Canvas canvas, Paint paint, double w, double h) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.05, h * 0.1, w * 0.9, h * 0.9),
-        const Radius.circular(2),
-      ),
-      paint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.0, 0, w, h * 0.15),
-        const Radius.circular(2),
-      ),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _BottlePainter oldDelegate) =>
-      shape != oldDelegate.shape || color != oldDelegate.color;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  3. SEARCH FIELD
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  SEARCH FIELD
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _IngredientSearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final VoidCallback onClear;
-  final bool hasQuery;
 
   const _IngredientSearchField({
     required this.controller,
     required this.focusNode,
     required this.onChanged,
     required this.onClear,
-    required this.hasQuery,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: SizedBox(
-        height: 40,
-        child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          onChanged: onChanged,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-          decoration: InputDecoration(
-            hintText: 'Search ingredients...',
-            hintStyle: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 12,
-            ),
-            prefixIcon: const Icon(
-              Icons.search,
-              color: AppTheme.textSecondary,
-              size: 18,
-            ),
-            suffixIcon: hasQuery
-                ? IconButton(
-                    icon: const Icon(
-                      Icons.clear,
-                      color: AppTheme.textSecondary,
-                      size: 16,
-                    ),
-                    onPressed: onClear,
-                  )
-                : null,
-            filled: true,
-            fillColor: AppTheme.surfaceDark,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  4. INLINE SUGGESTION
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _CategoryFilterChips extends StatelessWidget {
-  final String? selectedCategory;
-  final Map<String, int> stockedCounts;
-  final ValueChanged<String?> onSelect;
-
-  const _CategoryFilterChips({
-    required this.selectedCategory,
-    required this.stockedCounts,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    Widget chip({
-      required String label,
-      required bool selected,
-      required VoidCallback onTap,
-    }) {
-      return GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppTheme.accentGold.withValues(alpha: 0.18)
-                : AppTheme.surfaceDark,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected
-                  ? AppTheme.accentGold.withValues(alpha: 0.42)
-                  : AppTheme.surfaceLight.withValues(alpha: 0.75),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: selected
-                  ? AppTheme.accentGold
-                  : AppTheme.textSecondary.withValues(alpha: 0.92),
-            ),
-          ),
-        ),
-      );
-    }
-
     return Container(
-      height: 34,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          chip(
-            label: 'All',
-            selected: selectedCategory == null,
-            onTap: () => onSelect(null),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.75)),
+      ),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        onChanged: onChanged,
+        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search ingredients',
+          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 13),
+          prefixIcon: Icon(Icons.search, color: AppTheme.accentGold.withValues(alpha: 0.6), size: 19),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 18), onPressed: onClear);
+            },
           ),
-          const SizedBox(width: 8),
-          ...IngredientCategory.allCategories.expand((category) {
-            final stocked = stockedCounts[category] ?? 0;
-            return [
-              chip(
-                label: '$category ($stocked)',
-                selected: selectedCategory == category,
-                onTap: () => onSelect(category),
-              ),
-              const SizedBox(width: 8),
-            ];
-          }),
-        ],
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          isDense: true,
+        ),
       ),
     );
   }
 }
 
-class _InlineSuggestion extends StatelessWidget {
+// ═══════════════════════════════════════════════════════════════════════════
+//  SUGGESTION NUDGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SuggestionNudge extends StatelessWidget {
   final SmartSuggestion suggestion;
-  final String modeLabel;
   final bool isBusy;
   final VoidCallback onAdd;
-  final VoidCallback onCycleMode;
 
-  const _InlineSuggestion({
-    required this.suggestion,
-    required this.modeLabel,
-    required this.isBusy,
-    required this.onAdd,
-    required this.onCycleMode,
-  });
+  const _SuggestionNudge({required this.suggestion, required this.isBusy, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onCycleMode,
+      onTap: isBusy ? null : onAdd,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceDark,
-          borderRadius: BorderRadius.circular(10),
-          border: Border(
-            left: BorderSide(
-              color: AppTheme.accentGold.withValues(alpha: 0.5),
-              width: 2.5,
-            ),
-          ),
+          color: AppTheme.accentGold.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.22)),
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.auto_awesome,
-              color: AppTheme.accentGold.withValues(alpha: 0.6),
-              size: 14,
-            ),
-            const SizedBox(width: 8),
+            Icon(Icons.auto_awesome, size: 13, color: AppTheme.accentGold.withValues(alpha: 0.7)),
+            const SizedBox(width: 10),
             Expanded(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: suggestion.ingredientName,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    TextSpan(
-                      text:
-                          ' → ${suggestion.unlocksCount} cocktail${suggestion.unlocksCount != 1 ? 's' : ''}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Add ${suggestion.ingredientName}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 1),
+                  Text('unlocks ${suggestion.unlocksCount} cocktail${suggestion.unlocksCount == 1 ? '' : 's'}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.65))),
+                ],
               ),
             ),
             const SizedBox(width: 8),
-            GestureDetector(
-              onTap: isBusy ? null : onAdd,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
+            if (isBusy)
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentGold))
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: isBusy
-                      ? AppTheme.accentGold.withValues(alpha: 0.6)
-                      : AppTheme.accentGold,
-                  borderRadius: BorderRadius.circular(6),
+                  color: AppTheme.accentGold.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.35)),
                 ),
-                child: isBusy
-                    ? const SizedBox(
-                        width: 10,
-                        height: 10,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.6,
-                          color: AppTheme.primaryDark,
-                        ),
-                      )
-                    : const Text(
-                        'ADD',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryDark,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                child: Text('+ Add', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.9))),
               ),
-            ),
           ],
         ),
       ),
@@ -3307,185 +1233,367 @@ class _InlineSuggestion extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  5. INGREDIENT LIST SECTION
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  CATEGORY GRID SLIVER
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _IngredientListSection extends StatelessWidget {
-  final Map<String, List<Ingredient>> groupedIngredients;
+class _CategoryGridSliver extends StatelessWidget {
+  final List<Ingredient> allIngredients;
   final Set<int> barIngredientIds;
-  final Set<int> busyIngredientIds;
-  final Future<void> Function(int) onToggle;
-  final void Function(int ingredientId, BuildContext context) onTapWithContext;
-  final ScrollController scrollController;
-  final Map<String, GlobalKey> categoryKeys;
+  final void Function(String) onTapCategory;
 
-  const _IngredientListSection({
-    required this.groupedIngredients,
+  const _CategoryGridSliver({
+    required this.allIngredients,
     required this.barIngredientIds,
-    required this.busyIngredientIds,
-    required this.onToggle,
-    required this.onTapWithContext,
-    required this.scrollController,
-    required this.categoryKeys,
+    required this.onTapCategory,
   });
 
   @override
   Widget build(BuildContext context) {
-    final grouped = groupedIngredients;
+    final categories = IngredientCategory.allCategories;
+    final icons = IngredientCategory.categoryIcons;
 
-    if (grouped.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search_off,
-              size: 48,
-              color: AppTheme.textSecondary.withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'No ingredients found',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ],
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.55,
         ),
-      );
-    }
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final category = categories[index];
+            final stocked = allIngredients.where((i) => i.category == category && barIngredientIds.contains(i.id)).length;
+            final total = allIngredients.where((i) => i.category == category).length;
+            final icon = icons[category] ?? '📦';
+            return _CategoryTile(
+              category: category,
+              icon: icon,
+              stocked: stocked,
+              total: total,
+              onTap: () => onTapCategory(category),
+            );
+          },
+          childCount: categories.length,
+        ),
+      ),
+    );
+  }
+}
 
-    final sortedEntries = <MapEntry<String, List<Ingredient>>>[];
-    for (final cat in IngredientCategory.allCategories) {
-      if (grouped.containsKey(cat)) {
-        sortedEntries.add(MapEntry(cat, grouped[cat]!));
-      }
-    }
+// ═══════════════════════════════════════════════════════════════════════════
+//  CATEGORY TILE
+// ═══════════════════════════════════════════════════════════════════════════
 
-    final sortedByCategory = <String, List<Ingredient>>{};
-    for (final entry in sortedEntries) {
-      categoryKeys.putIfAbsent(entry.key, () => GlobalKey());
-      sortedByCategory[entry.key] = List<Ingredient>.from(entry.value)
-        ..sort((a, b) {
-          final aS = barIngredientIds.contains(a.id);
-          final bS = barIngredientIds.contains(b.id);
-          if (aS && !bS) return -1;
-          if (!aS && bS) return 1;
-          return a.name.compareTo(b.name);
-        });
-    }
+class _CategoryTile extends StatelessWidget {
+  final String category;
+  final String icon;
+  final int stocked;
+  final int total;
+  final VoidCallback onTap;
 
-    return CustomScrollView(
-      controller: scrollController,
-      slivers: [
-        for (final entry in sortedEntries) ...[
-          SliverPersistentHeader(
-            key: categoryKeys[entry.key],
-            pinned: true,
-            delegate: _StickyHeaderDelegate(
-              category: entry.key,
-              icon: IngredientCategory.categoryIcons[entry.key] ?? '📦',
-              count: entry.value
-                  .where((i) => barIngredientIds.contains(i.id))
-                  .length,
-              total: entry.value.length,
-            ),
+  const _CategoryTile({
+    required this.category,
+    required this.icon,
+    required this.stocked,
+    required this.total,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAny = stocked > 0;
+    final isFull = total > 0 && stocked == total;
+    final fillFraction = total > 0 ? stocked / total : 0.0;
+
+    final borderColor = isFull
+        ? AppTheme.accentGold.withValues(alpha: 0.5)
+        : hasAny
+            ? AppTheme.accentGold.withValues(alpha: 0.22)
+            : AppTheme.surfaceLight.withValues(alpha: 0.6);
+
+    final bgColor = isFull
+        ? AppTheme.accentGold.withValues(alpha: 0.08)
+        : hasAny
+            ? AppTheme.accentGold.withValues(alpha: 0.04)
+            : AppTheme.surfaceDark.withValues(alpha: 0.6);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Stack(
+            children: [
+              // Progress bar at bottom
+              if (fillFraction > 0)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: FractionallySizedBox(
+                    widthFactor: 1.0,
+                    child: Container(
+                      height: 2.5,
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: fillFraction,
+                        child: Container(
+                          height: 2.5,
+                          decoration: BoxDecoration(
+                            color: isFull ? AppTheme.accentGold.withValues(alpha: 0.9) : AppTheme.accentGold.withValues(alpha: 0.5),
+                            borderRadius: const BorderRadius.only(topRight: Radius.circular(2)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              // Content
+              Padding(
+                padding: const EdgeInsets.fromLTRB(13, 13, 10, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(icon, style: const TextStyle(fontSize: 22)),
+                    const Spacer(),
+                    Text(
+                      category,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isFull ? AppTheme.textPrimary : AppTheme.textPrimary.withValues(alpha: 0.9),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      total == 0 ? 'None' : '$stocked / $total',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: hasAny ? AppTheme.accentGold.withValues(alpha: 0.7) : AppTheme.textSecondary.withValues(alpha: 0.4),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final sorted = sortedByCategory[entry.key] ?? const <Ingredient>[];
-              final ingredient = sorted[index];
-              final isStocked = barIngredientIds.contains(ingredient.id);
-              final isBusy = busyIngredientIds.contains(ingredient.id);
-              return _IngredientRow(
-                ingredient: ingredient,
-                isStocked: isStocked,
-                isBusy: isBusy,
-                onTap: isBusy ? null : () => onToggle(ingredient.id),
-                onTapWithContext: isBusy
-                    ? null
-                    : (ctx) => onTapWithContext(ingredient.id, ctx),
-              );
-            }, childCount: (sortedByCategory[entry.key] ?? const <Ingredient>[]).length),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CATEGORY DETAIL VIEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _CategoryDetailView extends StatelessWidget {
+  final String category;
+  final List<Ingredient> ingredients;
+  final Set<int> barIngredientIds;
+  final Set<int> busyIngredientIds;
+  final Map<int, int> unlockDeltas;
+  final bool deltaLoading;
+  final int stockedCount;
+  final int totalCount;
+  final Future<void> Function(int) onToggle;
+  final void Function(int, BuildContext) onTapWithContext;
+  final VoidCallback onBack;
+
+  const _CategoryDetailView({
+    required this.category,
+    required this.ingredients,
+    required this.barIngredientIds,
+    required this.busyIngredientIds,
+    required this.unlockDeltas,
+    required this.deltaLoading,
+    required this.stockedCount,
+    required this.totalCount,
+    required this.onToggle,
+    required this.onTapWithContext,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = IngredientCategory.categoryIcons[category] ?? '📦';
+    final stocked = ingredients.where((i) => barIngredientIds.contains(i.id)).toList();
+    final missing = ingredients.where((i) => !barIngredientIds.contains(i.id)).toList();
+
+    return Column(
+      children: [
+        // Back header
+        Container(
+          padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryDark,
+            border: Border(bottom: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.5))),
           ),
-        ],
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: AppTheme.accentGold),
+                onPressed: onBack,
+                splashRadius: 20,
+              ),
+              Text(icon, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 8),
+              Text(category, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              const Spacer(),
+              Text(
+                '$stockedCount / $totalCount',
+                style: TextStyle(fontSize: 13, color: stockedCount > 0 ? AppTheme.accentGold.withValues(alpha: 0.8) : AppTheme.textSecondary.withValues(alpha: 0.45), fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        // List
+        Expanded(
+          child: ListView(
+            children: [
+              if (stocked.isNotEmpty) ...[
+                _DetailSectionHeader(label: 'In your bar', count: stocked.length),
+                ...stocked.map((ingredient) => _IngredientRow(
+                      ingredient: ingredient,
+                      isStocked: true,
+                      isBusy: busyIngredientIds.contains(ingredient.id),
+                      unlockDelta: null,
+                      onTap: () => onToggle(ingredient.id),
+                      onTapWithContext: (ctx) => onTapWithContext(ingredient.id, ctx),
+                    )),
+              ],
+              if (missing.isNotEmpty) ...[
+                _DetailSectionHeader(label: 'Not stocked', count: missing.length, dimmed: true),
+                ...missing.map((ingredient) {
+                  final delta = unlockDeltas[ingredient.id];
+                  return _IngredientRow(
+                    ingredient: ingredient,
+                    isStocked: false,
+                    isBusy: busyIngredientIds.contains(ingredient.id),
+                    unlockDelta: deltaLoading ? null : (delta != null && delta > 0 ? delta : null),
+                    onTap: () => onToggle(ingredient.id),
+                    onTapWithContext: (ctx) => onTapWithContext(ingredient.id, ctx),
+                  );
+                }),
+              ],
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final String category;
-  final String icon;
+class _DetailSectionHeader extends StatelessWidget {
+  final String label;
   final int count;
-  final int total;
+  final bool dimmed;
 
-  _StickyHeaderDelegate({
-    required this.category,
-    required this.icon,
-    required this.count,
-    required this.total,
-  });
+  const _DetailSectionHeader({required this.label, required this.count, this.dimmed = false});
 
   @override
-  double get minExtent => 36;
-  @override
-  double get maxExtent => 36;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(
-      color: AppTheme.primaryDark,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-      alignment: Alignment.centerLeft,
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
       child: Row(
         children: [
-          Text(icon, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 8),
           Text(
-            category.toUpperCase(),
-            style: const TextStyle(
+            label.toUpperCase(),
+            style: TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-              color: AppTheme.accentGold,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+              color: dimmed ? AppTheme.textSecondary.withValues(alpha: 0.35) : AppTheme.accentGold.withValues(alpha: 0.65),
             ),
           ),
           const SizedBox(width: 6),
           Text(
-            '$count/$total',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.textSecondary.withValues(alpha: 0.6),
-            ),
+            '$count',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
           ),
-          const SizedBox(width: 8),
-          Expanded(child: Container(height: 0.5, color: AppTheme.surfaceLight)),
         ],
       ),
     );
   }
-
-  @override
-  bool shouldRebuild(covariant _StickyHeaderDelegate oldDelegate) =>
-      category != oldDelegate.category ||
-      count != oldDelegate.count ||
-      total != oldDelegate.total;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  SEARCH RESULTS SLIVER
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SearchResultsSliver extends StatelessWidget {
+  final List<Ingredient> results;
+  final Set<int> barIngredientIds;
+  final Set<int> busyIngredientIds;
+  final Future<void> Function(int) onToggle;
+  final void Function(int, BuildContext) onTapWithContext;
+
+  const _SearchResultsSliver({
+    required this.results,
+    required this.barIngredientIds,
+    required this.busyIngredientIds,
+    required this.onToggle,
+    required this.onTapWithContext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (results.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 56),
+          child: Column(
+            children: [
+              Icon(Icons.search_off_rounded, size: 40, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+              const SizedBox(height: 10),
+              Text('No ingredients found', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary.withValues(alpha: 0.5))),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final ingredient = results[index];
+          final isStocked = barIngredientIds.contains(ingredient.id);
+          return _IngredientRow(
+            ingredient: ingredient,
+            isStocked: isStocked,
+            isBusy: busyIngredientIds.contains(ingredient.id),
+            unlockDelta: null,
+            showCategory: true,
+            onTap: () => onToggle(ingredient.id),
+            onTapWithContext: (ctx) => onTapWithContext(ingredient.id, ctx),
+          );
+        },
+        childCount: results.length,
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  INGREDIENT ROW
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _IngredientRow extends StatefulWidget {
   final Ingredient ingredient;
   final bool isStocked;
   final bool isBusy;
+  final int? unlockDelta;
+  final bool showCategory;
   final VoidCallback? onTap;
   final void Function(BuildContext ctx)? onTapWithContext;
 
@@ -3493,6 +1601,8 @@ class _IngredientRow extends StatefulWidget {
     required this.ingredient,
     required this.isStocked,
     required this.isBusy,
+    required this.unlockDelta,
+    this.showCategory = false,
     required this.onTap,
     required this.onTapWithContext,
   });
@@ -3501,18 +1611,14 @@ class _IngredientRow extends StatefulWidget {
   State<_IngredientRow> createState() => _IngredientRowState();
 }
 
-class _IngredientRowState extends State<_IngredientRow>
-    with SingleTickerProviderStateMixin {
+class _IngredientRowState extends State<_IngredientRow> with SingleTickerProviderStateMixin {
   late AnimationController _scaleController;
   late Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _scaleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
+    _scaleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
     _scale = Tween<double>(begin: 1.0, end: 1.0).animate(_scaleController);
   }
 
@@ -3521,13 +1627,10 @@ class _IngredientRowState extends State<_IngredientRow>
     super.didUpdateWidget(oldWidget);
     if (widget.isStocked != oldWidget.isStocked) {
       _scaleController.reset();
-      _scale =
-          TweenSequence<double>([
-            TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.03), weight: 40),
-            TweenSequenceItem(tween: Tween(begin: 1.03, end: 1.0), weight: 60),
-          ]).animate(
-            CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
-          );
+      _scale = TweenSequence<double>([
+        TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.03), weight: 40),
+        TweenSequenceItem(tween: Tween(begin: 1.03, end: 1.0), weight: 60),
+      ]).animate(CurvedAnimation(parent: _scaleController, curve: Curves.easeOut));
       _scaleController.forward();
     }
   }
@@ -3552,79 +1655,69 @@ class _IngredientRowState extends State<_IngredientRow>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
-            color: widget.isStocked
-                ? AppTheme.accentGold.withValues(alpha: 0.05)
-                : Colors.transparent,
-            border: const Border(
-              bottom: BorderSide(color: AppTheme.surfaceLight, width: 0.3),
-            ),
+            color: widget.isStocked ? AppTheme.accentGold.withValues(alpha: 0.05) : Colors.transparent,
+            border: const Border(bottom: BorderSide(color: AppTheme.surfaceLight, width: 0.3)),
           ),
           child: Row(
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: 26,
-                height: 26,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: widget.isBusy
-                      ? AppTheme.surfaceDark
-                      : widget.isStocked
-                      ? AppTheme.accentGold
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
+                  color: widget.isBusy ? AppTheme.surfaceDark : widget.isStocked ? AppTheme.accentGold : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: widget.isBusy
                         ? AppTheme.accentGold.withValues(alpha: 0.6)
                         : widget.isStocked
-                        ? AppTheme.accentGold
-                        : AppTheme.surfaceLight,
+                            ? AppTheme.accentGold
+                            : AppTheme.surfaceLight,
                     width: 1.5,
                   ),
                 ),
                 child: widget.isBusy
-                    ? const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.7,
-                          color: AppTheme.accentGold,
-                        ),
-                      )
+                    ? const Padding(padding: EdgeInsets.all(4), child: CircularProgressIndicator(strokeWidth: 1.7, color: AppTheme.accentGold))
                     : widget.isStocked
-                    ? const Icon(
-                        Icons.check,
-                        color: AppTheme.primaryDark,
-                        size: 15,
-                      )
-                    : null,
+                        ? const Icon(Icons.check, color: AppTheme.primaryDark, size: 13)
+                        : null,
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(
-                  widget.ingredient.name,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: widget.isStocked
-                        ? FontWeight.w600
-                        : FontWeight.normal,
-                    color: widget.isStocked
-                        ? AppTheme.textPrimary
-                        : AppTheme.textSecondary,
-                  ),
-                ),
+                child: widget.showCategory
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.ingredient.name,
+                            style: TextStyle(fontSize: 14, fontWeight: widget.isStocked ? FontWeight.w600 : FontWeight.w400, color: widget.isStocked ? AppTheme.textPrimary : AppTheme.textSecondary),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(widget.ingredient.category, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.45))),
+                        ],
+                      )
+                    : Text(
+                        widget.ingredient.name,
+                        style: TextStyle(fontSize: 14, fontWeight: widget.isStocked ? FontWeight.w600 : FontWeight.w400, color: widget.isStocked ? AppTheme.textPrimary : AppTheme.textSecondary),
+                      ),
               ),
-              if (IngredientSubstitutions.getSubstitutes(
-                widget.ingredient.name,
-              ).isNotEmpty)
-                Tooltip(
-                  message: 'Has substitutions',
-                  child: Icon(
-                    Icons.swap_horiz,
-                    size: 14,
-                    color: AppTheme.textSecondary.withValues(alpha: 0.4),
+              if (widget.isStocked) ...[
+                const SizedBox(width: 8),
+                Text('in bar', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.accentGold.withValues(alpha: 0.6))),
+              ] else if (widget.unlockDelta != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGold.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.25)),
                   ),
+                  child: Text('+${widget.unlockDelta}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.8))),
                 ),
+              ],
             ],
           ),
         ),
@@ -3633,4 +1726,72 @@ class _IngredientRowState extends State<_IngredientRow>
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  UNLOCK PREVIEW CARD
+// ═══════════════════════════════════════════════════════════════════════════
 
+class _UnlockPreviewCard extends StatelessWidget {
+  final Cocktail cocktail;
+  final bool showName;
+
+  const _UnlockPreviewCard({required this.cocktail, this.showName = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final basePath = cocktail.imagePath ?? ImageUtils.generateBasePathFromName(cocktail.name);
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.primaryDark,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.65)),
+        boxShadow: [BoxShadow(color: AppTheme.accentGold.withValues(alpha: 0.18), blurRadius: 20, spreadRadius: 0.6, offset: const Offset(0, 5))],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: FutureBuilder<String?>(
+              future: ImageUtils.findCocktailImage(basePath),
+              builder: (context, snapshot) {
+                final path = snapshot.data;
+                if (path == null) {
+                  return Container(
+                    color: AppTheme.surfaceLight.withValues(alpha: 0.2),
+                    child: const Center(child: Icon(Icons.local_bar_rounded, color: AppTheme.textSecondary, size: 22)),
+                  );
+                }
+                return Image.asset(path, fit: BoxFit.cover, width: double.infinity);
+              },
+            ),
+          ),
+          if (showName)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(cocktail.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ANIMATED UNLOCK REVEAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _AnimatedUnlockReveal extends StatelessWidget {
+  final Widget child;
+  const _AnimatedUnlockReveal({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      tween: Tween<double>(begin: 0.97, end: 1.0),
+      builder: (context, value, child) => Opacity(opacity: value, child: Transform.scale(scale: value, child: child)),
+      child: child,
+    );
+  }
+}

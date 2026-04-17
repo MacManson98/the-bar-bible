@@ -443,11 +443,6 @@ class FinderScreenState extends State<FinderScreen>
                       scale: _heroScale,
                       child: _buildHeroHeader(
                         readyCount: _filteredExactCache.length,
-                        oneAwayCount: _filteredMissing1Cache.length,
-                        allCount:
-                            _filteredExactCache.length +
-                            _filteredMissing1Cache.length +
-                            _filteredMissing2PlusCache.length,
                       ),
                     ),
                   ),
@@ -476,7 +471,7 @@ class FinderScreenState extends State<FinderScreen>
                       },
                       child: Opacity(
                         key: ValueKey(
-                          '${_activeBar?.id ?? -1}_${_mode.name}_${_viewMode.name}',
+                          '${_activeBar?.id ?? -1}_${_searchQuery}_${_spiritFilter}',
                         ),
                         opacity: 1.0,
                         child: _buildResultsForMode(_modeResultsCache),
@@ -517,11 +512,8 @@ class FinderScreenState extends State<FinderScreen>
       _filteredMissing1Cache,
       _filteredMissing2PlusCache,
     );
-    if (_mode == _FinderMode.canMake && _viewMode == _FinderViewMode.tiles) {
-      _cachedTileSections = _computeTileSections(_modeResultsCache);
-    } else {
-      _cachedTileSections = const [];
-    }
+    // Always compute so curated picks are available regardless of mode.
+    _cachedTileSections = _computeTileSections(_filteredExactCache);
   }
 
   List<_RailSectionData> _computeTileSections(List<CocktailMatch> matches) {
@@ -647,11 +639,7 @@ class FinderScreenState extends State<FinderScreen>
   }
 
   // â”€â”€ Hero Header â”€â”€
-  Widget _buildHeroHeader({
-    required int readyCount,
-    required int oneAwayCount,
-    required int allCount,
-  }) {
+  Widget _buildHeroHeader({required int readyCount}) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -711,24 +699,27 @@ class FinderScreenState extends State<FinderScreen>
               await _deleteBarWithConfirm(bar);
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Text(
-            '$readyCount cocktails ready',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary.withValues(alpha: 0.95),
-              height: 1.25,
+            '$readyCount',
+            style: const TextStyle(
+              fontSize: 58,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.accentGold,
+              height: 1.0,
+              letterSpacing: -2,
             ),
           ),
-          const SizedBox(height: 10),
-          _buildModeTabs(
-            readyCount: readyCount,
-            oneAwayCount: oneAwayCount,
-            allCount: allCount,
+          const SizedBox(height: 4),
+          Text(
+            'cocktails you can make right now',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary.withValues(alpha: 0.8),
+            ),
           ),
-          const SizedBox(height: 10),
-          Align(alignment: Alignment.centerRight, child: _buildViewToggle()),
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -1660,47 +1651,307 @@ class FinderScreenState extends State<FinderScreen>
     if (_barCount == 0) {
       return _buildFinderPurposeEmptyState();
     }
-    if (matches.isEmpty) {
+    final canMake = _filteredExactCache;
+
+    if (canMake.isEmpty && _searchQuery.isEmpty && _spiritFilter == 'All') {
+      return _buildFinderPurposeEmptyState();
+    }
+
+    if (canMake.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.search_off,
-              size: 48,
-              color: AppTheme.textSecondary.withValues(alpha: 0.4),
-            ),
+            Icon(Icons.search_off, size: 48,
+                color: AppTheme.textSecondary.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
-            const Text(
-              'No matches',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+            const Text('No matches',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                _searchController.clear();
+                setState(() {
+                  _searchQuery = '';
+                  _spiritFilter = 'All';
+                  _refreshDerivedCaches();
+                });
+              },
+              child: const Text('Clear filters',
+                  style: TextStyle(color: AppTheme.accentGold)),
             ),
-            if (_searchQuery.isNotEmpty || _spiritFilter != 'All') ...[
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() {
-                    _searchQuery = '';
-                    _spiritFilter = 'All';
-                    _refreshDerivedCaches();
-                  });
-                },
-                child: const Text(
-                  'Clear filters',
-                  style: TextStyle(color: AppTheme.accentGold),
-                ),
-              ),
-            ],
           ],
         ),
       );
     }
 
-    if (_mode == _FinderMode.canMake && _viewMode == _FinderViewMode.tiles) {
-      return _buildTilesResults(matches);
+    final curatedSection = _cachedTileSections.isNotEmpty
+        ? _cachedTileSections.firstWhere(
+            (s) => s.rail.id == 'start_here',
+            orElse: () => _cachedTileSections.first,
+          )
+        : null;
+    final curatedMatches = curatedSection?.preview ?? const [];
+    final bestUnlock = _computeBestUnlock();
+    final oneAwayCount = _filteredMissing1Cache.length;
+    final allItems = _buildMainListItems(canMake, curatedMatches, bestUnlock, oneAwayCount);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.accentGold.withValues(alpha: 0.025),
+      ),
+      child: ListView.builder(
+        controller: _resultsScrollController,
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 100),
+        itemCount: allItems.length,
+        itemBuilder: (context, index) => allItems[index],
+      ),
+    );
+  }
+
+  List<Widget> _buildMainListItems(
+    List<CocktailMatch> canMake,
+    List<CocktailMatch> curatedMatches,
+    _BestUnlock? bestUnlock,
+    int oneAwayCount,
+  ) {
+    final items = <Widget>[];
+
+    if (curatedMatches.isNotEmpty) {
+      final rail = _cachedTileSections
+          .firstWhere((s) => s.rail.id == 'start_here',
+              orElse: () => _cachedTileSections.first)
+          .rail;
+      items.add(_buildCuratedSection(curatedMatches, rail.title));
     }
-    return _buildListResults(matches);
+
+    items.add(
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'All ${canMake.length}',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF5a4a28),
+                letterSpacing: 1.0,
+              ),
+            ),
+            if (_searchQuery.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _searchController.clear();
+                  setState(() {
+                    _searchQuery = '';
+                    _refreshDerivedCaches();
+                  });
+                },
+                child: const Text('Clear',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.accentGold,
+                    )),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    for (final m in canMake) {
+      items.add(_cocktailCard(m, AppTheme.accentGold, true));
+    }
+
+    if (bestUnlock != null) items.add(_buildBestUnlockCard(bestUnlock));
+    if (oneAwayCount > 0) items.add(_buildOneAwayNudge(oneAwayCount));
+    items.add(const SizedBox(height: 8));
+    return items;
+  }
+
+  Widget _buildCuratedSection(List<CocktailMatch> picks, String title) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title.isEmpty ? 'Picks for now' : title,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.accentGold,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const Text(
+                'Refreshes daily',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3a3020),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 220,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: picks.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) => _FinderRailTile(
+              match: picks[i],
+              database: widget.database,
+              width: 138,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  _BestUnlock? _computeBestUnlock() {
+    if (_filteredMissing1Cache.isEmpty) return null;
+    final counts = <String, int>{};
+    for (final m in _filteredMissing1Cache) {
+      if (m.missingIngredients.isEmpty) continue;
+      final ing = m.missingIngredients.first;
+      counts[ing] = (counts[ing] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return null;
+    String? best;
+    int bestCount = 0;
+    counts.forEach((ing, count) {
+      if (count > bestCount) { bestCount = count; best = ing; }
+    });
+    if (best == null || bestCount < 2) return null;
+    return _BestUnlock(ingredientName: best!, unlockCount: bestCount);
+  }
+
+  Widget _buildBestUnlockCard(_BestUnlock unlock) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.accentGold.withValues(alpha: 0.12),
+                border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.3)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.lock_open_rounded, color: AppTheme.accentGold, size: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('BEST UNLOCK',
+                      style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: Color(0xFF5a4a28), letterSpacing: 0.8,
+                      )),
+                  const SizedBox(height: 2),
+                  RichText(
+                    text: TextSpan(children: [
+                      TextSpan(
+                        text: 'Add ${unlock.ingredientName}',
+                        style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700,
+                          color: AppTheme.accentGold,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '  ·  unlocks ${unlock.unlockCount} more',
+                        style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500,
+                          color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: widget.onNavigateToMyBar,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentGold,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Text('+ Add',
+                    style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w800,
+                      color: AppTheme.primaryDark,
+                    )),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOneAwayNudge(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _mode = _FinderMode.oneAway;
+          _refreshDerivedCaches();
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('1 AWAY',
+                        style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w700,
+                          color: Color(0xFF3a3020), letterSpacing: 0.8,
+                        )),
+                    const SizedBox(height: 2),
+                    Text('$count cocktails just out of reach',
+                        style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                        )),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppTheme.accentGold, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildListResults(List<CocktailMatch> matches) {
@@ -2152,74 +2403,100 @@ class FinderScreenState extends State<FinderScreen>
     return intersection / base;
   }
 
+  // ── Time-aware picks ──────────────────────────────────────────────────────
+
+  _TimeBand _currentTimeBand() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return _TimeBand.morning;
+    if (hour >= 12 && hour < 18) return _TimeBand.afternoon;
+    if (hour >= 18 && hour < 21) return _TimeBand.earlyEvening;
+    if (hour >= 21) return _TimeBand.lateEvening;
+    return _TimeBand.lateNight;
+  }
+
   _FinderRailBucket _buildStartHereRail({
     required List<CocktailMatch> matches,
     required Map<int, _CocktailMeta> metas,
     required Random random,
   }) {
-    final tagFreq = <String, int>{};
-    for (final m in matches) {
-      final tags = metas[m.cocktail.id]?.tags ?? const <String>{};
-      for (final t in tags) {
-        tagFreq[t] = (tagFreq[t] ?? 0) + 1;
-      }
+    if (matches.length < 5) {
+      return _FinderRailBucket(
+        id: 'start_here',
+        title: '',
+        family: _RailFamily.hybrid,
+        count: 0,
+        matches: const [],
+        score: 999.0,
+      );
     }
-    final topTags = tagFreq.keys.toList()
-      ..sort((a, b) => (tagFreq[b] ?? 0).compareTo(tagFreq[a] ?? 0));
-    final focusTags = topTags.take(8).toList();
 
-    final pool = List<CocktailMatch>.from(matches)
-      ..sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
+    final band = _currentTimeBand();
+    final config = _bandConfigs[band]!;
+
+    // Score every makeable cocktail against the current time band.
+    final scored = <_ScoredMatch>[];
+    for (final m in matches) {
+      final meta = metas[m.cocktail.id];
+      if (meta == null) continue;
+
+      double score = random.nextDouble() * 0.03; // stable daily jitter
+
+      for (final tag in config.priorityTags) {
+        if (_hasTasteTag(meta, {tag})) score += 3.0;
+      }
+      for (final tag in config.excludeTags) {
+        if (_hasTasteTag(meta, {tag})) score -= 2.0;
+      }
+      if (config.preferredMethods.contains(meta.method)) score += 1.0;
+      if (meta.difficulty > config.maxDifficulty) score -= 1.0;
+
+      scored.add(_ScoredMatch(m, score));
+    }
+
+    // Sort by score descending.
+    scored.sort((a, b) => b.score.compareTo(a.score));
+
+    // Pick top 6 with diversity guard (max 2 same spirit, max 2 same method).
     final selected = <CocktailMatch>[];
-    final selectedIds = <int>{};
     final usedSpirit = <String, int>{};
     final usedMethod = <String, int>{};
-    final usedTag = <String, int>{};
 
-    while (selected.length < 6 && selected.length < pool.length) {
-      CocktailMatch? best;
-      double bestScore = -1;
-      for (final m in pool) {
-        if (selectedIds.contains(m.cocktail.id)) continue;
-        final meta = metas[m.cocktail.id];
-        if (meta == null) continue;
-        var score = random.nextDouble() * 0.03;
-        final spiritSeen = usedSpirit[meta.spirit] ?? 0;
-        score += spiritSeen == 0 ? 2.2 : 0.2 / (spiritSeen + 1);
-        final methodSeen = usedMethod[meta.method] ?? 0;
-        score += methodSeen == 0 ? 1.5 : 0.15 / (methodSeen + 1);
-        for (final t in focusTags) {
-          if (!meta.tags.contains(t)) continue;
-          final seen = usedTag[t] ?? 0;
-          score += seen == 0 ? 0.85 : 0.07 / (seen + 1);
-        }
-        if (score > bestScore) {
-          bestScore = score;
-          best = m;
-        }
-      }
-      if (best == null) break;
-      final meta = metas[best.cocktail.id]!;
-      selected.add(best);
-      selectedIds.add(best.cocktail.id);
+    for (final entry in scored) {
+      if (selected.length >= 6) break;
+      final m = entry.match;
+      final meta = metas[m.cocktail.id]!;
+      if ((usedSpirit[meta.spirit] ?? 0) >= 2) continue;
+      if ((usedMethod[meta.method] ?? 0) >= 2) continue;
+      selected.add(m);
       usedSpirit[meta.spirit] = (usedSpirit[meta.spirit] ?? 0) + 1;
       usedMethod[meta.method] = (usedMethod[meta.method] ?? 0) + 1;
-      for (final t in focusTags) {
-        if (meta.tags.contains(t)) {
-          usedTag[t] = (usedTag[t] ?? 0) + 1;
+    }
+
+    // If diversity filter was too aggressive, top up from remaining scored list.
+    if (selected.length < 3) {
+      final selectedIds = selected.map((m) => m.cocktail.id).toSet();
+      for (final entry in scored) {
+        if (selected.length >= 6) break;
+        final m = entry.match;
+        if (!selectedIds.contains(m.cocktail.id)) {
+          selected.add(m);
+          selectedIds.add(m.cocktail.id);
         }
       }
     }
+
+    final label = _bandConfigs[band]!.label;
 
     return _FinderRailBucket(
       id: 'start_here',
-      title: 'Built for Tonight',
+      title: label,
       family: _RailFamily.hybrid,
       count: selected.length,
       matches: selected,
       score: 999.0,
     );
   }
+
 
   _CocktailMeta _metaFor(Cocktail c) => _CocktailMeta(
     spirit: _normalizeSpirit(c.baseSpirit),
@@ -2901,6 +3178,75 @@ class _FinderRailTileState extends State<_FinderRailTile> {
 }
 
 enum _RailFamily { taste, spirit, method, glass, difficulty, hybrid }
+
+
+class _BestUnlock {
+  final String ingredientName;
+  final int unlockCount;
+  const _BestUnlock({required this.ingredientName, required this.unlockCount});
+}
+
+class _ScoredMatch {
+  final CocktailMatch match;
+  final double score;
+  const _ScoredMatch(this.match, this.score);
+}
+
+enum _TimeBand { morning, afternoon, earlyEvening, lateEvening, lateNight }
+
+class _BandConfig {
+  final Set<String> priorityTags;
+  final Set<String> excludeTags;
+  final Set<String> preferredMethods;
+  final int maxDifficulty;
+  final String label;
+
+  const _BandConfig({
+    required this.priorityTags,
+    required this.excludeTags,
+    required this.preferredMethods,
+    required this.maxDifficulty,
+    required this.label,
+  });
+}
+
+const Map<_TimeBand, _BandConfig> _bandConfigs = {
+  _TimeBand.morning: _BandConfig(
+    priorityTags: {'spritz', 'light', 'floral', 'citrus', 'low-abv'},
+    excludeTags: {'smoky', 'bitter', 'strong', 'spirit-forward'},
+    preferredMethods: {'build', 'shake'},
+    maxDifficulty: 2,
+    label: 'Good morning picks',
+  ),
+  _TimeBand.afternoon: _BandConfig(
+    priorityTags: {'refreshing', 'citrus', 'tart', 'fruity', 'herbal'},
+    excludeTags: {'smoky', 'strong'},
+    preferredMethods: {'shake', 'build'},
+    maxDifficulty: 3,
+    label: 'Afternoon picks',
+  ),
+  _TimeBand.earlyEvening: _BandConfig(
+    priorityTags: {'bitter', 'balanced', 'aperitif', 'citrus', 'herbal'},
+    excludeTags: {'creamy', 'dessert', 'sweet'},
+    preferredMethods: {'stir', 'shake'},
+    maxDifficulty: 3,
+    label: 'For the aperitif hour',
+  ),
+  _TimeBand.lateEvening: _BandConfig(
+    priorityTags: {'spirit-forward', 'bold', 'rich', 'smooth', 'complex'},
+    excludeTags: {'fruity', 'sweet', 'low-abv'},
+    preferredMethods: {'stir'},
+    maxDifficulty: 4,
+    label: 'For tonight',
+  ),
+  _TimeBand.lateNight: _BandConfig(
+    priorityTags: {'spirit-forward', 'strong', 'simple'},
+    excludeTags: {'citrus', 'fruity', 'sweet', 'creamy'},
+    preferredMethods: {'stir', 'build'},
+    maxDifficulty: 5,
+    label: 'Late night picks',
+  ),
+};
 
 class _CocktailMeta {
   final String spirit;
