@@ -471,7 +471,7 @@ class FinderScreenState extends State<FinderScreen>
                       },
                       child: Opacity(
                         key: ValueKey(
-                          '${_activeBar?.id ?? -1}_${_searchQuery}_${_spiritFilter}',
+                          '${_activeBar?.id ?? -1}_$_searchQuery_$_spiritFilter',
                         ),
                         opacity: 1.0,
                         child: _buildResultsForMode(_modeResultsCache),
