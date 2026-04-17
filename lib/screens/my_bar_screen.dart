@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -191,8 +191,6 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
     _setSearchQuery('');
   }
 
-  /// Opens a category detail view and pre-computes unlock deltas for all
-  /// missing ingredients in that category.
   Future<void> _openCategory(String category) async {
     setState(() {
       _activeCategoryFilter = category;
@@ -243,9 +241,7 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
     const base = 'new bar';
     if (!names.contains(base)) return 'New Bar';
     var index = 2;
-    while (names.contains('$base $index')) {
-      index++;
-    }
+    while (names.contains('$base $index')) index++;
     return 'New Bar $index';
   }
 
@@ -928,6 +924,44 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
               onClearBar: _clearCurrentBarWithConfirm,
               onDeleteBar: _deleteBarWithConfirm,
             ),
+            // ── Pinned top controls (stat card, search, nudge) ──────────
+            if (!inCategoryMode)
+              FadeTransition(
+                opacity: _headerFade,
+                child: Container(
+                  color: AppTheme.primaryDark,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (!inSearchMode) ...[
+                        _StatCard(
+                          cocktailCount: analytics.exactMatchCount,
+                          stockedCount: _barIngredientIds.length,
+                          totalCount: _allIngredients.length,
+                          onTap: widget.onNavigateToFinder,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      _IngredientSearchField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        onChanged: _setSearchQuery,
+                        onClear: _clearSearchInput,
+                      ),
+                      if (!inSearchMode && hasSuggestion) ...[
+                        const SizedBox(height: 10),
+                        _SuggestionNudge(
+                          suggestion: suggestion,
+                          isBusy: suggestionIsBusy,
+                          onAdd: _handleSuggestionAdd,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            // ── Scrollable content area ───────────────────────────────────
             Expanded(
               child: FadeTransition(
                 opacity: _headerFade,
@@ -948,40 +982,6 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
                     : CustomScrollView(
                         controller: _listScrollController,
                         slivers: [
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (!inSearchMode) ...[
-                                    _StatCard(
-                                      cocktailCount: analytics.exactMatchCount,
-                                      stockedCount: _barIngredientIds.length,
-                                      totalCount: _allIngredients.length,
-                                      onTap: widget.onNavigateToFinder,
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  _IngredientSearchField(
-                                    controller: _searchController,
-                                    focusNode: _searchFocusNode,
-                                    onChanged: _setSearchQuery,
-                                    onClear: _clearSearchInput,
-                                  ),
-                                  if (!inSearchMode && hasSuggestion) ...[
-                                    const SizedBox(height: 10),
-                                    _SuggestionNudge(
-                                      suggestion: suggestion,
-                                      isBusy: suggestionIsBusy,
-                                      onAdd: _handleSuggestionAdd,
-                                    ),
-                                  ],
-                                  const SizedBox(height: 12),
-                                ],
-                              ),
-                            ),
-                          ),
                           if (inSearchMode)
                             _SearchResultsSliver(
                               results: _searchResults,
@@ -1334,31 +1334,26 @@ class _CategoryTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(13),
           child: Stack(
             children: [
-              // Progress bar at bottom
               if (fillFraction > 0)
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
-                  child: FractionallySizedBox(
-                    widthFactor: 1.0,
-                    child: Container(
-                      height: 2.5,
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: fillFraction,
-                        child: Container(
-                          height: 2.5,
-                          decoration: BoxDecoration(
-                            color: isFull ? AppTheme.accentGold.withValues(alpha: 0.9) : AppTheme.accentGold.withValues(alpha: 0.5),
-                            borderRadius: const BorderRadius.only(topRight: Radius.circular(2)),
-                          ),
+                  child: Container(
+                    height: 2.5,
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: fillFraction,
+                      child: Container(
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: isFull ? AppTheme.accentGold.withValues(alpha: 0.9) : AppTheme.accentGold.withValues(alpha: 0.5),
+                          borderRadius: const BorderRadius.only(topRight: Radius.circular(2)),
                         ),
                       ),
                     ),
                   ),
                 ),
-              // Content
               Padding(
                 padding: const EdgeInsets.fromLTRB(13, 13, 10, 16),
                 child: Column(
@@ -1433,7 +1428,6 @@ class _CategoryDetailView extends StatelessWidget {
 
     return Column(
       children: [
-        // Back header
         Container(
           padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
           decoration: BoxDecoration(
@@ -1458,7 +1452,6 @@ class _CategoryDetailView extends StatelessWidget {
             ],
           ),
         ),
-        // List
         Expanded(
           child: ListView(
             children: [
@@ -1519,10 +1512,7 @@ class _DetailSectionHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            '$count',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
-          ),
+          Text('$count', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.3))),
         ],
       ),
     );
