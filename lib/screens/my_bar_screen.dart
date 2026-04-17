@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -243,7 +243,9 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
     const base = 'new bar';
     if (!names.contains(base)) return 'New Bar';
     var index = 2;
-    while (names.contains('$base $index')) index++;
+    while (names.contains('$base $index')) {
+      index++;
+    }
     return 'New Bar $index';
   }
 
@@ -895,7 +897,7 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
     final suggestion = analytics.suggestion;
     final hasSuggestion = suggestion != null && _barIngredientIds.isNotEmpty;
     final suggestionIsBusy = hasSuggestion &&
-        (_suggestionAddsInFlight.contains(suggestion!.canonicalName) ||
+        (_suggestionAddsInFlight.contains(suggestion.canonicalName) ||
             _allIngredients
                 .where((i) => IngredientEquivalence.normalise(i.name) == suggestion.canonicalName)
                 .map((i) => i.id)
@@ -970,7 +972,7 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
                                   if (!inSearchMode && hasSuggestion) ...[
                                     const SizedBox(height: 10),
                                     _SuggestionNudge(
-                                      suggestion: suggestion!,
+                                      suggestion: suggestion,
                                       isBusy: suggestionIsBusy,
                                       onAdd: _handleSuggestionAdd,
                                     ),
@@ -1250,8 +1252,8 @@ class _CategoryGridSliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categories = IngredientCategory.allCategories;
-    final icons = IngredientCategory.categoryIcons;
+    const categories = IngredientCategory.allCategories;
+    const icons = IngredientCategory.categoryIcons;
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16),

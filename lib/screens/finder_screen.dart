@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'dart:convert';
 import 'dart:math';
 import 'dart:async';
@@ -471,7 +473,7 @@ class FinderScreenState extends State<FinderScreen>
                       },
                       child: Opacity(
                         key: ValueKey(
-                          '${_activeBar?.id ?? -1}_$_searchQuery_$_spiritFilter',
+                          '${_activeBar?.id ?? -1}_$_searchQuery$_spiritFilter',
                         ),
                         opacity: 1.0,
                         child: _buildResultsForMode(_modeResultsCache),
@@ -1915,15 +1917,12 @@ class FinderScreenState extends State<FinderScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: GestureDetector(
-        onTap: () => setState(() {
-          _mode = _FinderMode.oneAway;
-          _refreshDerivedCaches();
-        }),
+        onTap: () => _showOneAwaySheet(),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           decoration: BoxDecoration(
             color: AppTheme.surfaceDark,
-            border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
+            border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.35)),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -1932,16 +1931,16 @@ class FinderScreenState extends State<FinderScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('1 AWAY',
+                    Text('1 AWAY',
                         style: TextStyle(
                           fontSize: 10, fontWeight: FontWeight.w700,
-                          color: Color(0xFF3a3020), letterSpacing: 0.8,
+                          color: AppTheme.accentGold.withValues(alpha: 0.85), letterSpacing: 0.8,
                         )),
                     const SizedBox(height: 2),
                     Text('$count cocktails just out of reach',
                         style: TextStyle(
                           fontSize: 12, fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                          color: AppTheme.textSecondary.withValues(alpha: 0.85),
                         )),
                   ],
                 ),
@@ -1951,6 +1950,156 @@ class FinderScreenState extends State<FinderScreen>
           ),
         ),
       ),
+    );
+  }
+
+  void _showOneAwaySheet() {
+    // Sort by cocktail name for consistency
+    final items = List<CocktailMatch>.from(_filteredMissing1Cache)
+      ..sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.92,
+          builder: (context, scrollController) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 4),
+                    width: 36, height: 4,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceLight,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '1 INGREDIENT AWAY',
+                              style: TextStyle(
+                                fontSize: 10, fontWeight: FontWeight.w700,
+                                color: AppTheme.accentGold.withValues(alpha: 0.85),
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${items.length} cocktail${items.length == 1 ? '' : 's'} within reach',
+                              style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  child: Divider(color: AppTheme.surfaceLight, height: 1),
+                ),
+                // List
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final m = items[index];
+                      final missing = m.missingIngredients.isNotEmpty
+                          ? m.missingIngredients.first
+                          : 'Unknown';
+                      return InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CocktailDetailScreen(
+                                cocktail: m.cocktail,
+                                database: widget.database,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      m.cocktail.name,
+                                      style: const TextStyle(
+                                        fontSize: 15, fontWeight: FontWeight.w700,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 6, height: 6,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE8A838).withValues(alpha: 0.85),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Need: $missing',
+                                          style: const TextStyle(
+                                            fontSize: 11, fontWeight: FontWeight.w600,
+                                            color: Color(0xFFE8A838),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right,
+                                size: 18,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -2420,12 +2569,12 @@ class FinderScreenState extends State<FinderScreen>
     required Random random,
   }) {
     if (matches.length < 5) {
-      return _FinderRailBucket(
+      return const _FinderRailBucket(
         id: 'start_here',
         title: '',
         family: _RailFamily.hybrid,
         count: 0,
-        matches: const [],
+        matches: [],
         score: 999.0,
       );
     }
