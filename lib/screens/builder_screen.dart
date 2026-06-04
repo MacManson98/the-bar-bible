@@ -96,14 +96,6 @@ class _BuilderScreenState extends State<BuilderScreen> {
     await _findMatchingCocktails();
   }
 
-  // Shopping list loading (not implemented yet)
-  // Future<void> _loadShoppingList() async {
-  //   final items = await widget.database.select(widget.database.shoppingList).get();
-  //   setState(() {
-  //     shoppingList = items;
-  //   });
-  // }
-
   Future<void> _findMatchingCocktails() async {
     if (selectedIngredientIds.isEmpty) {
       setState(() {
@@ -183,22 +175,12 @@ class _BuilderScreenState extends State<BuilderScreen> {
     setState(() {
       matchedCocktails = matches;
     });
-
-    // Calculate unlock potential for smart suggestions
-    if (matches.isNotEmpty) {
-      await _calculateUnlockPotential();
-    }
   }
 
   Future<List<Ingredient>> _getIngredientNames(Set<int> ids) async {
     return await (widget.database.select(widget.database.ingredients)
       ..where((i) => i.id.isIn(ids.toList()))
     ).get();
-  }
-
-  Future<void> _calculateUnlockPotential() async {
-    // Find which ingredients would unlock the most new cocktails
-    // This will be used for smart suggestions
   }
 
   void _sortMatches(List<CocktailMatch> matches) {

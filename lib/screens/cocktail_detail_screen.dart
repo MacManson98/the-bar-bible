@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../data/database.dart' as db;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
@@ -26,7 +27,6 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   bool isHistoryExpanded = false;
   String? _resolvedImagePath;
   int _batchSize = 1; // Batch calculator: default to single serving
-  bool _serviceMode = false;
   bool _useOz = false;
   Set<int> _barIngredientIds = {};
   final Set<int> _busyAddIngredientIds = <int>{};
@@ -40,7 +40,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     _loadIngredients();
     _resolveImagePath();
     _trackRecentlyViewed();
-    _loadServiceMode();
+    _loadPreferences();
     _loadBarContext();
   }
 
@@ -99,14 +99,12 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     }
   }
 
-  Future<void> _loadServiceMode() async {
+  Future<void> _loadPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final svc = prefs.getBool('service_mode') ?? false;
       final oz = prefs.getBool('use_oz') ?? false;
       if (mounted) {
         setState(() {
-          _serviceMode = svc;
           _useOz = oz;
         });
       }
@@ -124,10 +122,14 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   }
 
   Future<void> _resolveImagePath() async {
-    // Use imagePath from database, or generate from name if not set
-    final basePath = widget.cocktail.imagePath ?? 
+    // If we have a network URL, use it directly
+    if (widget.cocktail.imageUrl != null && widget.cocktail.imageUrl!.isNotEmpty) {
+      if (mounted) setState(() { _resolvedImagePath = widget.cocktail.imageUrl; });
+      return;
+    }
+    // Fall back to local asset
+    final basePath = widget.cocktail.imagePath ??
         ImageUtils.generateBasePathFromName(widget.cocktail.name);
-    
     final resolved = await ImageUtils.findCocktailImage(basePath);
     if (mounted) {
       setState(() {
@@ -160,9 +162,11 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
       return;
     }
 
+    final cocktailFsId = widget.cocktail.firestoreId ?? widget.cocktail.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+
     // Check which collections already have this cocktail
     final existingCollections = await (widget.database.select(widget.database.collectionCocktails)
-      ..where((tbl) => tbl.cocktailId.equals(widget.cocktail.id))
+      ..where((tbl) => tbl.firestoreId.equals(cocktailFsId))
     ).get();
     if (!mounted) return;
 
@@ -202,7 +206,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                     await (widget.database.delete(widget.database.collectionCocktails)
                       ..where((tbl) => 
                         tbl.collectionId.equals(collection.id) &
-                        tbl.cocktailId.equals(widget.cocktail.id)
+                        tbl.firestoreId.equals(cocktailFsId)
                       )
                     ).go();
                   } else {
@@ -210,7 +214,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                     await widget.database.into(widget.database.collectionCocktails).insert(
                       db.CollectionCocktailsCompanion.insert(
                         collectionId: collection.id,
-                        cocktailId: widget.cocktail.id,
+                        firestoreId: cocktailFsId,
                       ),
                     );
                   }
@@ -406,7 +410,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                 padding: const EdgeInsets.only(right: 8),
                 child: FavoriteButton(
                   database: widget.database,
-                  cocktailId: widget.cocktail.id,
+                  firestoreId: widget.cocktail.firestoreId ?? widget.cocktail.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_'),
                   showSnackbar: true,
                   size: 26,
                 ),
@@ -435,14 +439,21 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                     fit: StackFit.expand,
                     children: [
                       if (_resolvedImagePath != null)
-                        Image.asset(
-                          _resolvedImagePath!,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.topCenter,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(color: AppTheme.surfaceDark);
-                          },
-                        )
+                        _resolvedImagePath!.startsWith('http')
+                          ? CachedNetworkImage(
+                              imageUrl: _resolvedImagePath!,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              errorWidget: (c, u, e) => Container(color: AppTheme.surfaceDark),
+                            )
+                          : Image.asset(
+                              _resolvedImagePath!,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(color: AppTheme.surfaceDark);
+                              },
+                            )
                       else
                         Container(color: AppTheme.surfaceDark),
                       
@@ -772,16 +783,16 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                       // Ingredients list with scaled amounts
                       ...ingredients.map((ing) {
                         return Padding(
-                          padding: EdgeInsets.only(bottom: _serviceMode ? 18 : 14),
+                          padding: const EdgeInsets.only(bottom: 14),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               SizedBox(
-                                width: _serviceMode ? 120 : 100,
+                                width: 100,
                                 child: Text(
                                   _getScaledAmount(ing),
                                   style: TextStyle(
-                                    fontSize: _serviceMode ? 22 : 16,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     color: _batchSize > 1 
                                         ? AppTheme.accentGold 
@@ -793,8 +804,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                               Expanded(
                                 child: Text(
                                   ing.ingredientName,
-                                  style: TextStyle(
-                                    fontSize: _serviceMode ? 22 : 16,
+                                  style: const TextStyle(
+                                    fontSize: 16,
                                     color: AppTheme.textPrimary,
                                     height: 1.4,
                                   ),
@@ -864,8 +875,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                                 Expanded(
                                   child: Text(
                                     entry.value,
-                                    style: TextStyle(
-                                      fontSize: _serviceMode ? 20 : 15,
+                                    style: const TextStyle(
+                                      fontSize: 15,
                                       color: AppTheme.textPrimary,
                                       height: 1.4,
                                     ),
@@ -895,8 +906,8 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                         Expanded(
                           child: Text(
                             widget.cocktail.garnish!,
-                            style: TextStyle(
-                              fontSize: _serviceMode ? 18 : 14,
+                            style: const TextStyle(
+                              fontSize: 14,
                               color: AppTheme.textSecondary,
                             ),
                           ),

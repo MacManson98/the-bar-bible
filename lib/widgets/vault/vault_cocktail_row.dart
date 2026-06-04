@@ -1,5 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/database.dart';
 
@@ -49,7 +49,20 @@ class VaultCocktailRow extends StatelessWidget {
             const SizedBox(width: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: resolvedImagePath != null
+              child: cocktail.imageUrl != null && cocktail.imageUrl!.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: cocktail.imageUrl!,
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.cover,
+                      errorWidget: (c, u, e) => Container(
+                        width: 72, height: 72,
+                        color: AppTheme.surfaceLight,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.local_bar, color: AppTheme.accentGold),
+                      ),
+                    )
+                  : resolvedImagePath != null
                   ? Image.asset(
                       resolvedImagePath!,
                       width: 72,

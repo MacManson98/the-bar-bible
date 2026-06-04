@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
+import '../services/purchase_service.dart';
 import 'cocktail_detail_screen.dart';
+import 'paywall_screen.dart';
 import 'favorites_screen.dart';
 import 'collections_screen.dart';
 
@@ -258,6 +261,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _viewCocktailDetail(Cocktail cocktail) {
     HapticFeedback.lightImpact();
+    final purchaseService = context.read<PurchaseService>();
+    if (cocktail.isPremium && !purchaseService.isPremium) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const PaywallScreen()),
+      );
+      return;
+    }
     _trackRecentlyViewed(cocktail.id);
     Navigator.push(
       context,
@@ -512,7 +523,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => FavoritesScreen(database: widget.database),
+                                      builder: (context) => FavoritesScreen(
+                            database: widget.database,
+                            onNavigateToBrowse: widget.onNavigateToBrowse,
+                          ),
                                     ),
                                   ).then((_) => _loadData());
                                 },
@@ -775,7 +789,7 @@ class _TonightsPickCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ImageUtils.getCocktailImage(cocktail.imagePath),
+              ImageUtils.getCocktailImage(cocktail.imagePath, imageUrl: cocktail.imageUrl),
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -881,7 +895,7 @@ class _RecentlyViewedChip extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(13),
-                child: ImageUtils.getCocktailImage(cocktail.imagePath),
+                child: ImageUtils.getCocktailImage(cocktail.imagePath, imageUrl: cocktail.imageUrl),
               ),
             ),
             const SizedBox(height: 8),

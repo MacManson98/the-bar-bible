@@ -1,5 +1,4 @@
-﻿import 'package:flutter/material.dart';
-
+import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import 'vault_pill_button.dart';
 
@@ -29,11 +28,24 @@ class VaultScreenHeader extends StatelessWidget {
             child: Row(
               children: [
                 if (showBack) ...[
-                  VaultPillButton(
-                    label: 'Back',
-                    icon: Icons.arrow_back_ios_new,
-                    isPrimary: false,
+                  GestureDetector(
                     onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.surfaceDark,
+                        border: Border.all(
+                          color: AppTheme.accentGold.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: AppTheme.accentGold,
+                        size: 14,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 10),
                 ],

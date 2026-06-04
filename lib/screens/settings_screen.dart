@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme/app_theme.dart';
+import '../data/database.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final AppDatabase database;
+
+  const SettingsScreen({super.key, required this.database});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -11,7 +15,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool useOz = false;
-  bool serviceModeEnabled = false;
   bool isLoading = true;
 
   @override
@@ -24,7 +27,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       useOz = prefs.getBool('use_oz') ?? false;
-      serviceModeEnabled = prefs.getBool('service_mode') ?? false;
       isLoading = false;
     });
   }
@@ -32,155 +34,282 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleUnits(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use_oz', value);
-    setState(() {
-      useOz = value;
-    });
+    setState(() => useOz = value);
   }
 
-  Future<void> _toggleServiceMode(bool value) async {
+  Future<void> _clearRecentlyViewed() async {
+    final confirmed = await _showConfirmDialog(
+      title: 'Clear History',
+      message: 'Remove all recently viewed cocktails from your home screen?',
+      confirmLabel: 'Clear',
+    );
+    if (!confirmed || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('service_mode', value);
-    setState(() {
-      serviceModeEnabled = value;
-    });
+    await prefs.remove('recently_viewed_ids');
+    HapticFeedback.mediumImpact();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Recently viewed cleared')),
+    );
+  }
+
+  Future<void> _resetBarIngredients() async {
+    final bars = await widget.database.select(widget.database.savedBars).get();
+    if (!mounted) return;
+
+    if (bars.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No saved bars found')),
+      );
+      return;
+    }
+
+    int totalCount = 0;
+    for (final bar in bars) {
+      final ingredients = await (widget.database
+              .select(widget.database.savedBarIngredients)
+            ..where((bi) => bi.savedBarId.equals(bar.id)))
+          .get();
+      totalCount += ingredients.length;
+    }
+
+    if (!mounted) return;
+
+    if (totalCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your bar is already empty')),
+      );
+      return;
+    }
+
+    final barLabel = bars.length == 1 ? 'your bar' : 'all ${bars.length} bars';
+    final confirmed = await _showConfirmDialog(
+      title: 'Reset Bar',
+      message:
+          'Remove all $totalCount ingredient${totalCount == 1 ? '' : 's'} from $barLabel? This cannot be undone.',
+      confirmLabel: 'Reset',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    await widget.database.delete(widget.database.savedBarIngredients).go();
+    HapticFeedback.heavyImpact();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Bar ingredients cleared')),
+    );
+  }
+
+  Future<bool> _showConfirmDialog({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool destructive = false,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+            color: AppTheme.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              confirmLabel,
+              style: TextStyle(
+                color: destructive ? Colors.redAccent : AppTheme.accentGold,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('SETTINGS'),
+      return const Scaffold(
+        backgroundColor: AppTheme.primaryDark,
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.accentGold),
         ),
-        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'SETTINGS',
-          style: TextStyle(
-            letterSpacing: 2,
-            fontWeight: FontWeight.bold,
-          ),
+      backgroundColor: AppTheme.primaryDark,
+      body: SafeArea(
+        child: ListView(
+          children: [
+            _buildHeader(),
+
+            // ── Measurements ──────────────────────────────────────────────
+            const _SectionHeader(title: 'MEASUREMENTS'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _UnitButton(
+                      label: 'METRIC (ML)',
+                      isSelected: !useOz,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        _toggleUnits(false);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _UnitButton(
+                      label: 'IMPERIAL (OZ)',
+                      isSelected: useOz,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        _toggleUnits(true);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const _SectionDivider(),
+
+            // ── My Bar ────────────────────────────────────────────────────
+            const _SectionHeader(title: 'MY BAR'),
+            _SettingTile(
+              icon: Icons.history,
+              title: 'Clear Recently Viewed',
+              subtitle: 'Remove cocktail view history from home screen',
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textSecondary,
+                size: 20,
+              ),
+              onTap: _clearRecentlyViewed,
+            ),
+            _SettingTile(
+              icon: Icons.delete_outline,
+              iconColor: Colors.redAccent.withValues(alpha: 0.8),
+              title: 'Reset Bar Ingredients',
+              subtitle: 'Remove all ingredients from your saved bar',
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textSecondary,
+                size: 20,
+              ),
+              onTap: _resetBarIngredients,
+            ),
+
+            const _SectionDivider(),
+
+            // ── About ─────────────────────────────────────────────────────
+            const _SectionHeader(title: 'ABOUT'),
+            const _SettingTile(
+              icon: Icons.info_outline,
+              title: 'Version',
+              subtitle: '1.0.0 (Build 9)',
+            ),
+            const _SettingTile(
+              icon: Icons.local_bar_outlined,
+              title: 'Cocktail Database',
+              subtitle: 'IBA Official Cocktails',
+            ),
+            _SettingTile(
+              icon: Icons.favorite_outline,
+              title: 'Credits',
+              subtitle: 'Built with Flutter & Dart',
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textSecondary,
+                size: 20,
+              ),
+              onTap: _showCreditsDialog,
+            ),
+
+            const SizedBox(height: 40),
+            _buildFooter(),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
-      body: ListView(
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      child: Row(
         children: [
-          // Header
           Container(
-            padding: const EdgeInsets.all(20),
-            child: const Row(
-              children: [
-                Icon(Icons.menu_book, color: AppTheme.accentGold, size: 28),
-                SizedBox(width: 12),
-                Text(
-                  'THE BAR BIBLE',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
+            width: 3,
+            height: 24,
+            decoration: BoxDecoration(
+              color: AppTheme.accentGold,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-
-          const Divider(color: AppTheme.surfaceLight),
-
-          // Measurements Section
-          const _SectionHeader(title: 'MEASUREMENTS'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _UnitButton(
-                    label: 'METRIC (ML)',
-                    isSelected: !useOz,
-                    onTap: () => _toggleUnits(false),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _UnitButton(
-                    label: 'IMPERIAL (OZ)',
-                    isSelected: useOz,
-                    onTap: () => _toggleUnits(true),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Display Section
-          const _SectionHeader(title: 'DISPLAY'),
-          _SettingTile(
-            icon: Icons.text_fields,
-            title: 'Service Mode',
-            subtitle: 'Larger text for behind the bar',
-            trailing: Switch(
-              value: serviceModeEnabled,
-              onChanged: _toggleServiceMode,
-              activeThumbColor: AppTheme.accentGold,
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // About Section
-          const _SectionHeader(title: 'ABOUT'),
-          const _SettingTile(
-            icon: Icons.info_outline,
-            title: 'Version',
-            subtitle: '1.0.0 (MVP)',
-          ),
-          const _SettingTile(
-            icon: Icons.menu_book,
-            title: 'Cocktail Database',
-            subtitle: 'IBA Official Cocktails',
-          ),
-          _SettingTile(
-            icon: Icons.copyright,
-            title: 'Credits',
-            subtitle: 'Built with Flutter',
-            onTap: () {
-              _showCreditsDialog();
-            },
-          ),
-
-          const SizedBox(height: 40),
-
-          // Footer
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                const Text(
-                  'THE BAR BIBLE',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                    letterSpacing: 2,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Essential Cocktail Reference',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
+          const SizedBox(width: 12),
+          const Text(
+            'SETTINGS',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 3.0,
+              color: AppTheme.textPrimary,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Column(
+      children: [
+        const Text(
+          'THE BAR BIBLE',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            letterSpacing: 2,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Essential Cocktail Reference',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppTheme.textSecondary.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
     );
   }
 
@@ -202,22 +331,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Version 1.0.0',
-              style: TextStyle(color: AppTheme.textPrimary),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Essential cocktail reference for bartenders and enthusiasts.',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Built with Flutter & Dart',
+              'Version 1.0.0 (Build 9)',
               style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
             ),
+            SizedBox(height: 10),
+            Text(
+              'Essential cocktail reference for bartenders and enthusiasts.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            SizedBox(height: 16),
+            Divider(color: AppTheme.surfaceLight),
+            SizedBox(height: 12),
+            _CreditRow(label: 'Framework', value: 'Flutter & Dart'),
+            SizedBox(height: 8),
+            _CreditRow(label: 'Database', value: 'IBA Official Cocktails'),
+            SizedBox(height: 8),
+            _CreditRow(label: 'Developer', value: 'MacManson98'),
           ],
         ),
         actions: [
@@ -237,6 +372,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+// ─── Widgets ──────────────────────────────────────────────────────────────────
+
 class _SectionHeader extends StatelessWidget {
   final String title;
 
@@ -249,9 +386,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title,
         style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 2.0,
           color: AppTheme.accentGold,
         ),
       ),
@@ -259,8 +396,22 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class _SectionDivider extends StatelessWidget {
+  const _SectionDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      color: AppTheme.surfaceLight,
+    );
+  }
+}
+
 class _SettingTile extends StatelessWidget {
   final IconData icon;
+  final Color? iconColor;
   final String title;
   final String subtitle;
   final Widget? trailing;
@@ -268,6 +419,7 @@ class _SettingTile extends StatelessWidget {
 
   const _SettingTile({
     required this.icon,
+    this.iconColor,
     required this.title,
     required this.subtitle,
     this.trailing,
@@ -276,30 +428,50 @@ class _SettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: AppTheme.textSecondary,
-        size: 24,
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textPrimary,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(
-          fontSize: 13,
-          color: AppTheme.textSecondary,
-        ),
-      ),
-      trailing: trailing,
+    return InkWell(
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      splashColor: AppTheme.accentGold.withValues(alpha: 0.05),
+      highlightColor: AppTheme.accentGold.withValues(alpha: 0.03),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: iconColor ?? AppTheme.textSecondary,
+              size: 22,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 12),
+              trailing!,
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -337,11 +509,43 @@ class _UnitButton extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.bold,
               letterSpacing: 1,
-              color: isSelected ? AppTheme.primaryDark : AppTheme.textPrimary,
+              color:
+                  isSelected ? AppTheme.primaryDark : AppTheme.textPrimary,
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CreditRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _CreditRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: AppTheme.textSecondary.withValues(alpha: 0.7),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -8,7 +8,7 @@ class AddCocktailsDialog extends StatefulWidget {
   final AppDatabase database;
   final Collection collection;
   final List<Cocktail> allCocktails;
-  final Set<int> existingCocktailIds;
+  final Set<String> existingFirestoreIds;
   final VoidCallback onClose;
 
   const AddCocktailsDialog({
@@ -16,7 +16,7 @@ class AddCocktailsDialog extends StatefulWidget {
     required this.database,
     required this.collection,
     required this.allCocktails,
-    required this.existingCocktailIds,
+    required this.existingFirestoreIds,
     required this.onClose,
   });
 
@@ -32,8 +32,8 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
   Set<int> selectedDifficulties = {};
 
   // Track newly selected cocktails this session (not existing ones)
-  final Set<int> _pendingAdded = {};
-  final Set<int> _pendingRemoved = {};
+  final Set<String> _pendingAdded = {};
+  final Set<String> _pendingRemoved = {};
 
   final List<String> spirits = [
     'Gin',
@@ -400,8 +400,9 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
               itemCount: filteredCocktails.length,
               itemBuilder: (context, index) {
                 final cocktail = filteredCocktails[index];
-                final isInCollection = widget.existingCocktailIds.contains(
-                  cocktail.id,
+                final cocktailFsId = cocktail.firestoreId ?? cocktail.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+                final isInCollection = widget.existingFirestoreIds.contains(
+                  cocktailFsId,
                 );
 
                 return _PickerRow(
@@ -415,24 +416,24 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                             return tbl.collectionId.equals(
                                   widget.collection.id,
                                 ) &
-                                tbl.cocktailId.equals(cocktail.id);
+                                tbl.firestoreId.equals(cocktailFsId);
                           }))
                           .go();
-                      widget.existingCocktailIds.remove(cocktail.id);
-                      _pendingAdded.remove(cocktail.id);
-                      _pendingRemoved.add(cocktail.id);
+                      widget.existingFirestoreIds.remove(cocktailFsId);
+                      _pendingAdded.remove(cocktailFsId);
+                      _pendingRemoved.add(cocktailFsId);
                     } else {
                       await widget.database
                           .into(widget.database.collectionCocktails)
                           .insert(
                             CollectionCocktailsCompanion.insert(
                               collectionId: widget.collection.id,
-                              cocktailId: cocktail.id,
+                              firestoreId: cocktailFsId,
                             ),
                           );
-                      widget.existingCocktailIds.add(cocktail.id);
-                      _pendingAdded.add(cocktail.id);
-                      _pendingRemoved.remove(cocktail.id);
+                      widget.existingFirestoreIds.add(cocktailFsId);
+                      _pendingAdded.add(cocktailFsId);
+                      _pendingRemoved.remove(cocktailFsId);
                     }
                     setState(() {});
                   },

@@ -44,7 +44,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
         .join([
           innerJoin(
             cocktails,
-            cocktails.id.equalsExp(collectionCocktails.cocktailId),
+            cocktails.firestoreId.equalsExp(collectionCocktails.firestoreId),
           ),
         ])
         .get();
@@ -280,10 +280,15 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
   Widget _buildEmptyState() {
     return VaultEmptyState(
       icon: Icons.collections_bookmark,
-      title: 'NO COLLECTIONS YET',
-      body: 'Create collections to organize\nyour favorite cocktails',
-      ctaLabel: 'CREATE COLLECTION',
+      title: 'No Collections Yet',
+      body: 'Group cocktails into themed vaults. Build a menu for tonight, save classics by spirit, or organise your training list.',
+      ctaLabel: 'Create Collection',
       onCta: _createCollection,
+      useCases: const [
+        VaultUseCaseHint(icon: Icons.local_bar, label: "Tonight's menu"),
+        VaultUseCaseHint(icon: Icons.school_outlined, label: 'Training lists'),
+        VaultUseCaseHint(icon: Icons.wb_sunny_outlined, label: 'Seasonal specials'),
+      ],
     );
   }
 }
@@ -445,43 +450,44 @@ class _CollectionCardState extends State<_CollectionCard> {
   Widget _buildPreviewArea() {
     final previews = widget.meta.previewImagePaths.take(3).toList();
     if (previews.isEmpty) {
+      // Pick a cocktail icon deterministically based on collection name
+      const icons = [
+        Icons.local_bar,
+        Icons.wine_bar,
+        Icons.sports_bar,
+        Icons.emoji_food_beverage,
+        Icons.coffee,
+        Icons.liquor,
+        Icons.nightlife,
+      ];
+      final iconIndex = widget.collection.name.codeUnits.fold(0, (a, b) => a + b) % icons.length;
+      final icon = icons[iconIndex];
       return Stack(
         fit: StackFit.expand,
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.surfaceLight.withValues(alpha: 0.42),
-                  AppTheme.surfaceDark.withValues(alpha: 0.85),
-                ],
-              ),
-            ),
+          Container(
+            color: const Color(0xFF1a1a14),
             child: Stack(
               children: [
-                for (var i = -1; i < 4; i++)
-                  Positioned(
-                    left: i * 38,
-                    top: 0,
-                    bottom: 0,
-                    child: Transform.rotate(
-                      angle: -0.24,
-                      child: Container(
-                        width: 16,
-                        color: AppTheme.accentGold.withValues(alpha: 0.06),
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _DotGridPainter(),
+                  ),
+                ),
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.accentGold.withValues(alpha: 0.25),
                       ),
                     ),
-                  ),
-                Center(
-                  child: Text(
-                    'VAULT',
-                    style: TextStyle(
-                      color: AppTheme.accentGold.withValues(alpha: 0.45),
-                      fontSize: 11,
-                      letterSpacing: 2,
-                      fontWeight: FontWeight.w700,
+                    child: Icon(
+                      icon,
+                      color: AppTheme.accentGold.withValues(alpha: 0.6),
+                      size: 22,
                     ),
                   ),
                 ),
@@ -579,7 +585,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     final query = widget.database.select(widget.database.cocktails).join([
       innerJoin(
         widget.database.collectionCocktails,
-        widget.database.collectionCocktails.cocktailId.equalsExp(widget.database.cocktails.id),
+        widget.database.collectionCocktails.firestoreId.equalsExp(widget.database.cocktails.firestoreId),
       ),
     ])..where(widget.database.collectionCocktails.collectionId.equals(widget.collection.id));
 
@@ -609,10 +615,10 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
     });
   }
 
-  Future<void> _removeCocktail(int cocktailId) async {
+  Future<void> _removeCocktail(String firestoreId) async {
     await (widget.database.delete(widget.database.collectionCocktails)
       ..where((tbl) { 
-        return tbl.collectionId.equals(widget.collection.id) & tbl.cocktailId.equals(cocktailId);
+        return tbl.collectionId.equals(widget.collection.id) & tbl.firestoreId.equals(firestoreId);
       })
     ).go();
     _loadCocktails();
@@ -627,7 +633,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       ..where((tbl) => tbl.collectionId.equals(widget.collection.id))
     ).get();
     
-    final existingCocktailIds = existingCocktails.map((e) => e.cocktailId).toSet();
+    final existingFirestoreIds = existingCocktails.map((e) => e.firestoreId).toSet();
 
     if (!mounted) return;
 
@@ -637,7 +643,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
         database: widget.database,
         collection: widget.collection,
         allCocktails: allCocktails,
-        existingCocktailIds: existingCocktailIds,
+        existingFirestoreIds: existingFirestoreIds,
         onClose: _loadCocktails,
       ),
     );
@@ -703,7 +709,7 @@ class _CollectionDetailScreenState extends State<CollectionDetailScreen> {
       itemName: cocktail.name,
       destructiveLabel: 'Remove From Collection',
       destructiveIcon: Icons.remove_circle_outline,
-      onConfirm: () => _removeCocktail(cocktail.id),
+      onConfirm: () => _removeCocktail(cocktail.firestoreId ?? cocktail.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')),
     );
   }
 
@@ -737,4 +743,23 @@ class _PreviewCandidate {
     required this.imagePath,
     required this.cocktailName,
   });
+}
+
+class _DotGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFd4af37).withValues(alpha: 0.07)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    const spacing = 16.0;
+    for (double x = spacing; x < size.width; x += spacing) {
+      for (double y = spacing; y < size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), 1, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

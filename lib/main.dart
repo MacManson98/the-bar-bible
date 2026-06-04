@@ -1,37 +1,40 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/bar_service.dart';
 import 'core/utils/image_utils.dart';
 import 'data/database.dart';
-import 'services/content_sync_service.dart';
+import 'data/flavor_data.dart';
+import 'services/firestore_sync_service.dart';
+import 'services/purchase_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/cocktail_detail_screen.dart';
-import 'screens/finder_screen.dart';
+import 'screens/paywall_screen.dart';
+import 'screens/splash_screen.dart';
 import 'screens/my_bar_screen.dart';
+import 'screens/my_bar_tab_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  final purchaseService = PurchaseService();
+  await purchaseService.init();
 
   final database = await initDatabase();
 
-  runApp(CocktailSpecsApp(database: database));
+  runApp(ChangeNotifierProvider.value(
+    value: purchaseService,
+    child: CocktailSpecsApp(database: database),
+  ));
 }
 
 Future<AppDatabase> initDatabase() async {
-  final dbFolder = await getApplicationDocumentsDirectory();
-  final dbPath = p.join(dbFolder.path, 'cocktails.db');
-
-  if (!await File(dbPath).exists()) {
-    final data = await rootBundle.load('assets/databases/cocktails.db');
-    await File(dbPath).writeAsBytes(data.buffer.asUint8List());
-  }
-
   return AppDatabase();
 }
 
@@ -48,7 +51,10 @@ class CocktailSpecsApp extends StatelessWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
       debugShowCheckedModeBanner: false,
-      home: MainNavigationScreen(database: database),
+      home: SplashScreen(
+        onReady: () => FirestoreSyncService(database).syncIfNeeded(),
+        child: MainNavigationScreen(database: database),
+      ),
     );
   }
 }
@@ -65,15 +71,14 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   static const int _homeTabIndex = 0;
   static const int _browseTabIndex = 1;
-  static const int _finderTabIndex = 2;
-  static const int _myBarTabIndex = 3;
+  static const int _myBarTabIndex = 2;
 
   int _selectedIndex = _homeTabIndex;
   String _activeBarName = 'My Bar';
   late final BarService _barService;
 
   // GlobalKeys to reach tab states for cross-tab refresh
-  final _finderKey = GlobalKey<FinderScreenState>();
+  final _myBarTabKey = GlobalKey<MyBarTabScreenState>();
   final _myBarKey = GlobalKey<MyBarScreenState>();
   Timer? _barChangedDebounceTimer;
 
@@ -82,11 +87,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     super.initState();
     _barService = BarService(widget.database);
     _loadActiveBarName();
-    _startContentSync();
-  }
-
-  void _startContentSync() {
-    unawaited(ContentSyncService(widget.database).syncIfNeeded());
   }
 
   List<Widget> _buildScreens() {
@@ -95,24 +95,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         database: widget.database,
         activeBarName: _activeBarName,
         onNavigateToBrowse: () => _onTabTapped(_browseTabIndex),
-        onNavigateToFinder: () => _onTabTapped(_finderTabIndex),
+        onNavigateToFinder: () {
+          _onTabTapped(_myBarTabIndex);
+          _myBarTabKey.currentState?.switchToCocktails();
+        },
       ),
       CocktailsListScreen(database: widget.database),
-      FinderScreen(
-        key: _finderKey,
-        database: widget.database,
-        onBarSwitched: _switchBarFromPill,
-        onNavigateToMyBar: () => _onTabTapped(_myBarTabIndex),
-      ),
-      MyBarScreen(
-        key: _myBarKey,
+      MyBarTabScreen(
+        key: _myBarTabKey,
         database: widget.database,
         activeBarName: _activeBarName,
+        myBarKey: _myBarKey,
         onBarSwitched: _switchBarFromPill,
         onBarChanged: _onBarChanged,
-        onNavigateToFinder: () => _onTabTapped(_finderTabIndex),
       ),
-      const SettingsScreen(),
+      SettingsScreen(database: widget.database),
     ];
   }
 
@@ -126,27 +123,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   /// Called when the Bar Context Pill selects a different bar.
   Future<void> _switchBarFromPill(int barId) async {
     await _barService.setDefaultBar(barId);
-
-    // Refresh pill label
     await _loadActiveBarName();
-
-    // Refresh both bar-aware tabs (await My Bar so it finishes before user sees stale data)
-    _finderKey.currentState?.loadBarAndMatch();
+    _myBarTabKey.currentState?.refreshAllFinders();
     await _myBarKey.currentState?.loadData();
   }
 
   void _onTabTapped(int index) {
-    // If switching TO Finder, refresh it (bar may have changed)
-    if (index == _finderTabIndex && _selectedIndex != _finderTabIndex) {
-      _finderKey.currentState?.loadBarAndMatch();
-    }
-    // If switching TO My Bar, refresh it (active bar may have changed in Finder)
+    // Refresh My Bar tabs when navigating to them from elsewhere.
     if (index == _myBarTabIndex && _selectedIndex != _myBarTabIndex) {
       _myBarKey.currentState?.loadData();
+      _myBarTabKey.currentState?.refreshAllFinders();
     }
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
   }
 
   /// Called by My Bar whenever an ingredient is toggled or bar is switched.
@@ -154,13 +142,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _barChangedDebounceTimer?.cancel();
     _barChangedDebounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
-      // Keep pill label in sync (My Bar may have switched bars internally)
       _loadActiveBarName();
-      // If Finder is the active tab, refresh immediately.
-      // Otherwise it will refresh when user switches to Finder tab.
-      if (_selectedIndex == _finderTabIndex) {
-        _finderKey.currentState?.loadBarAndMatch();
-      }
+      // Cocktail/Shot/Mocktail finder tabs — keep them all in sync.
+      _myBarTabKey.currentState?.refreshAllFinders();
     });
   }
 
@@ -243,17 +227,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             BottomNavigationBarItem(
               icon: Padding(
                 padding: EdgeInsets.only(bottom: 4),
-                child: Icon(Icons.search_outlined, size: 24),
-              ),
-              activeIcon: Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Icon(Icons.search, size: 24),
-              ),
-              label: 'Finder',
-            ),
-            BottomNavigationBarItem(
-              icon: Padding(
-                padding: EdgeInsets.only(bottom: 4),
                 child: Icon(Icons.liquor_outlined, size: 24),
               ),
               activeIcon: Padding(
@@ -291,33 +264,46 @@ class CocktailsListScreen extends StatefulWidget {
   State<CocktailsListScreen> createState() => _CocktailsListScreenState();
 }
 
-class _CocktailsListScreenState extends State<CocktailsListScreen> {
+class _CocktailsListScreenState extends State<CocktailsListScreen>
+    with SingleTickerProviderStateMixin {
   List<Cocktail> allCocktails = [];
   List<Cocktail> filteredCocktails = [];
   bool isLoading = true;
 
   String searchQuery = '';
   Set<String> selectedSpirits = {};
-  Set<String> selectedMethods = {};
+  Set<String> selectedFlavors = {};
   Set<int> selectedDifficulties = {};
   String sortBy = 'alphabetical';
+  String premiumFilter = 'all'; // 'all', 'free', 'premium'
+
+  late final TabController _tabController;
+  static const _categoryValues = ['cocktail', 'mocktail', 'shot'];
+  static const _categoryLabels = ['Cocktails', 'Mocktails', 'Shots'];
+  static const _categoryLabelsSingular = ['Cocktail', 'Mocktail', 'Shot'];
+
+  String get _activeCategory => _categoryValues[_tabController.index];
+  String get _activeLabel => _categoryLabels[_tabController.index];
+  String get _activeLabelSingular => _categoryLabelsSingular[_tabController.index];
 
   final List<String> spirits = [
-    'Gin',
-    'Vodka',
-    'Rum',
-    'Bourbon',
-    'Whiskey',
-    'Brandy',
-    'Cognac',
-    'Other',
+    'Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Brandy', 'Cognac', 'Other',
   ];
-  final List<String> methods = ['shake', 'stir', 'build'];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) _applyFilters();
+    });
     _loadCocktails();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCocktails() async {
@@ -335,6 +321,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
   void _applyFilters() {
     setState(() {
       filteredCocktails = allCocktails.where((cocktail) {
+        if (cocktail.category != _activeCategory) return false;
         if (searchQuery.isNotEmpty &&
             !cocktail.name.toLowerCase().contains(searchQuery.toLowerCase())) {
           return false;
@@ -343,14 +330,23 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
             !selectedSpirits.contains(cocktail.baseSpirit)) {
           return false;
         }
-        if (selectedMethods.isNotEmpty &&
-            !selectedMethods.contains(cocktail.method)) {
-          return false;
+        if (selectedFlavors.isNotEmpty) {
+          final tags = parseCocktailTags(cocktail.tags);
+          final matchesAny = selectedFlavors.any((label) {
+            final chip = kFlavorChips.firstWhere(
+              (c) => c.label == label,
+              orElse: () => FlavorChip(label: label, aliases: {label}),
+            );
+            return cocktailHasFlavorTag(tags, chip.aliases);
+          });
+          if (!matchesAny) return false;
         }
         if (selectedDifficulties.isNotEmpty &&
             !selectedDifficulties.contains(cocktail.difficulty)) {
           return false;
         }
+        if (premiumFilter == 'free' && cocktail.isPremium) return false;
+        if (premiumFilter == 'premium' && !cocktail.isPremium) return false;
         return true;
       }).toList();
 
@@ -371,7 +367,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
     setState(() {
       searchQuery = '';
       selectedSpirits.clear();
-      selectedMethods.clear();
+      selectedFlavors.clear();
       selectedDifficulties.clear();
       filteredCocktails = allCocktails;
     });
@@ -380,18 +376,18 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
 
   bool get hasActiveFilters =>
       selectedSpirits.isNotEmpty ||
-      selectedMethods.isNotEmpty ||
+      selectedFlavors.isNotEmpty ||
       selectedDifficulties.isNotEmpty;
 
   int _getActiveFilterCount() {
     return selectedSpirits.length +
-        selectedMethods.length +
+        selectedFlavors.length +
         selectedDifficulties.length;
   }
 
   void _showFiltersSheet() {
     final tempSpirits = Set<String>.from(selectedSpirits);
-    final tempMethods = Set<String>.from(selectedMethods);
+    final tempFlavors = Set<String>.from(selectedFlavors);
     final tempDifficulties = Set<int>.from(selectedDifficulties);
 
     showModalBottomSheet(
@@ -404,7 +400,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
             color: AppTheme.surfaceDark,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -414,26 +410,28 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                   const Text(
                     'FILTERS',
                     style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.0,
+                      color: AppTheme.accentGold,
                     ),
                   ),
                   const Spacer(),
                   if (tempSpirits.isNotEmpty ||
-                      tempMethods.isNotEmpty ||
+                      tempFlavors.isNotEmpty ||
                       tempDifficulties.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setModalState(() {
+                    GestureDetector(
+                      onTap: () => setModalState(() {
                         tempSpirits.clear();
-                        tempMethods.clear();
+                        tempFlavors.clear();
                         tempDifficulties.clear();
                       }),
-                      child: const Text(
-                        'CLEAR ALL',
+                      child: Text(
+                        'Clear all',
                         style: TextStyle(
-                          color: AppTheme.accentGold,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppTheme.accentGold.withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -458,16 +456,16 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
               ),
               const SizedBox(height: 16),
               _FilterSection(
-                label: 'METHOD',
-                children: methods
+                label: 'FLAVOR',
+                children: kFlavorChips
                     .map(
-                      (m) => _FilterChipMulti(
-                        label: m.toUpperCase(),
-                        isSelected: tempMethods.contains(m),
+                      (chip) => _FilterChipMulti(
+                        label: chip.label,
+                        isSelected: tempFlavors.contains(chip.label),
                         onTap: () => setModalState(
-                          () => tempMethods.contains(m)
-                              ? tempMethods.remove(m)
-                              : tempMethods.add(m),
+                          () => tempFlavors.contains(chip.label)
+                              ? tempFlavors.remove(chip.label)
+                              : tempFlavors.add(chip.label),
                         ),
                       ),
                     )
@@ -495,7 +493,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                 onPressed: () {
                   setState(() {
                     selectedSpirits = tempSpirits;
-                    selectedMethods = tempMethods;
+                    selectedFlavors = tempFlavors;
                     selectedDifficulties = tempDifficulties;
                   });
                   _applyFilters();
@@ -570,7 +568,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                         Padding(
                           padding: EdgeInsets.only(left: 44),
                           child: Text(
-                            'Cocktail Reference Library',
+                            'Drinks Reference Library',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppTheme.textSecondary,
@@ -581,13 +579,45 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                       ],
                     ),
                   ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryDark,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.surfaceLight.withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorColor: AppTheme.accentGold,
+                      indicatorWeight: 2,
+                      indicatorSize: TabBarIndicatorSize.label,
+                      labelColor: AppTheme.accentGold,
+                      unselectedLabelColor: AppTheme.textSecondary,
+                      labelStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      tabs: const [
+                        Tab(text: 'Cocktails'),
+                        Tab(text: 'Mocktails'),
+                        Tab(text: 'Shots'),
+                      ],
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
                         TextField(
                           decoration: InputDecoration(
-                            hintText: 'Search cocktails...',
+                            hintText: 'Search $_activeLabel...',
                             prefixIcon: const Icon(Icons.search),
                             suffixIcon: searchQuery.isNotEmpty
                                 ? IconButton(
@@ -693,11 +723,11 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                                   },
                                 ),
                               ),
-                              ...selectedMethods.map(
-                                (m) => _ActiveFilterPill(
-                                  label: m.toUpperCase(),
+                              ...selectedFlavors.map(
+                                (f) => _ActiveFilterPill(
+                                  label: f,
                                   onRemove: () {
-                                    setState(() => selectedMethods.remove(m));
+                                    setState(() => selectedFlavors.remove(f));
                                     _applyFilters();
                                   },
                                 ),
@@ -720,6 +750,30 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                     ),
                   ),
                   Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: Row(
+                      children: [
+                        _PremiumFilterPill(
+                          label: 'All',
+                          selected: premiumFilter == 'all',
+                          onTap: () { setState(() => premiumFilter = 'all'); _applyFilters(); },
+                        ),
+                        const SizedBox(width: 8),
+                        _PremiumFilterPill(
+                          label: 'Free',
+                          selected: premiumFilter == 'free',
+                          onTap: () { setState(() => premiumFilter = 'free'); _applyFilters(); },
+                        ),
+                        const SizedBox(width: 8),
+                        _PremiumFilterPill(
+                          label: 'Premium',
+                          selected: premiumFilter == 'premium',
+                          onTap: () { setState(() => premiumFilter = 'premium'); _applyFilters(); },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
                       children: [
@@ -730,7 +784,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          '${filteredCocktails.length} ${filteredCocktails.length == 1 ? 'Cocktail' : 'Cocktails'}',
+                          '${filteredCocktails.length} ${filteredCocktails.length == 1 ? _activeLabelSingular : _activeLabel}',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -746,6 +800,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                         ? _EmptyState(
                             hasFilters: hasActiveFilters,
                             onClear: _clearFilters,
+                            label: _activeLabel.toUpperCase(),
                           )
                         : ListView.builder(
                             padding: const EdgeInsets.only(
@@ -760,15 +815,25 @@ class _CocktailsListScreenState extends State<CocktailsListScreen> {
                               return _CocktailCard(
                                 cocktail: cocktail,
                                 onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CocktailDetailScreen(
-                                        database: widget.database,
-                                        cocktail: cocktail,
+                                  final purchaseService = context.read<PurchaseService>();
+                                  if (cocktail.isPremium && !purchaseService.isPremium) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const PaywallScreen(),
                                       ),
-                                    ),
-                                  );
+                                    );
+                                  } else {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => CocktailDetailScreen(
+                                          database: widget.database,
+                                          cocktail: cocktail,
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
                               );
                             },
@@ -900,6 +965,11 @@ class _CocktailCardState extends State<_CocktailCard> {
   }
 
   Future<void> _resolveImagePath() async {
+    // Prefer network URL
+    if (widget.cocktail.imageUrl != null && widget.cocktail.imageUrl!.isNotEmpty) {
+      if (mounted) setState(() => _resolvedImagePath = widget.cocktail.imageUrl);
+      return;
+    }
     final basePath =
         widget.cocktail.imagePath ??
         ImageUtils.generateBasePathFromName(widget.cocktail.name);
@@ -916,25 +986,41 @@ class _CocktailCardState extends State<_CocktailCard> {
         child: InkWell(
           onTap: widget.onTap,
           borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.surfaceLight),
-            ),
+          child: Consumer<PurchaseService>(
+            builder: (context, purchaseService, _) {
+              final isLocked = widget.cocktail.isPremium && !purchaseService.isPremium;
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceDark,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isLocked
+                        ? AppTheme.accentGold.withValues(alpha: 0.4)
+                        : AppTheme.surfaceLight,
+                    width: isLocked ? 1.0 : 0.5,
+                  ),
+                ),
             child: Row(
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: _resolvedImagePath != null
-                      ? Image.asset(
-                          _resolvedImagePath!,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _imageFallback(),
-                        )
+                      ? (_resolvedImagePath!.startsWith('http')
+                          ? CachedNetworkImage(
+                              imageUrl: _resolvedImagePath!,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => _imageFallback(),
+                            )
+                          : Image.asset(
+                              _resolvedImagePath!,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _imageFallback(),
+                            ))
                       : _imageFallback(),
                 ),
                 const SizedBox(width: 12),
@@ -951,13 +1037,43 @@ class _CocktailCardState extends State<_CocktailCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.cocktail.name.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.cocktail.name.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isLocked) ...
+                            [
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accentGold.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppTheme.accentGold.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'PREMIUM',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: AppTheme.accentGold,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                        ],
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -1015,15 +1131,28 @@ class _CocktailCardState extends State<_CocktailCard> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: AppTheme.textSecondary,
+                    Consumer<PurchaseService>(
+                      builder: (context, purchaseService, _) {
+                        if (widget.cocktail.isPremium && !purchaseService.isPremium) {
+                          return const Icon(
+                            Icons.lock,
+                            size: 14,
+                            color: AppTheme.textSecondary,
+                          );
+                        }
+                        return const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 14,
+                          color: AppTheme.textSecondary,
+                        );
+                      },
                     ),
                   ],
                 ),
               ],
             ),
+          );
+        },
           ),
         ),
       ),
@@ -1041,10 +1170,56 @@ class _CocktailCardState extends State<_CocktailCard> {
   );
 }
 
+class _PremiumFilterPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PremiumFilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppTheme.accentGold.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? AppTheme.accentGold.withValues(alpha: 0.5)
+                : AppTheme.surfaceLight,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: selected ? AppTheme.accentGold : AppTheme.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
   final bool hasFilters;
   final VoidCallback onClear;
-  const _EmptyState({required this.hasFilters, required this.onClear});
+  final String label;
+  const _EmptyState({
+    required this.hasFilters,
+    required this.onClear,
+    this.label = 'COCKTAILS',
+  });
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -1053,9 +1228,9 @@ class _EmptyState extends StatelessWidget {
         children: [
           const Icon(Icons.search_off, size: 64, color: AppTheme.textSecondary),
           const SizedBox(height: 16),
-          const Text(
-            'NO COCKTAILS FOUND',
-            style: TextStyle(
+          Text(
+            'NO $label FOUND',
+            style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
               letterSpacing: 1,

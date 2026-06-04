@@ -155,6 +155,55 @@ class $CocktailsTable extends Cocktails
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+    'image_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('cocktail'),
+  );
+  static const VerificationMeta _isPremiumMeta = const VerificationMeta(
+    'isPremium',
+  );
+  @override
+  late final GeneratedColumn<bool> isPremium = GeneratedColumn<bool>(
+    'is_premium',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_premium" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _firestoreIdMeta = const VerificationMeta(
+    'firestoreId',
+  );
+  @override
+  late final GeneratedColumn<String> firestoreId = GeneratedColumn<String>(
+    'firestore_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -171,6 +220,10 @@ class $CocktailsTable extends Cocktails
     difficulty,
     tags,
     imagePath,
+    imageUrl,
+    category,
+    isPremium,
+    firestoreId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -281,6 +334,33 @@ class $CocktailsTable extends Cocktails
         imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
       );
     }
+    if (data.containsKey('image_url')) {
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('is_premium')) {
+      context.handle(
+        _isPremiumMeta,
+        isPremium.isAcceptableOrUnknown(data['is_premium']!, _isPremiumMeta),
+      );
+    }
+    if (data.containsKey('firestore_id')) {
+      context.handle(
+        _firestoreIdMeta,
+        firestoreId.isAcceptableOrUnknown(
+          data['firestore_id']!,
+          _firestoreIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -346,6 +426,22 @@ class $CocktailsTable extends Cocktails
         DriftSqlType.string,
         data['${effectivePrefix}image_path'],
       ),
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_url'],
+      ),
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      isPremium: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_premium'],
+      )!,
+      firestoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}firestore_id'],
+      ),
     );
   }
 
@@ -370,6 +466,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
   final int difficulty;
   final String? tags;
   final String? imagePath;
+  final String? imageUrl;
+  final String category;
+  final bool isPremium;
+  final String? firestoreId;
   const Cocktail({
     required this.id,
     required this.name,
@@ -385,6 +485,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     required this.difficulty,
     this.tags,
     this.imagePath,
+    this.imageUrl,
+    required this.category,
+    required this.isPremium,
+    this.firestoreId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -419,6 +523,14 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     if (!nullToAbsent || imagePath != null) {
       map['image_path'] = Variable<String>(imagePath);
     }
+    if (!nullToAbsent || imageUrl != null) {
+      map['image_url'] = Variable<String>(imageUrl);
+    }
+    map['category'] = Variable<String>(category);
+    map['is_premium'] = Variable<bool>(isPremium);
+    if (!nullToAbsent || firestoreId != null) {
+      map['firestore_id'] = Variable<String>(firestoreId);
+    }
     return map;
   }
 
@@ -450,6 +562,14 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       imagePath: imagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(imagePath),
+      imageUrl: imageUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageUrl),
+      category: Value(category),
+      isPremium: Value(isPremium),
+      firestoreId: firestoreId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(firestoreId),
     );
   }
 
@@ -475,6 +595,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       difficulty: serializer.fromJson<int>(json['difficulty']),
       tags: serializer.fromJson<String?>(json['tags']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
+      imageUrl: serializer.fromJson<String?>(json['imageUrl']),
+      category: serializer.fromJson<String>(json['category']),
+      isPremium: serializer.fromJson<bool>(json['isPremium']),
+      firestoreId: serializer.fromJson<String?>(json['firestoreId']),
     );
   }
   @override
@@ -495,6 +619,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
       'difficulty': serializer.toJson<int>(difficulty),
       'tags': serializer.toJson<String?>(tags),
       'imagePath': serializer.toJson<String?>(imagePath),
+      'imageUrl': serializer.toJson<String?>(imageUrl),
+      'category': serializer.toJson<String>(category),
+      'isPremium': serializer.toJson<bool>(isPremium),
+      'firestoreId': serializer.toJson<String?>(firestoreId),
     };
   }
 
@@ -513,6 +641,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     int? difficulty,
     Value<String?> tags = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
+    Value<String?> imageUrl = const Value.absent(),
+    String? category,
+    bool? isPremium,
+    Value<String?> firestoreId = const Value.absent(),
   }) => Cocktail(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -530,6 +662,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     difficulty: difficulty ?? this.difficulty,
     tags: tags.present ? tags.value : this.tags,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
+    imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    category: category ?? this.category,
+    isPremium: isPremium ?? this.isPremium,
+    firestoreId: firestoreId.present ? firestoreId.value : this.firestoreId,
   );
   Cocktail copyWithCompanion(CocktailsCompanion data) {
     return Cocktail(
@@ -557,6 +693,12 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
           : this.difficulty,
       tags: data.tags.present ? data.tags.value : this.tags,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      category: data.category.present ? data.category.value : this.category,
+      isPremium: data.isPremium.present ? data.isPremium.value : this.isPremium,
+      firestoreId: data.firestoreId.present
+          ? data.firestoreId.value
+          : this.firestoreId,
     );
   }
 
@@ -576,7 +718,11 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
           ..write('baseSpirit: $baseSpirit, ')
           ..write('difficulty: $difficulty, ')
           ..write('tags: $tags, ')
-          ..write('imagePath: $imagePath')
+          ..write('imagePath: $imagePath, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('category: $category, ')
+          ..write('isPremium: $isPremium, ')
+          ..write('firestoreId: $firestoreId')
           ..write(')'))
         .toString();
   }
@@ -597,6 +743,10 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
     difficulty,
     tags,
     imagePath,
+    imageUrl,
+    category,
+    isPremium,
+    firestoreId,
   );
   @override
   bool operator ==(Object other) =>
@@ -615,7 +765,11 @@ class Cocktail extends DataClass implements Insertable<Cocktail> {
           other.baseSpirit == this.baseSpirit &&
           other.difficulty == this.difficulty &&
           other.tags == this.tags &&
-          other.imagePath == this.imagePath);
+          other.imagePath == this.imagePath &&
+          other.imageUrl == this.imageUrl &&
+          other.category == this.category &&
+          other.isPremium == this.isPremium &&
+          other.firestoreId == this.firestoreId);
 }
 
 class CocktailsCompanion extends UpdateCompanion<Cocktail> {
@@ -633,6 +787,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
   final Value<int> difficulty;
   final Value<String?> tags;
   final Value<String?> imagePath;
+  final Value<String?> imageUrl;
+  final Value<String> category;
+  final Value<bool> isPremium;
+  final Value<String?> firestoreId;
   const CocktailsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -648,6 +806,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     this.difficulty = const Value.absent(),
     this.tags = const Value.absent(),
     this.imagePath = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    this.category = const Value.absent(),
+    this.isPremium = const Value.absent(),
+    this.firestoreId = const Value.absent(),
   });
   CocktailsCompanion.insert({
     this.id = const Value.absent(),
@@ -664,6 +826,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     required int difficulty,
     this.tags = const Value.absent(),
     this.imagePath = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    this.category = const Value.absent(),
+    this.isPremium = const Value.absent(),
+    this.firestoreId = const Value.absent(),
   }) : name = Value(name),
        method = Value(method),
        glass = Value(glass),
@@ -684,6 +850,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     Expression<int>? difficulty,
     Expression<String>? tags,
     Expression<String>? imagePath,
+    Expression<String>? imageUrl,
+    Expression<String>? category,
+    Expression<bool>? isPremium,
+    Expression<String>? firestoreId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -700,6 +870,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
       if (difficulty != null) 'difficulty': difficulty,
       if (tags != null) 'tags': tags,
       if (imagePath != null) 'image_path': imagePath,
+      if (imageUrl != null) 'image_url': imageUrl,
+      if (category != null) 'category': category,
+      if (isPremium != null) 'is_premium': isPremium,
+      if (firestoreId != null) 'firestore_id': firestoreId,
     });
   }
 
@@ -718,6 +892,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     Value<int>? difficulty,
     Value<String?>? tags,
     Value<String?>? imagePath,
+    Value<String?>? imageUrl,
+    Value<String>? category,
+    Value<bool>? isPremium,
+    Value<String?>? firestoreId,
   }) {
     return CocktailsCompanion(
       id: id ?? this.id,
@@ -734,6 +912,10 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
       difficulty: difficulty ?? this.difficulty,
       tags: tags ?? this.tags,
       imagePath: imagePath ?? this.imagePath,
+      imageUrl: imageUrl ?? this.imageUrl,
+      category: category ?? this.category,
+      isPremium: isPremium ?? this.isPremium,
+      firestoreId: firestoreId ?? this.firestoreId,
     );
   }
 
@@ -782,6 +964,18 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
     if (imagePath.present) {
       map['image_path'] = Variable<String>(imagePath.value);
     }
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (isPremium.present) {
+      map['is_premium'] = Variable<bool>(isPremium.value);
+    }
+    if (firestoreId.present) {
+      map['firestore_id'] = Variable<String>(firestoreId.value);
+    }
     return map;
   }
 
@@ -801,7 +995,11 @@ class CocktailsCompanion extends UpdateCompanion<Cocktail> {
           ..write('baseSpirit: $baseSpirit, ')
           ..write('difficulty: $difficulty, ')
           ..write('tags: $tags, ')
-          ..write('imagePath: $imagePath')
+          ..write('imagePath: $imagePath, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('category: $category, ')
+          ..write('isPremium: $isPremium, ')
+          ..write('firestoreId: $firestoreId')
           ..write(')'))
         .toString();
   }
@@ -1803,19 +2001,16 @@ class $CollectionCocktailsTable extends CollectionCocktails
       'REFERENCES collections (id)',
     ),
   );
-  static const VerificationMeta _cocktailIdMeta = const VerificationMeta(
-    'cocktailId',
+  static const VerificationMeta _firestoreIdMeta = const VerificationMeta(
+    'firestoreId',
   );
   @override
-  late final GeneratedColumn<int> cocktailId = GeneratedColumn<int>(
-    'cocktail_id',
+  late final GeneratedColumn<String> firestoreId = GeneratedColumn<String>(
+    'firestore_id',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.string,
     requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES cocktails (id)',
-    ),
   );
   static const VerificationMeta _addedAtMeta = const VerificationMeta(
     'addedAt',
@@ -1830,7 +2025,12 @@ class $CollectionCocktailsTable extends CollectionCocktails
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, collectionId, cocktailId, addedAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    collectionId,
+    firestoreId,
+    addedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1857,13 +2057,16 @@ class $CollectionCocktailsTable extends CollectionCocktails
     } else if (isInserting) {
       context.missing(_collectionIdMeta);
     }
-    if (data.containsKey('cocktail_id')) {
+    if (data.containsKey('firestore_id')) {
       context.handle(
-        _cocktailIdMeta,
-        cocktailId.isAcceptableOrUnknown(data['cocktail_id']!, _cocktailIdMeta),
+        _firestoreIdMeta,
+        firestoreId.isAcceptableOrUnknown(
+          data['firestore_id']!,
+          _firestoreIdMeta,
+        ),
       );
     } else if (isInserting) {
-      context.missing(_cocktailIdMeta);
+      context.missing(_firestoreIdMeta);
     }
     if (data.containsKey('added_at')) {
       context.handle(
@@ -1888,9 +2091,9 @@ class $CollectionCocktailsTable extends CollectionCocktails
         DriftSqlType.int,
         data['${effectivePrefix}collection_id'],
       )!,
-      cocktailId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}cocktail_id'],
+      firestoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}firestore_id'],
       )!,
       addedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -1909,12 +2112,12 @@ class CollectionCocktail extends DataClass
     implements Insertable<CollectionCocktail> {
   final int id;
   final int collectionId;
-  final int cocktailId;
+  final String firestoreId;
   final DateTime addedAt;
   const CollectionCocktail({
     required this.id,
     required this.collectionId,
-    required this.cocktailId,
+    required this.firestoreId,
     required this.addedAt,
   });
   @override
@@ -1922,7 +2125,7 @@ class CollectionCocktail extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['collection_id'] = Variable<int>(collectionId);
-    map['cocktail_id'] = Variable<int>(cocktailId);
+    map['firestore_id'] = Variable<String>(firestoreId);
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
   }
@@ -1931,7 +2134,7 @@ class CollectionCocktail extends DataClass
     return CollectionCocktailsCompanion(
       id: Value(id),
       collectionId: Value(collectionId),
-      cocktailId: Value(cocktailId),
+      firestoreId: Value(firestoreId),
       addedAt: Value(addedAt),
     );
   }
@@ -1944,7 +2147,7 @@ class CollectionCocktail extends DataClass
     return CollectionCocktail(
       id: serializer.fromJson<int>(json['id']),
       collectionId: serializer.fromJson<int>(json['collectionId']),
-      cocktailId: serializer.fromJson<int>(json['cocktailId']),
+      firestoreId: serializer.fromJson<String>(json['firestoreId']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
   }
@@ -1954,7 +2157,7 @@ class CollectionCocktail extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'collectionId': serializer.toJson<int>(collectionId),
-      'cocktailId': serializer.toJson<int>(cocktailId),
+      'firestoreId': serializer.toJson<String>(firestoreId),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
@@ -1962,12 +2165,12 @@ class CollectionCocktail extends DataClass
   CollectionCocktail copyWith({
     int? id,
     int? collectionId,
-    int? cocktailId,
+    String? firestoreId,
     DateTime? addedAt,
   }) => CollectionCocktail(
     id: id ?? this.id,
     collectionId: collectionId ?? this.collectionId,
-    cocktailId: cocktailId ?? this.cocktailId,
+    firestoreId: firestoreId ?? this.firestoreId,
     addedAt: addedAt ?? this.addedAt,
   );
   CollectionCocktail copyWithCompanion(CollectionCocktailsCompanion data) {
@@ -1976,9 +2179,9 @@ class CollectionCocktail extends DataClass
       collectionId: data.collectionId.present
           ? data.collectionId.value
           : this.collectionId,
-      cocktailId: data.cocktailId.present
-          ? data.cocktailId.value
-          : this.cocktailId,
+      firestoreId: data.firestoreId.present
+          ? data.firestoreId.value
+          : this.firestoreId,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
@@ -1988,52 +2191,52 @@ class CollectionCocktail extends DataClass
     return (StringBuffer('CollectionCocktail(')
           ..write('id: $id, ')
           ..write('collectionId: $collectionId, ')
-          ..write('cocktailId: $cocktailId, ')
+          ..write('firestoreId: $firestoreId, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, collectionId, cocktailId, addedAt);
+  int get hashCode => Object.hash(id, collectionId, firestoreId, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CollectionCocktail &&
           other.id == this.id &&
           other.collectionId == this.collectionId &&
-          other.cocktailId == this.cocktailId &&
+          other.firestoreId == this.firestoreId &&
           other.addedAt == this.addedAt);
 }
 
 class CollectionCocktailsCompanion extends UpdateCompanion<CollectionCocktail> {
   final Value<int> id;
   final Value<int> collectionId;
-  final Value<int> cocktailId;
+  final Value<String> firestoreId;
   final Value<DateTime> addedAt;
   const CollectionCocktailsCompanion({
     this.id = const Value.absent(),
     this.collectionId = const Value.absent(),
-    this.cocktailId = const Value.absent(),
+    this.firestoreId = const Value.absent(),
     this.addedAt = const Value.absent(),
   });
   CollectionCocktailsCompanion.insert({
     this.id = const Value.absent(),
     required int collectionId,
-    required int cocktailId,
+    required String firestoreId,
     this.addedAt = const Value.absent(),
   }) : collectionId = Value(collectionId),
-       cocktailId = Value(cocktailId);
+       firestoreId = Value(firestoreId);
   static Insertable<CollectionCocktail> custom({
     Expression<int>? id,
     Expression<int>? collectionId,
-    Expression<int>? cocktailId,
+    Expression<String>? firestoreId,
     Expression<DateTime>? addedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (collectionId != null) 'collection_id': collectionId,
-      if (cocktailId != null) 'cocktail_id': cocktailId,
+      if (firestoreId != null) 'firestore_id': firestoreId,
       if (addedAt != null) 'added_at': addedAt,
     });
   }
@@ -2041,13 +2244,13 @@ class CollectionCocktailsCompanion extends UpdateCompanion<CollectionCocktail> {
   CollectionCocktailsCompanion copyWith({
     Value<int>? id,
     Value<int>? collectionId,
-    Value<int>? cocktailId,
+    Value<String>? firestoreId,
     Value<DateTime>? addedAt,
   }) {
     return CollectionCocktailsCompanion(
       id: id ?? this.id,
       collectionId: collectionId ?? this.collectionId,
-      cocktailId: cocktailId ?? this.cocktailId,
+      firestoreId: firestoreId ?? this.firestoreId,
       addedAt: addedAt ?? this.addedAt,
     );
   }
@@ -2061,8 +2264,8 @@ class CollectionCocktailsCompanion extends UpdateCompanion<CollectionCocktail> {
     if (collectionId.present) {
       map['collection_id'] = Variable<int>(collectionId.value);
     }
-    if (cocktailId.present) {
-      map['cocktail_id'] = Variable<int>(cocktailId.value);
+    if (firestoreId.present) {
+      map['firestore_id'] = Variable<String>(firestoreId.value);
     }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
@@ -2075,7 +2278,7 @@ class CollectionCocktailsCompanion extends UpdateCompanion<CollectionCocktail> {
     return (StringBuffer('CollectionCocktailsCompanion(')
           ..write('id: $id, ')
           ..write('collectionId: $collectionId, ')
-          ..write('cocktailId: $cocktailId, ')
+          ..write('firestoreId: $firestoreId, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
@@ -2542,6 +2745,10 @@ class $SavedBarIngredientsTable extends SavedBarIngredients
 
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {savedBarId, ingredientId},
+  ];
   @override
   SavedBarIngredient map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
@@ -3069,19 +3276,16 @@ class $FavoritesTable extends Favorites
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $FavoritesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _cocktailIdMeta = const VerificationMeta(
-    'cocktailId',
+  static const VerificationMeta _firestoreIdMeta = const VerificationMeta(
+    'firestoreId',
   );
   @override
-  late final GeneratedColumn<int> cocktailId = GeneratedColumn<int>(
-    'cocktail_id',
+  late final GeneratedColumn<String> firestoreId = GeneratedColumn<String>(
+    'firestore_id',
     aliasedName,
     false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES cocktails (id) ON DELETE CASCADE',
-    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
   );
   static const VerificationMeta _favoritedAtMeta = const VerificationMeta(
     'favoritedAt',
@@ -3096,7 +3300,7 @@ class $FavoritesTable extends Favorites
     clientDefault: () => DateTime.now(),
   );
   @override
-  List<GeneratedColumn> get $columns => [cocktailId, favoritedAt];
+  List<GeneratedColumn> get $columns => [firestoreId, favoritedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3109,11 +3313,16 @@ class $FavoritesTable extends Favorites
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('cocktail_id')) {
+    if (data.containsKey('firestore_id')) {
       context.handle(
-        _cocktailIdMeta,
-        cocktailId.isAcceptableOrUnknown(data['cocktail_id']!, _cocktailIdMeta),
+        _firestoreIdMeta,
+        firestoreId.isAcceptableOrUnknown(
+          data['firestore_id']!,
+          _firestoreIdMeta,
+        ),
       );
+    } else if (isInserting) {
+      context.missing(_firestoreIdMeta);
     }
     if (data.containsKey('favorited_at')) {
       context.handle(
@@ -3128,14 +3337,14 @@ class $FavoritesTable extends Favorites
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {cocktailId};
+  Set<GeneratedColumn> get $primaryKey => {firestoreId};
   @override
   Favorite map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Favorite(
-      cocktailId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}cocktail_id'],
+      firestoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}firestore_id'],
       )!,
       favoritedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -3151,20 +3360,20 @@ class $FavoritesTable extends Favorites
 }
 
 class Favorite extends DataClass implements Insertable<Favorite> {
-  final int cocktailId;
+  final String firestoreId;
   final DateTime favoritedAt;
-  const Favorite({required this.cocktailId, required this.favoritedAt});
+  const Favorite({required this.firestoreId, required this.favoritedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['cocktail_id'] = Variable<int>(cocktailId);
+    map['firestore_id'] = Variable<String>(firestoreId);
     map['favorited_at'] = Variable<DateTime>(favoritedAt);
     return map;
   }
 
   FavoritesCompanion toCompanion(bool nullToAbsent) {
     return FavoritesCompanion(
-      cocktailId: Value(cocktailId),
+      firestoreId: Value(firestoreId),
       favoritedAt: Value(favoritedAt),
     );
   }
@@ -3175,7 +3384,7 @@ class Favorite extends DataClass implements Insertable<Favorite> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Favorite(
-      cocktailId: serializer.fromJson<int>(json['cocktailId']),
+      firestoreId: serializer.fromJson<String>(json['firestoreId']),
       favoritedAt: serializer.fromJson<DateTime>(json['favoritedAt']),
     );
   }
@@ -3183,20 +3392,20 @@ class Favorite extends DataClass implements Insertable<Favorite> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'cocktailId': serializer.toJson<int>(cocktailId),
+      'firestoreId': serializer.toJson<String>(firestoreId),
       'favoritedAt': serializer.toJson<DateTime>(favoritedAt),
     };
   }
 
-  Favorite copyWith({int? cocktailId, DateTime? favoritedAt}) => Favorite(
-    cocktailId: cocktailId ?? this.cocktailId,
+  Favorite copyWith({String? firestoreId, DateTime? favoritedAt}) => Favorite(
+    firestoreId: firestoreId ?? this.firestoreId,
     favoritedAt: favoritedAt ?? this.favoritedAt,
   );
   Favorite copyWithCompanion(FavoritesCompanion data) {
     return Favorite(
-      cocktailId: data.cocktailId.present
-          ? data.cocktailId.value
-          : this.cocktailId,
+      firestoreId: data.firestoreId.present
+          ? data.firestoreId.value
+          : this.firestoreId,
       favoritedAt: data.favoritedAt.present
           ? data.favoritedAt.value
           : this.favoritedAt,
@@ -3206,61 +3415,71 @@ class Favorite extends DataClass implements Insertable<Favorite> {
   @override
   String toString() {
     return (StringBuffer('Favorite(')
-          ..write('cocktailId: $cocktailId, ')
+          ..write('firestoreId: $firestoreId, ')
           ..write('favoritedAt: $favoritedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(cocktailId, favoritedAt);
+  int get hashCode => Object.hash(firestoreId, favoritedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Favorite &&
-          other.cocktailId == this.cocktailId &&
+          other.firestoreId == this.firestoreId &&
           other.favoritedAt == this.favoritedAt);
 }
 
 class FavoritesCompanion extends UpdateCompanion<Favorite> {
-  final Value<int> cocktailId;
+  final Value<String> firestoreId;
   final Value<DateTime> favoritedAt;
+  final Value<int> rowid;
   const FavoritesCompanion({
-    this.cocktailId = const Value.absent(),
+    this.firestoreId = const Value.absent(),
     this.favoritedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
   });
   FavoritesCompanion.insert({
-    this.cocktailId = const Value.absent(),
+    required String firestoreId,
     this.favoritedAt = const Value.absent(),
-  });
+    this.rowid = const Value.absent(),
+  }) : firestoreId = Value(firestoreId);
   static Insertable<Favorite> custom({
-    Expression<int>? cocktailId,
+    Expression<String>? firestoreId,
     Expression<DateTime>? favoritedAt,
+    Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (cocktailId != null) 'cocktail_id': cocktailId,
+      if (firestoreId != null) 'firestore_id': firestoreId,
       if (favoritedAt != null) 'favorited_at': favoritedAt,
+      if (rowid != null) 'rowid': rowid,
     });
   }
 
   FavoritesCompanion copyWith({
-    Value<int>? cocktailId,
+    Value<String>? firestoreId,
     Value<DateTime>? favoritedAt,
+    Value<int>? rowid,
   }) {
     return FavoritesCompanion(
-      cocktailId: cocktailId ?? this.cocktailId,
+      firestoreId: firestoreId ?? this.firestoreId,
       favoritedAt: favoritedAt ?? this.favoritedAt,
+      rowid: rowid ?? this.rowid,
     );
   }
 
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (cocktailId.present) {
-      map['cocktail_id'] = Variable<int>(cocktailId.value);
+    if (firestoreId.present) {
+      map['firestore_id'] = Variable<String>(firestoreId.value);
     }
     if (favoritedAt.present) {
       map['favorited_at'] = Variable<DateTime>(favoritedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
     }
     return map;
   }
@@ -3268,8 +3487,9 @@ class FavoritesCompanion extends UpdateCompanion<Favorite> {
   @override
   String toString() {
     return (StringBuffer('FavoritesCompanion(')
-          ..write('cocktailId: $cocktailId, ')
-          ..write('favoritedAt: $favoritedAt')
+          ..write('firestoreId: $firestoreId, ')
+          ..write('favoritedAt: $favoritedAt, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -3305,16 +3525,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     shoppingList,
     favorites,
   ];
-  @override
-  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'cocktails',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('favorites', kind: UpdateKind.delete)],
-    ),
-  ]);
 }
 
 typedef $$CocktailsTableCreateCompanionBuilder =
@@ -3333,6 +3543,10 @@ typedef $$CocktailsTableCreateCompanionBuilder =
       required int difficulty,
       Value<String?> tags,
       Value<String?> imagePath,
+      Value<String?> imageUrl,
+      Value<String> category,
+      Value<bool> isPremium,
+      Value<String?> firestoreId,
     });
 typedef $$CocktailsTableUpdateCompanionBuilder =
     CocktailsCompanion Function({
@@ -3350,6 +3564,10 @@ typedef $$CocktailsTableUpdateCompanionBuilder =
       Value<int> difficulty,
       Value<String?> tags,
       Value<String?> imagePath,
+      Value<String?> imageUrl,
+      Value<String> category,
+      Value<bool> isPremium,
+      Value<String?> firestoreId,
     });
 
 final class $$CocktailsTableReferences
@@ -3378,51 +3596,6 @@ final class $$CocktailsTableReferences
     final cache = $_typedResult.readTableOrNull(
       _cocktailIngredientsRefsTable($_db),
     );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $CollectionCocktailsTable,
-    List<CollectionCocktail>
-  >
-  _collectionCocktailsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.collectionCocktails,
-        aliasName: $_aliasNameGenerator(
-          db.cocktails.id,
-          db.collectionCocktails.cocktailId,
-        ),
-      );
-
-  $$CollectionCocktailsTableProcessedTableManager get collectionCocktailsRefs {
-    final manager = $$CollectionCocktailsTableTableManager(
-      $_db,
-      $_db.collectionCocktails,
-    ).filter((f) => f.cocktailId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _collectionCocktailsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$FavoritesTable, List<Favorite>>
-  _favoritesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.favorites,
-    aliasName: $_aliasNameGenerator(db.cocktails.id, db.favorites.cocktailId),
-  );
-
-  $$FavoritesTableProcessedTableManager get favoritesRefs {
-    final manager = $$FavoritesTableTableManager(
-      $_db,
-      $_db.favorites,
-    ).filter((f) => f.cocktailId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_favoritesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -3508,6 +3681,26 @@ class $$CocktailsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isPremium => $composableBuilder(
+    column: $table.isPremium,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   Expression<bool> cocktailIngredientsRefs(
     Expression<bool> Function($$CocktailIngredientsTableFilterComposer f) f,
   ) {
@@ -3524,56 +3717,6 @@ class $$CocktailsTableFilterComposer
           }) => $$CocktailIngredientsTableFilterComposer(
             $db: $db,
             $table: $db.cocktailIngredients,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> collectionCocktailsRefs(
-    Expression<bool> Function($$CollectionCocktailsTableFilterComposer f) f,
-  ) {
-    final $$CollectionCocktailsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.collectionCocktails,
-      getReferencedColumn: (t) => t.cocktailId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CollectionCocktailsTableFilterComposer(
-            $db: $db,
-            $table: $db.collectionCocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> favoritesRefs(
-    Expression<bool> Function($$FavoritesTableFilterComposer f) f,
-  ) {
-    final $$FavoritesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.favorites,
-      getReferencedColumn: (t) => t.cocktailId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$FavoritesTableFilterComposer(
-            $db: $db,
-            $table: $db.favorites,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3662,6 +3805,26 @@ class $$CocktailsTableOrderingComposer
     column: $table.imagePath,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isPremium => $composableBuilder(
+    column: $table.isPremium,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CocktailsTableAnnotationComposer
@@ -3725,6 +3888,20 @@ class $$CocktailsTableAnnotationComposer
   GeneratedColumn<String> get imagePath =>
       $composableBuilder(column: $table.imagePath, builder: (column) => column);
 
+  GeneratedColumn<String> get imageUrl =>
+      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<bool> get isPremium =>
+      $composableBuilder(column: $table.isPremium, builder: (column) => column);
+
+  GeneratedColumn<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => column,
+  );
+
   Expression<T> cocktailIngredientsRefs<T extends Object>(
     Expression<T> Function($$CocktailIngredientsTableAnnotationComposer a) f,
   ) {
@@ -3750,57 +3927,6 @@ class $$CocktailsTableAnnotationComposer
         );
     return f(composer);
   }
-
-  Expression<T> collectionCocktailsRefs<T extends Object>(
-    Expression<T> Function($$CollectionCocktailsTableAnnotationComposer a) f,
-  ) {
-    final $$CollectionCocktailsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.collectionCocktails,
-          getReferencedColumn: (t) => t.cocktailId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CollectionCocktailsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.collectionCocktails,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> favoritesRefs<T extends Object>(
-    Expression<T> Function($$FavoritesTableAnnotationComposer a) f,
-  ) {
-    final $$FavoritesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.favorites,
-      getReferencedColumn: (t) => t.cocktailId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$FavoritesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.favorites,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
 }
 
 class $$CocktailsTableTableManager
@@ -3816,11 +3942,7 @@ class $$CocktailsTableTableManager
           $$CocktailsTableUpdateCompanionBuilder,
           (Cocktail, $$CocktailsTableReferences),
           Cocktail,
-          PrefetchHooks Function({
-            bool cocktailIngredientsRefs,
-            bool collectionCocktailsRefs,
-            bool favoritesRefs,
-          })
+          PrefetchHooks Function({bool cocktailIngredientsRefs})
         > {
   $$CocktailsTableTableManager(_$AppDatabase db, $CocktailsTable table)
     : super(
@@ -3849,6 +3971,10 @@ class $$CocktailsTableTableManager
                 Value<int> difficulty = const Value.absent(),
                 Value<String?> tags = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<bool> isPremium = const Value.absent(),
+                Value<String?> firestoreId = const Value.absent(),
               }) => CocktailsCompanion(
                 id: id,
                 name: name,
@@ -3864,6 +3990,10 @@ class $$CocktailsTableTableManager
                 difficulty: difficulty,
                 tags: tags,
                 imagePath: imagePath,
+                imageUrl: imageUrl,
+                category: category,
+                isPremium: isPremium,
+                firestoreId: firestoreId,
               ),
           createCompanionCallback:
               ({
@@ -3881,6 +4011,10 @@ class $$CocktailsTableTableManager
                 required int difficulty,
                 Value<String?> tags = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<bool> isPremium = const Value.absent(),
+                Value<String?> firestoreId = const Value.absent(),
               }) => CocktailsCompanion.insert(
                 id: id,
                 name: name,
@@ -3896,6 +4030,10 @@ class $$CocktailsTableTableManager
                 difficulty: difficulty,
                 tags: tags,
                 imagePath: imagePath,
+                imageUrl: imageUrl,
+                category: category,
+                isPremium: isPremium,
+                firestoreId: firestoreId,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -3905,89 +4043,38 @@ class $$CocktailsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback:
-              ({
-                cocktailIngredientsRefs = false,
-                collectionCocktailsRefs = false,
-                favoritesRefs = false,
-              }) {
-                return PrefetchHooks(
-                  db: db,
-                  explicitlyWatchedTables: [
-                    if (cocktailIngredientsRefs) db.cocktailIngredients,
-                    if (collectionCocktailsRefs) db.collectionCocktails,
-                    if (favoritesRefs) db.favorites,
-                  ],
-                  addJoins: null,
-                  getPrefetchedDataCallback: (items) async {
-                    return [
-                      if (cocktailIngredientsRefs)
-                        await $_getPrefetchedData<
-                          Cocktail,
-                          $CocktailsTable,
-                          CocktailIngredient
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CocktailsTableReferences
-                              ._cocktailIngredientsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CocktailsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).cocktailIngredientsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.cocktailId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (collectionCocktailsRefs)
-                        await $_getPrefetchedData<
-                          Cocktail,
-                          $CocktailsTable,
-                          CollectionCocktail
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CocktailsTableReferences
-                              ._collectionCocktailsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CocktailsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).collectionCocktailsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.cocktailId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (favoritesRefs)
-                        await $_getPrefetchedData<
-                          Cocktail,
-                          $CocktailsTable,
-                          Favorite
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CocktailsTableReferences
-                              ._favoritesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CocktailsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).favoritesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.cocktailId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                    ];
-                  },
-                );
+          prefetchHooksCallback: ({cocktailIngredientsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (cocktailIngredientsRefs) db.cocktailIngredients,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (cocktailIngredientsRefs)
+                    await $_getPrefetchedData<
+                      Cocktail,
+                      $CocktailsTable,
+                      CocktailIngredient
+                    >(
+                      currentTable: table,
+                      referencedTable: $$CocktailsTableReferences
+                          ._cocktailIngredientsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$CocktailsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).cocktailIngredientsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.cocktailId == item.id),
+                      typedResults: items,
+                    ),
+                ];
               },
+            );
+          },
         ),
       );
 }
@@ -4004,11 +4091,7 @@ typedef $$CocktailsTableProcessedTableManager =
       $$CocktailsTableUpdateCompanionBuilder,
       (Cocktail, $$CocktailsTableReferences),
       Cocktail,
-      PrefetchHooks Function({
-        bool cocktailIngredientsRefs,
-        bool collectionCocktailsRefs,
-        bool favoritesRefs,
-      })
+      PrefetchHooks Function({bool cocktailIngredientsRefs})
     >;
 typedef $$IngredientsTableCreateCompanionBuilder =
     IngredientsCompanion Function({
@@ -5227,14 +5310,14 @@ typedef $$CollectionCocktailsTableCreateCompanionBuilder =
     CollectionCocktailsCompanion Function({
       Value<int> id,
       required int collectionId,
-      required int cocktailId,
+      required String firestoreId,
       Value<DateTime> addedAt,
     });
 typedef $$CollectionCocktailsTableUpdateCompanionBuilder =
     CollectionCocktailsCompanion Function({
       Value<int> id,
       Value<int> collectionId,
-      Value<int> cocktailId,
+      Value<String> firestoreId,
       Value<DateTime> addedAt,
     });
 
@@ -5272,28 +5355,6 @@ final class $$CollectionCocktailsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
-
-  static $CocktailsTable _cocktailIdTable(_$AppDatabase db) =>
-      db.cocktails.createAlias(
-        $_aliasNameGenerator(
-          db.collectionCocktails.cocktailId,
-          db.cocktails.id,
-        ),
-      );
-
-  $$CocktailsTableProcessedTableManager get cocktailId {
-    final $_column = $_itemColumn<int>('cocktail_id')!;
-
-    final manager = $$CocktailsTableTableManager(
-      $_db,
-      $_db.cocktails,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_cocktailIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
 }
 
 class $$CollectionCocktailsTableFilterComposer
@@ -5307,6 +5368,11 @@ class $$CollectionCocktailsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5337,29 +5403,6 @@ class $$CollectionCocktailsTableFilterComposer
     );
     return composer;
   }
-
-  $$CocktailsTableFilterComposer get cocktailId {
-    final $$CocktailsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.cocktailId,
-      referencedTable: $db.cocktails,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CocktailsTableFilterComposer(
-            $db: $db,
-            $table: $db.cocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CollectionCocktailsTableOrderingComposer
@@ -5373,6 +5416,11 @@ class $$CollectionCocktailsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5403,29 +5451,6 @@ class $$CollectionCocktailsTableOrderingComposer
     );
     return composer;
   }
-
-  $$CocktailsTableOrderingComposer get cocktailId {
-    final $$CocktailsTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.cocktailId,
-      referencedTable: $db.cocktails,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CocktailsTableOrderingComposer(
-            $db: $db,
-            $table: $db.cocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CollectionCocktailsTableAnnotationComposer
@@ -5439,6 +5464,11 @@ class $$CollectionCocktailsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
@@ -5465,29 +5495,6 @@ class $$CollectionCocktailsTableAnnotationComposer
     );
     return composer;
   }
-
-  $$CocktailsTableAnnotationComposer get cocktailId {
-    final $$CocktailsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.cocktailId,
-      referencedTable: $db.cocktails,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CocktailsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.cocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CollectionCocktailsTableTableManager
@@ -5503,7 +5510,7 @@ class $$CollectionCocktailsTableTableManager
           $$CollectionCocktailsTableUpdateCompanionBuilder,
           (CollectionCocktail, $$CollectionCocktailsTableReferences),
           CollectionCocktail,
-          PrefetchHooks Function({bool collectionId, bool cocktailId})
+          PrefetchHooks Function({bool collectionId})
         > {
   $$CollectionCocktailsTableTableManager(
     _$AppDatabase db,
@@ -5528,24 +5535,24 @@ class $$CollectionCocktailsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> collectionId = const Value.absent(),
-                Value<int> cocktailId = const Value.absent(),
+                Value<String> firestoreId = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => CollectionCocktailsCompanion(
                 id: id,
                 collectionId: collectionId,
-                cocktailId: cocktailId,
+                firestoreId: firestoreId,
                 addedAt: addedAt,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 required int collectionId,
-                required int cocktailId,
+                required String firestoreId,
                 Value<DateTime> addedAt = const Value.absent(),
               }) => CollectionCocktailsCompanion.insert(
                 id: id,
                 collectionId: collectionId,
-                cocktailId: cocktailId,
+                firestoreId: firestoreId,
                 addedAt: addedAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -5556,7 +5563,7 @@ class $$CollectionCocktailsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({collectionId = false, cocktailId = false}) {
+          prefetchHooksCallback: ({collectionId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -5591,21 +5598,6 @@ class $$CollectionCocktailsTableTableManager
                               )
                               as T;
                     }
-                    if (cocktailId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.cocktailId,
-                                referencedTable:
-                                    $$CollectionCocktailsTableReferences
-                                        ._cocktailIdTable(db),
-                                referencedColumn:
-                                    $$CollectionCocktailsTableReferences
-                                        ._cocktailIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
 
                     return state;
                   },
@@ -5630,7 +5622,7 @@ typedef $$CollectionCocktailsTableProcessedTableManager =
       $$CollectionCocktailsTableUpdateCompanionBuilder,
       (CollectionCocktail, $$CollectionCocktailsTableReferences),
       CollectionCocktail,
-      PrefetchHooks Function({bool collectionId, bool cocktailId})
+      PrefetchHooks Function({bool collectionId})
     >;
 typedef $$SavedBarsTableCreateCompanionBuilder =
     SavedBarsCompanion Function({
@@ -6647,38 +6639,16 @@ typedef $$ShoppingListTableProcessedTableManager =
     >;
 typedef $$FavoritesTableCreateCompanionBuilder =
     FavoritesCompanion Function({
-      Value<int> cocktailId,
+      required String firestoreId,
       Value<DateTime> favoritedAt,
+      Value<int> rowid,
     });
 typedef $$FavoritesTableUpdateCompanionBuilder =
     FavoritesCompanion Function({
-      Value<int> cocktailId,
+      Value<String> firestoreId,
       Value<DateTime> favoritedAt,
+      Value<int> rowid,
     });
-
-final class $$FavoritesTableReferences
-    extends BaseReferences<_$AppDatabase, $FavoritesTable, Favorite> {
-  $$FavoritesTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $CocktailsTable _cocktailIdTable(_$AppDatabase db) =>
-      db.cocktails.createAlias(
-        $_aliasNameGenerator(db.favorites.cocktailId, db.cocktails.id),
-      );
-
-  $$CocktailsTableProcessedTableManager get cocktailId {
-    final $_column = $_itemColumn<int>('cocktail_id')!;
-
-    final manager = $$CocktailsTableTableManager(
-      $_db,
-      $_db.cocktails,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_cocktailIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-}
 
 class $$FavoritesTableFilterComposer
     extends Composer<_$AppDatabase, $FavoritesTable> {
@@ -6689,33 +6659,15 @@ class $$FavoritesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get favoritedAt => $composableBuilder(
     column: $table.favoritedAt,
     builder: (column) => ColumnFilters(column),
   );
-
-  $$CocktailsTableFilterComposer get cocktailId {
-    final $$CocktailsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.cocktailId,
-      referencedTable: $db.cocktails,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CocktailsTableFilterComposer(
-            $db: $db,
-            $table: $db.cocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$FavoritesTableOrderingComposer
@@ -6727,33 +6679,15 @@ class $$FavoritesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get favoritedAt => $composableBuilder(
     column: $table.favoritedAt,
     builder: (column) => ColumnOrderings(column),
   );
-
-  $$CocktailsTableOrderingComposer get cocktailId {
-    final $$CocktailsTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.cocktailId,
-      referencedTable: $db.cocktails,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CocktailsTableOrderingComposer(
-            $db: $db,
-            $table: $db.cocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$FavoritesTableAnnotationComposer
@@ -6765,33 +6699,15 @@ class $$FavoritesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get favoritedAt => $composableBuilder(
     column: $table.favoritedAt,
     builder: (column) => column,
   );
-
-  $$CocktailsTableAnnotationComposer get cocktailId {
-    final $$CocktailsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.cocktailId,
-      referencedTable: $db.cocktails,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CocktailsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.cocktails,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$FavoritesTableTableManager
@@ -6805,9 +6721,9 @@ class $$FavoritesTableTableManager
           $$FavoritesTableAnnotationComposer,
           $$FavoritesTableCreateCompanionBuilder,
           $$FavoritesTableUpdateCompanionBuilder,
-          (Favorite, $$FavoritesTableReferences),
+          (Favorite, BaseReferences<_$AppDatabase, $FavoritesTable, Favorite>),
           Favorite,
-          PrefetchHooks Function({bool cocktailId})
+          PrefetchHooks Function()
         > {
   $$FavoritesTableTableManager(_$AppDatabase db, $FavoritesTable table)
     : super(
@@ -6822,69 +6738,28 @@ class $$FavoritesTableTableManager
               $$FavoritesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<int> cocktailId = const Value.absent(),
+                Value<String> firestoreId = const Value.absent(),
                 Value<DateTime> favoritedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
               }) => FavoritesCompanion(
-                cocktailId: cocktailId,
+                firestoreId: firestoreId,
                 favoritedAt: favoritedAt,
+                rowid: rowid,
               ),
           createCompanionCallback:
               ({
-                Value<int> cocktailId = const Value.absent(),
+                required String firestoreId,
                 Value<DateTime> favoritedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
               }) => FavoritesCompanion.insert(
-                cocktailId: cocktailId,
+                firestoreId: firestoreId,
                 favoritedAt: favoritedAt,
+                rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$FavoritesTableReferences(db, table, e),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({cocktailId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (cocktailId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.cocktailId,
-                                referencedTable: $$FavoritesTableReferences
-                                    ._cocktailIdTable(db),
-                                referencedColumn: $$FavoritesTableReferences
-                                    ._cocktailIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-
-                    return state;
-                  },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ),
       );
 }
@@ -6899,9 +6774,9 @@ typedef $$FavoritesTableProcessedTableManager =
       $$FavoritesTableAnnotationComposer,
       $$FavoritesTableCreateCompanionBuilder,
       $$FavoritesTableUpdateCompanionBuilder,
-      (Favorite, $$FavoritesTableReferences),
+      (Favorite, BaseReferences<_$AppDatabase, $FavoritesTable, Favorite>),
       Favorite,
-      PrefetchHooks Function({bool cocktailId})
+      PrefetchHooks Function()
     >;
 
 class $AppDatabaseManager {

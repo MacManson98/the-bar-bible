@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "880092017001",
+    "project_id": "the-bar-bible-a7b98",
+    "storage_bucket": "the-bar-bible-a7b98.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:880092017001:android:bcd4d57730a6040d4ccdf8",
+        "android_client_info": {
+          "package_name": "com.tomcon.thebarbible"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEb-gOr2rlti2-F1wJYlCc5zqbXFpw7FY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

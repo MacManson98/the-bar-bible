@@ -24,7 +24,11 @@ class Cocktails extends Table {
   TextColumn get baseSpirit => text()();
   IntColumn get difficulty => integer()(); // 1-5
   TextColumn get tags => text().nullable()(); // JSON array as string for now
-  TextColumn get imagePath => text().nullable()(); // Path to cocktail image
+  TextColumn get imagePath => text().nullable()(); // Path to cocktail image (local asset)
+  TextColumn get imageUrl => text().nullable()(); // Firebase Storage URL
+  TextColumn get category => text().withDefault(const Constant('cocktail'))(); // cocktail | shot | mocktail
+  BoolColumn get isPremium => boolean().withDefault(const Constant(false))();
+  TextColumn get firestoreId => text().nullable()(); // Firestore document ID
 }
 
 // Ingredients table
@@ -58,7 +62,7 @@ class Collections extends Table {
 class CollectionCocktails extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get collectionId => integer().references(Collections, #id)();
-  IntColumn get cocktailId => integer().references(Cocktails, #id)();
+  TextColumn get firestoreId => text()(); // Firestore document ID (stable across syncs)
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -96,13 +100,12 @@ class ShoppingList extends Table {
 
 // Favorites table - simple, fast access to favorited cocktails
 class Favorites extends Table {
-  IntColumn get cocktailId =>
-      integer().references(Cocktails, #id, onDelete: KeyAction.cascade)();
+  TextColumn get firestoreId => text()(); // Firestore document ID (stable across syncs)
   DateTimeColumn get favoritedAt =>
       dateTime().clientDefault(() => DateTime.now())();
 
   @override
-  Set<Column> get primaryKey => {cocktailId}; // Cocktail ID is the primary key (one favorite per cocktail)
+  Set<Column> get primaryKey => {firestoreId};
 }
 
 @DriftDatabase(
@@ -122,7 +125,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 9; // Add unique key for saved bar ingredients
+  int get schemaVersion => 16;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -187,38 +190,72 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_bar_ingredients_unique
 ON saved_bar_ingredients(saved_bar_id, ingredient_id)
 ''');
       }
+      if (from <= 9) {
+        // Add tiles_notes column — safe to ignore if it already exists (e.g.
+        // a DB that was created fresh via onCreate when schemaVersion was 9).
+        try {
+          await migrator.addColumn(cocktails, cocktails.tilesNotes);
+        } catch (_) {}
+      }
+      if (from <= 11) {
+        await migrator.addColumn(cocktails, cocktails.category);
+      }
+      if (from <= 12) {
+        await customStatement('ALTER TABLE cocktails ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0');
+      }
+      if (from <= 13) {
+        await customStatement('ALTER TABLE cocktails ADD COLUMN firestore_id TEXT');
+        await customStatement('DROP TABLE IF EXISTS favorites');
+        await customStatement('CREATE TABLE IF NOT EXISTS favorites (firestore_id TEXT NOT NULL PRIMARY KEY, favorited_at INTEGER NOT NULL)');
+      }
+      if (from <= 14) {
+        await customStatement('DROP TABLE IF EXISTS collection_cocktails');
+        await customStatement('CREATE TABLE IF NOT EXISTS collection_cocktails (id INTEGER PRIMARY KEY AUTOINCREMENT, collection_id INTEGER NOT NULL REFERENCES collections(id), firestore_id TEXT NOT NULL, added_at INTEGER NOT NULL DEFAULT (unixepoch()))');
+      }
+      if (from <= 15) {
+        await customStatement('ALTER TABLE cocktails ADD COLUMN image_url TEXT');
+      }
+      if (from <= 10) {
+        // Create tables that exist in Drift schema but may be absent
+        // from the Python-exported asset DB
+        await customStatement('CREATE TABLE IF NOT EXISTS collections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()))');
+        await customStatement('CREATE TABLE IF NOT EXISTS collection_cocktails (id INTEGER PRIMARY KEY AUTOINCREMENT, collection_id INTEGER NOT NULL REFERENCES collections(id), cocktail_id INTEGER NOT NULL REFERENCES cocktails(id), added_at INTEGER NOT NULL DEFAULT (unixepoch()))');
+        await customStatement('CREATE TABLE IF NOT EXISTS saved_bars (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, is_default INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (unixepoch()), last_used INTEGER NOT NULL DEFAULT (unixepoch()))');
+        await customStatement('CREATE TABLE IF NOT EXISTS saved_bar_ingredients (id INTEGER PRIMARY KEY AUTOINCREMENT, saved_bar_id INTEGER NOT NULL REFERENCES saved_bars(id), ingredient_id INTEGER NOT NULL REFERENCES ingredients(id), added_at INTEGER NOT NULL DEFAULT (unixepoch()), UNIQUE(saved_bar_id, ingredient_id))');
+        await customStatement('CREATE TABLE IF NOT EXISTS shopping_list (id INTEGER PRIMARY KEY AUTOINCREMENT, ingredient_id INTEGER NOT NULL REFERENCES ingredients(id), unlocks_count INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL DEFAULT (unixepoch()))');
+      }
     },
   );
 
   // Favorites helper methods
-  Future<bool> isFavorited(int cocktailId) async {
+  Future<bool> isFavorited(String firestoreId) async {
     final result = await (select(
       favorites,
-    )..where((f) => f.cocktailId.equals(cocktailId))).getSingleOrNull();
+    )..where((f) => f.firestoreId.equals(firestoreId))).getSingleOrNull();
     return result != null;
   }
 
-  Future<void> toggleFavorite(int cocktailId) async {
+  Future<void> toggleFavorite(String firestoreId) async {
     final existing = await (select(
       favorites,
-    )..where((f) => f.cocktailId.equals(cocktailId))).getSingleOrNull();
+    )..where((f) => f.firestoreId.equals(firestoreId))).getSingleOrNull();
 
     if (existing != null) {
       // Remove from favorites
       await (delete(
         favorites,
-      )..where((f) => f.cocktailId.equals(cocktailId))).go();
+      )..where((f) => f.firestoreId.equals(firestoreId))).go();
     } else {
       // Add to favorites
       await into(
         favorites,
-      ).insert(FavoritesCompanion(cocktailId: Value(cocktailId)));
+      ).insert(FavoritesCompanion(firestoreId: Value(firestoreId)));
     }
   }
 
   Future<List<Cocktail>> getFavoriteCocktails() async {
     final query = select(cocktails).join([
-      innerJoin(favorites, favorites.cocktailId.equalsExp(cocktails.id)),
+      innerJoin(favorites, favorites.firestoreId.equalsExp(cocktails.firestoreId)),
     ])..orderBy([OrderingTerm.desc(favorites.favoritedAt)]);
 
     final results = await query.get();

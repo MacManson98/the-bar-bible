@@ -6,15 +6,19 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../core/services/bar_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/bar_create_diagnostics.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
+import '../data/flavor_data.dart';
 import '../data/ingredient_data.dart';
 import '../widgets/bar_selector_dropdown.dart';
+import '../services/purchase_service.dart';
 import 'cocktail_detail_screen.dart';
+import 'paywall_screen.dart';
 
 enum _FinderMode { canMake, oneAway, all }
 
@@ -24,12 +28,15 @@ class FinderScreen extends StatefulWidget {
   final AppDatabase database;
   final ValueChanged<int>? onBarSwitched;
   final VoidCallback? onNavigateToMyBar;
+  /// null = show all, 'cocktail' | 'shot' | 'mocktail' to restrict this instance.
+  final String? categoryFilter;
 
   const FinderScreen({
     super.key,
     required this.database,
     this.onBarSwitched,
     this.onNavigateToMyBar,
+    this.categoryFilter,
   });
 
   @override
@@ -37,10 +44,10 @@ class FinderScreen extends StatefulWidget {
 }
 
 class FinderScreenState extends State<FinderScreen>
-    with TickerProviderStateMixin {
-  static const int _railPreviewLimitNormal = 10;
-  static const int _railPreviewLimitSmall = 10;
-  static const int _railPreviewLimitStartHereSmall = 10;
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  static const int _railPreviewLimit = 10;
   static const int _smallTilesThreshold = 12;
   static const double _railTileHeight = 220;
 
@@ -59,8 +66,9 @@ class FinderScreenState extends State<FinderScreen>
 
   String _searchQuery = '';
   String _spiritFilter = 'All';
+  final Set<String> _flavorFilters = {};
   String _sortBy = 'match';
-  bool _isSpiritFilterOpen = false;
+  bool _isFilterSheetOpen = false;
   bool _isRailTransitioning = false;
   bool _isCreatingBar = false;
   BarCreateDiagnosticsFlow? _createDiagnostics;
@@ -198,8 +206,8 @@ class FinderScreenState extends State<FinderScreen>
     _sortList(snapshot.exact);
     _sortList(snapshot.missing1);
     _sortList(snapshot.missing2Plus);
-    _animController.reset();
     if (!mounted) return;
+    _animController.reset();
 
     setState(() {
       _activeBar = activeBar;
@@ -242,6 +250,16 @@ class FinderScreenState extends State<FinderScreen>
     _allCocktails = await widget.database
         .select(widget.database.cocktails)
         .get();
+    // Filter out premium cocktails for free users
+    final purchaseService = context.read<PurchaseService>();
+    if (!purchaseService.isPremium) {
+      _allCocktails = _allCocktails.where((c) => !c.isPremium).toList();
+    }
+    if (widget.categoryFilter != null) {
+      _allCocktails = _allCocktails
+          .where((c) => c.category == widget.categoryFilter)
+          .toList();
+    }
     final allIngredients = await widget.database
         .select(widget.database.ingredients)
         .get();
@@ -406,6 +424,18 @@ class FinderScreenState extends State<FinderScreen>
           m.cocktail.baseSpirit.toLowerCase() != _spiritFilter.toLowerCase()) {
         return false;
       }
+      if (_flavorFilters.isNotEmpty) {
+        final meta = _cocktailMetaById[m.cocktail.id];
+        if (meta == null) return false;
+        final matchesAny = _flavorFilters.any((label) {
+          final chip = kFlavorChips.firstWhere(
+            (c) => c.label == label,
+            orElse: () => FlavorChip(label: label, aliases: {label}),
+          );
+          return _hasTasteTag(meta, chip.aliases);
+        });
+        if (!matchesAny) return false;
+      }
       return true;
     }).toList();
   }
@@ -423,6 +453,7 @@ class FinderScreenState extends State<FinderScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppTheme.primaryDark,
@@ -473,7 +504,7 @@ class FinderScreenState extends State<FinderScreen>
                       },
                       child: Opacity(
                         key: ValueKey(
-                          '${_activeBar?.id ?? -1}_$_searchQuery$_spiritFilter',
+                          '${_activeBar?.id ?? -1}_$_searchQuery$_spiritFilter${_flavorFilters.join(',')}',
                         ),
                         opacity: 1.0,
                         child: _buildResultsForMode(_modeResultsCache),
@@ -539,7 +570,7 @@ class FinderScreenState extends State<FinderScreen>
             .where((m) => !usedIds.contains(m.cocktail.id))
             .toList();
         final startPreview = startAvailable
-            .take(min(_railPreviewLimitStartHereSmall, _railPreviewLimitNormal))
+            .take(_railPreviewLimit)
             .toList();
         if (startPreview.isNotEmpty) {
           usedIds.addAll(startPreview.map((m) => m.cocktail.id));
@@ -558,7 +589,7 @@ class FinderScreenState extends State<FinderScreen>
         final railAvailable = rail.matches
             .where((m) => !usedIds.contains(m.cocktail.id))
             .toList();
-        final preview = railAvailable.take(_railPreviewLimitSmall).toList();
+        final preview = railAvailable.take(_railPreviewLimit).toList();
         if (preview.length < 2) continue;
         usedIds.addAll(preview.map((m) => m.cocktail.id));
         sections.add(
@@ -575,7 +606,7 @@ class FinderScreenState extends State<FinderScreen>
         final railAvailable = rail.matches
             .where((m) => !usedIds.contains(m.cocktail.id))
             .toList();
-        final preview = railAvailable.take(_railPreviewLimitNormal).toList();
+        final preview = railAvailable.take(_railPreviewLimit).toList();
         if (preview.length < 2) continue;
         usedIds.addAll(preview.map((m) => m.cocktail.id));
         sections.add(
@@ -593,7 +624,7 @@ class FinderScreenState extends State<FinderScreen>
         sections.clear();
         for (final rail in rails) {
           final railAvailable = List<CocktailMatch>.from(rail.matches);
-          final preview = railAvailable.take(_railPreviewLimitNormal).toList();
+          final preview = railAvailable.take(_railPreviewLimit).toList();
           if (preview.length < 2) continue;
           sections.add(
             _RailSectionData(
@@ -622,7 +653,7 @@ class FinderScreenState extends State<FinderScreen>
     }
     final allUnique = uniqueById.values.toList()
       ..sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
-    final preview = allUnique.take(_railPreviewLimitNormal).toList();
+    final preview = allUnique.take(_railPreviewLimit).toList();
     if (preview.isEmpty) return null;
     final rail = _FinderRailBucket(
       id: 'all_makeable',
@@ -985,9 +1016,11 @@ class FinderScreenState extends State<FinderScreen>
   }
 
   Widget _buildFilterButton() {
-    final hasFilter = _spiritFilter != 'All';
+    final activeCount =
+        (_spiritFilter != 'All' ? 1 : 0) + _flavorFilters.length;
+    final hasFilter = activeCount > 0;
     return GestureDetector(
-      onTap: _showSpiritFilterSheet,
+      onTap: _showFilterSheet,
       child: Container(
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1008,7 +1041,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
             const SizedBox(width: 4),
             Text(
-              hasFilter ? _spiritFilter : 'Spirit',
+              hasFilter ? 'Filters ($activeCount)' : 'Filters',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -1022,6 +1055,7 @@ class FinderScreenState extends State<FinderScreen>
               GestureDetector(
                 onTap: () => setState(() {
                   _spiritFilter = 'All';
+                  _flavorFilters.clear();
                   _refreshDerivedCaches();
                 }),
                 child: const Icon(
@@ -1451,89 +1485,201 @@ class FinderScreenState extends State<FinderScreen>
     // mounted guard is inside _applyActiveBarSnapshot
   }
 
-  void _showSpiritFilterSheet() {
-    if (_isSpiritFilterOpen) return;
-    _isSpiritFilterOpen = true;
-    final spirits = [
-      'All',
-      'Gin',
-      'Vodka',
-      'Rum',
-      'Bourbon',
-      'Whiskey',
-      'Tequila',
-      'Brandy',
-      'Cognac',
-    ];
+  void _showFilterSheet() {
+    if (_isFilterSheetOpen) return;
+    _isFilterSheetOpen = true;
+
+    const spirits = ['All', 'Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Tequila', 'Brandy', 'Cognac'];
+
+    String tempSpirit = _spiritFilter;
+    final tempFlavors = Set<String>.from(_flavorFilters);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: AppTheme.surfaceDark,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'FILTER BY SPIRIT',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                color: AppTheme.accentGold,
-              ),
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModal) {
+          final anyActive = tempSpirit != 'All' || tempFlavors.isNotEmpty;
+          return Container(
+            decoration: const BoxDecoration(
+              color: AppTheme.surfaceDark,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: spirits.map((s) {
-                final sel = _spiritFilter == s;
-                return GestureDetector(
+            padding: EdgeInsets.fromLTRB(
+              24, 20, 24,
+              24 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    const Text(
+                      'FILTERS',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2.0,
+                        color: AppTheme.accentGold,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (anyActive)
+                      GestureDetector(
+                        onTap: () => setModal(() {
+                          tempSpirit = 'All';
+                          tempFlavors.clear();
+                        }),
+                        child: Text(
+                          'Clear all',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.accentGold.withValues(alpha: 0.7),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Spirit section
+                Text(
+                  'SPIRIT',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.8,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: spirits.map((s) {
+                    final sel = tempSpirit == s;
+                    return GestureDetector(
+                      onTap: () => setModal(() => tempSpirit = s),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: sel
+                              ? AppTheme.accentGold.withValues(alpha: 0.18)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: sel ? AppTheme.accentGold : AppTheme.surfaceLight,
+                            width: sel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Text(
+                          s,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                            color: sel ? AppTheme.accentGold : AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Flavor section
+                Text(
+                  'FLAVOR',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.8,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: kFlavorChips.map((chip) {
+                    final sel = tempFlavors.contains(chip.label);
+                    return GestureDetector(
+                      onTap: () => setModal(() {
+                        if (sel) {
+                          tempFlavors.remove(chip.label);
+                        } else {
+                          tempFlavors.add(chip.label);
+                        }
+                      }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: sel
+                              ? AppTheme.accentGold.withValues(alpha: 0.18)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: sel ? AppTheme.accentGold : AppTheme.surfaceLight,
+                            width: sel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Text(
+                          chip.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                            color: sel ? AppTheme.accentGold : AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 28),
+
+                // Apply button
+                GestureDetector(
                   onTap: () {
                     setState(() {
-                      _spiritFilter = s;
+                      _spiritFilter = tempSpirit;
+                      _flavorFilters
+                        ..clear()
+                        ..addAll(tempFlavors);
                       _refreshDerivedCaches();
                     });
                     Navigator.pop(context);
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
-                      color: sel ? AppTheme.accentGold : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: sel
-                            ? AppTheme.accentGold
-                            : AppTheme.surfaceLight,
-                      ),
+                      color: AppTheme.accentGold,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      s,
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'Apply filters',
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: sel ? FontWeight.bold : FontWeight.w500,
-                        color: sel
-                            ? AppTheme.primaryDark
-                            : AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryDark,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
+          );
+        },
       ),
-    ).whenComplete(() => _isSpiritFilterOpen = false);
+    ).whenComplete(() => _isFilterSheetOpen = false);
   }
 
   PopupMenuItem<String> _sortItem(String value, String label) {
@@ -1587,7 +1733,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
             const SizedBox(height: 10),
             const Text(
-              'Add the ingredients you have and Finder\nwill show what cocktails you can make.',
+              'Add the ingredients you have to see\nwhat cocktails you can make.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -1655,7 +1801,7 @@ class FinderScreenState extends State<FinderScreen>
     }
     final canMake = _filteredExactCache;
 
-    if (canMake.isEmpty && _searchQuery.isEmpty && _spiritFilter == 'All') {
+    if (canMake.isEmpty && _searchQuery.isEmpty && _spiritFilter == 'All' && _flavorFilters.isEmpty) {
       return _buildFinderPurposeEmptyState();
     }
 
@@ -1676,6 +1822,7 @@ class FinderScreenState extends State<FinderScreen>
                 setState(() {
                   _searchQuery = '';
                   _spiritFilter = 'All';
+                  _flavorFilters.clear();
                   _refreshDerivedCaches();
                 });
               },
@@ -2536,7 +2683,7 @@ class FinderScreenState extends State<FinderScreen>
     }
     if (fallback.length < 2) {
       return matches
-          .take(min(_railPreviewLimitNormal, matches.length))
+          .take(min(_railPreviewLimit, matches.length))
           .toList();
     }
     return fallback;
@@ -2829,7 +2976,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
             const SizedBox(height: 18),
             Text(
-              'Finder uses "$barName" to\nshow cocktails you can make.',
+              'Showing cocktails you can make\nwith "$barName".',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 16,
@@ -2840,7 +2987,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
             const SizedBox(height: 10),
             Text(
-              'Add ingredients to your bar and Finder will instantly list cocktails that match your inventory.',
+              'Add ingredients to your bar and this tab will instantly list cocktails that match your inventory.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -3504,3 +3651,4 @@ class _BarQuickStats {
     required this.canMakeCount,
   });
 }
+

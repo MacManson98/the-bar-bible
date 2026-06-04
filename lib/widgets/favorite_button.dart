@@ -10,7 +10,7 @@ import '../core/theme/app_theme.dart';
 /// - Optional snackbar message
 class FavoriteButton extends StatefulWidget {
   final AppDatabase database;
-  final int cocktailId;
+  final String firestoreId;
   final bool showSnackbar;
   final Color? activeColor;
   final Color? inactiveColor;
@@ -19,7 +19,7 @@ class FavoriteButton extends StatefulWidget {
   const FavoriteButton({
     super.key,
     required this.database,
-    required this.cocktailId,
+    required this.firestoreId,
     this.showSnackbar = true,
     this.activeColor,
     this.inactiveColor,
@@ -60,7 +60,7 @@ class _FavoriteButtonState extends State<FavoriteButton>
   }
 
   Future<void> _checkFavoriteStatus() async {
-    final favorited = await widget.database.isFavorited(widget.cocktailId);
+    final favorited = await widget.database.isFavorited(widget.firestoreId);
     if (mounted) {
       setState(() {
         isFavorited = favorited;
@@ -70,22 +70,11 @@ class _FavoriteButtonState extends State<FavoriteButton>
   }
 
   Future<void> _toggleFavorite() async {
-    // Haptic feedback
     HapticFeedback.lightImpact();
-    
-    // Optimistic UI update
-    setState(() {
-      isFavorited = !isFavorited;
-    });
-    
-    // Animate
-    _animationController.forward().then((_) {
-      _animationController.reverse();
-    });
-    
-    // Update database
+    setState(() { isFavorited = !isFavorited; });
+    _animationController.forward().then((_) { _animationController.reverse(); });
     try {
-      await widget.database.toggleFavorite(widget.cocktailId);
+      await widget.database.toggleFavorite(widget.firestoreId);
       
       // Show snackbar if enabled
       if (widget.showSnackbar && mounted) {
@@ -156,12 +145,12 @@ class _FavoriteButtonState extends State<FavoriteButton>
 /// Compact favorite icon for use in card corners
 class FavoriteIconCompact extends StatefulWidget {
   final AppDatabase database;
-  final int cocktailId;
+  final String firestoreId;
   
   const FavoriteIconCompact({
     super.key,
     required this.database,
-    required this.cocktailId,
+    required this.firestoreId,
   });
 
   @override
@@ -179,7 +168,7 @@ class _FavoriteIconCompactState extends State<FavoriteIconCompact> {
   }
 
   Future<void> _checkFavoriteStatus() async {
-    final favorited = await widget.database.isFavorited(widget.cocktailId);
+    final favorited = await widget.database.isFavorited(widget.firestoreId);
     if (mounted) {
       setState(() {
         isFavorited = favorited;
@@ -190,13 +179,9 @@ class _FavoriteIconCompactState extends State<FavoriteIconCompact> {
 
   Future<void> _toggleFavorite() async {
     HapticFeedback.lightImpact();
-    
-    setState(() {
-      isFavorited = !isFavorited;
-    });
-    
+    setState(() { isFavorited = !isFavorited; });
     try {
-      await widget.database.toggleFavorite(widget.cocktailId);
+      await widget.database.toggleFavorite(widget.firestoreId);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

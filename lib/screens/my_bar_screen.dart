@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,7 +39,10 @@ class MyBarScreen extends StatefulWidget {
   State<MyBarScreen> createState() => MyBarScreenState();
 }
 
-class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin {
+class MyBarScreenState extends State<MyBarScreen>
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   List<Ingredient> _allIngredients = [];
   Set<int> _barIngredientIds = {};
   SavedBar? _activeBar;
@@ -241,7 +244,9 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
     const base = 'new bar';
     if (!names.contains(base)) return 'New Bar';
     var index = 2;
-    while (names.contains('$base $index')) index++;
+    while (names.contains('$base $index')) {
+      index++;
+    }
     return 'New Bar $index';
   }
 
@@ -531,7 +536,7 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
                           widget.onNavigateToFinder?.call();
                         }
                       },
-                      child: Text(single ? 'View Cocktail' : 'View in Finder'),
+                      child: Text(single ? 'View Cocktail' : 'View Cocktails'),
                     ),
                   ),
                 ],
@@ -882,6 +887,7 @@ class MyBarScreenState extends State<MyBarScreen> with TickerProviderStateMixin 
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppTheme.primaryDark,
