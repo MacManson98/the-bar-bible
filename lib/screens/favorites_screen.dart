@@ -6,6 +6,7 @@ import '../core/utils/image_utils.dart';
 import '../data/database.dart';
 import '../widgets/vault/vault_widgets.dart';
 import 'cocktail_detail_screen.dart';
+
 class FavoritesScreen extends StatefulWidget {
   final AppDatabase database;
   final VoidCallback? onNavigateToBrowse;
@@ -82,7 +83,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               subtitle: '${_favorites.length} ${_favorites.length == 1 ? 'cocktail' : 'cocktails'}',
               showBack: isPushedRoute,
             ),
-    if (!_isLoading && _favorites.isNotEmpty) _buildStatsRow(freeCount),
+            if (!_isLoading && _favorites.isNotEmpty) _buildStatsRow(freeCount),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.accentGold))
@@ -144,49 +145,39 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 class _StatCard extends StatelessWidget {
   final String value;
   final String label;
-  final bool muted;
-  final VoidCallback? onTap;
 
-  const _StatCard({
-    required this.value,
-    required this.label,
-    this.muted = false,
-    this.onTap,
-  });
+  const _StatCard({required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceDark,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.surfaceLight),
-          ),
-          child: Column(
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: muted ? AppTheme.textSecondary : AppTheme.accentGold,
-                ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.surfaceLight),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.accentGold,
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 9,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 0.5,
-                ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 9,
+                color: AppTheme.textSecondary,
+                letterSpacing: 0.5,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

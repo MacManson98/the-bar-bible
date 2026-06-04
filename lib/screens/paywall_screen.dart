@@ -67,7 +67,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
               const SizedBox(height: 12),
 
-              Text(
+              const Text(
                 'One-time purchase. Everything unlocked forever.',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
@@ -79,19 +79,19 @@ class _PaywallScreenState extends State<PaywallScreen> {
               const SizedBox(height: 36),
 
               // Features list
-              _FeatureRow(
+              const _FeatureRow(
                 icon: Icons.menu_book,
                 title: '100+ cocktail recipes',
                 subtitle: 'Full specs, methods and history',
               ),
               const SizedBox(height: 16),
-              _FeatureRow(
+              const _FeatureRow(
                 icon: Icons.search,
                 title: 'Full Finder access',
                 subtitle: 'Match against every cocktail in the library',
               ),
               const SizedBox(height: 16),
-              _FeatureRow(
+              const _FeatureRow(
                 icon: Icons.favorite,
                 title: 'Favourites & collections',
                 subtitle: 'Save and organise your cocktail library',
@@ -186,10 +186,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
               const SizedBox(height: 8),
 
-              Text(
+              const Text(
                 'One-time purchase · No subscription · No expiry',
                 style: TextStyle(
-                  color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                  color: AppTheme.textSecondary,
                   fontSize: 12,
                 ),
                 textAlign: TextAlign.center,
@@ -244,7 +244,7 @@ class _FeatureRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 13,
                 ),

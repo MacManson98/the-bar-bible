@@ -34,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _init() async {
-    final results = await Future.wait([
+    await Future.wait([
       widget.onReady(),
       Future.delayed(const Duration(milliseconds: 2000)),
     ]);
@@ -89,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
+              const Text(
                 'Your cocktail reference',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
@@ -98,12 +98,12 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
               const SizedBox(height: 48),
-              SizedBox(
+              const SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: AppTheme.accentGold.withValues(alpha: 0.6),
+                  color: AppTheme.accentGold,
                 ),
               ),
             ],

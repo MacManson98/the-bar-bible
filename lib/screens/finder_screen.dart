@@ -18,7 +18,6 @@ import '../data/ingredient_data.dart';
 import '../widgets/bar_selector_dropdown.dart';
 import '../services/purchase_service.dart';
 import 'cocktail_detail_screen.dart';
-import 'paywall_screen.dart';
 
 enum _FinderMode { canMake, oneAway, all }
 
@@ -251,6 +250,7 @@ class FinderScreenState extends State<FinderScreen>
         .select(widget.database.cocktails)
         .get();
     // Filter out premium cocktails for free users
+    if (!mounted) return;
     final purchaseService = context.read<PurchaseService>();
     if (!purchaseService.isPremium) {
       _allCocktails = _allCocktails.where((c) => !c.isPremium).toList();
