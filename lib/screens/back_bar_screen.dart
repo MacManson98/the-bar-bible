@@ -1,4 +1,4 @@
-// ignore_for_file: prefer_const_constructors
+// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
@@ -6,6 +6,7 @@ import '../data/database.dart';
 import '../services/auth_service.dart';
 import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
+import 'cocktail_creator_screen.dart';
 
 class BackBarScreen extends StatefulWidget {
   final AppDatabase database;
@@ -61,9 +62,7 @@ class BackBarScreenState extends State<BackBarScreen>
       decoration: BoxDecoration(
         color: AppTheme.primaryDark,
         border: Border(
-          bottom: BorderSide(
-            color: AppTheme.surfaceLight.withValues(alpha: 0.3),
-          ),
+          bottom: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.3)),
         ),
       ),
       child: TabBar(
@@ -73,19 +72,9 @@ class BackBarScreenState extends State<BackBarScreen>
         indicatorSize: TabBarIndicatorSize.label,
         labelColor: AppTheme.accentGold,
         unselectedLabelColor: AppTheme.textSecondary,
-        labelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-        tabs: const [
-          Tab(text: 'Create'),
-          Tab(text: 'Community'),
-        ],
+        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.4),
+        unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        tabs: const [Tab(text: 'Create'), Tab(text: 'Community')],
       ),
     );
   }
@@ -118,9 +107,6 @@ class _CreateTabState extends State<_CreateTab> {
   Future<void> _loadData() async {
     final auth = context.read<AuthService>();
     final purchase = context.read<PurchaseService>();
-
-    debugPrint('BackBar _loadData: isSignedIn=${auth.isSignedIn}, user=${auth.currentUser?.email}');
-
     final creations = await widget.database.getUserCocktails();
 
     if (!auth.isSignedIn) {
@@ -153,10 +139,7 @@ class _CreateTabState extends State<_CreateTab> {
     final purchase = context.read<PurchaseService>();
 
     if (!auth.isSignedIn) {
-      final signedIn = await showAuthSheet(
-        context,
-        reason: 'Create a free account to start building your own cocktails.',
-      );
+      final signedIn = await showAuthSheet(context, reason: 'Create a free account to start building your own cocktails.');
       if (!signedIn || !mounted) return;
       await _loadData();
       return;
@@ -164,18 +147,16 @@ class _CreateTabState extends State<_CreateTab> {
 
     final canCreate = await auth.canCreateCocktail(purchase.isPremium);
     if (!canCreate && mounted) {
-      _showLimitSheet(
-        title: 'Create limit reached',
-        message: 'Free accounts can create up to 5 cocktails. Upgrade to Premium for unlimited creations.',
-      );
+      _showLimitSheet(title: 'Create limit reached', message: 'Free accounts can create up to 5 cocktails. Upgrade to Premium for unlimited creations.');
       return;
     }
 
-    // TODO: Navigate to cocktail creator form (Phase 4)
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Creator coming soon!')),
+      final created = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => CocktailCreatorScreen(database: widget.database)),
       );
+      if (created == true && mounted) await _loadData();
     }
   }
 
@@ -184,10 +165,7 @@ class _CreateTabState extends State<_CreateTab> {
     final purchase = context.read<PurchaseService>();
 
     if (!auth.isSignedIn) {
-      final signedIn = await showAuthSheet(
-        context,
-        reason: 'Create a free account to try AI cocktail generation.',
-      );
+      final signedIn = await showAuthSheet(context, reason: 'Create a free account to try AI cocktail generation.');
       if (!signedIn || !mounted) return;
       await _loadData();
       return;
@@ -206,9 +184,7 @@ class _CreateTabState extends State<_CreateTab> {
 
     // TODO: Navigate to AI generator screen (Phase 5)
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AI generator coming soon!')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('AI generator coming soon!')));
     }
   }
 
@@ -229,10 +205,7 @@ class _CreateTabState extends State<_CreateTab> {
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 24),
               width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceLight,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: AppTheme.surfaceLight, borderRadius: BorderRadius.circular(2)),
             ),
             Container(
               width: 56, height: 56,
@@ -246,11 +219,7 @@ class _CreateTabState extends State<_CreateTab> {
             const SizedBox(height: 16),
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
             const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.7), height: 1.45),
-            ),
+            Text(message, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.7), height: 1.45)),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -282,7 +251,6 @@ class _CreateTabState extends State<_CreateTab> {
     final purchase = context.watch<PurchaseService>();
     final isPremium = purchase.isPremium;
 
-    // Signed-out landing page
     if (!auth.isSignedIn) {
       return _SignedOutLanding(onSignIn: () async {
         final signedIn = await showAuthSheet(context);
@@ -297,50 +265,24 @@ class _CreateTabState extends State<_CreateTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
         children: [
-          // Header
-          const Text(
-            'Back Bar',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-          ),
+          const Text('Back Bar', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
           const SizedBox(height: 4),
-          Text(
-            'Your cocktail workshop',
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.55)),
-          ),
+          Text('Your cocktail workshop', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.55))),
           const SizedBox(height: 20),
 
-          // Usage card (only for non-premium signed-in users)
           if (auth.isSignedIn && !isPremium) ...[
-            _UsageCard(
-              createsRemaining: _createsRemaining,
-              aiCreditsRemaining: _aiCreditsRemaining,
-            ),
+            _UsageCard(createsRemaining: _createsRemaining, aiCreditsRemaining: _aiCreditsRemaining),
             const SizedBox(height: 20),
           ],
 
-          // Create CTA
           _CreateCTA(onTap: _handleCreateTap),
           const SizedBox(height: 12),
 
-          // AI CTA
-          _AiCTA(
-            onTap: _handleAiTap,
-            creditsRemaining: _aiCreditsRemaining,
-            isPremium: isPremium,
-            isSignedIn: auth.isSignedIn,
-          ),
+          _AiCTA(onTap: _handleAiTap, creditsRemaining: _aiCreditsRemaining, isPremium: isPremium, isSignedIn: auth.isSignedIn),
 
-          // My Creations
           if (_creations.isNotEmpty) ...[
             const SizedBox(height: 28),
-            Text(
-              'MY CREATIONS',
-              style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: AppTheme.textSecondary.withValues(alpha: 0.4),
-              ),
-            ),
+            Text('MY CREATIONS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: AppTheme.textSecondary.withValues(alpha: 0.4))),
             const SizedBox(height: 12),
             ..._creations.map((c) => _CreationCard(cocktail: c, database: widget.database)),
           ] else if (auth.isSignedIn) ...[
@@ -366,7 +308,6 @@ class _SignedOutLanding extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 100),
       children: [
-        // Icon
         Center(
           child: Container(
             width: 72, height: 72,
@@ -379,13 +320,7 @@ class _SignedOutLanding extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-
-        // Title
-        const Text(
-          'Back Bar',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-        ),
+        const Text('Back Bar', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         const SizedBox(height: 8),
         Text(
           'Your personal cocktail workshop — create recipes, generate with AI, and share with the community.',
@@ -394,48 +329,24 @@ class _SignedOutLanding extends StatelessWidget {
         ),
         const SizedBox(height: 32),
 
-        // Feature list
-        _FeatureRow(
-          icon: Icons.edit_outlined,
-          title: 'Create your own cocktails',
-          subtitle: 'Build custom recipes with your own ingredients, methods and notes.',
-          free: '5 free',
-        ),
+        _FeatureRow(icon: Icons.edit_outlined, title: 'Create your own cocktails', subtitle: 'Build custom recipes with your own ingredients, methods and notes.', free: '5 free'),
         const SizedBox(height: 16),
-        _FeatureRow(
-          icon: Icons.auto_awesome,
-          title: 'Generate with AI',
-          subtitle: 'Describe a flavour profile and get a fully formed recipe instantly.',
-          free: '1 free try',
-          iridescent: true,
-        ),
+        _FeatureRow(icon: Icons.auto_awesome, title: 'Generate with AI', subtitle: 'Describe a flavour profile and get a fully formed recipe instantly.', free: '1 free try', iridescent: true),
         const SizedBox(height: 16),
-        _FeatureRow(
-          icon: Icons.people_outline,
-          title: 'Community',
-          subtitle: 'Share creations and discover cocktails from other bartenders.',
-          free: 'Coming soon',
-        ),
+        _FeatureRow(icon: Icons.people_outline, title: 'Community', subtitle: 'Share creations and discover cocktails from other bartenders.', free: 'Coming soon'),
 
         const SizedBox(height: 32),
-
-        // Divider with "Free account includes"
         Row(
           children: [
             Expanded(child: Divider(color: AppTheme.surfaceLight.withValues(alpha: 0.3))),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                'Free account includes',
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.4), fontWeight: FontWeight.w500),
-              ),
+              child: Text('Free account includes', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.4), fontWeight: FontWeight.w500)),
             ),
             Expanded(child: Divider(color: AppTheme.surfaceLight.withValues(alpha: 0.3))),
           ],
         ),
         const SizedBox(height: 16),
-
-        // Free tier pills
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -446,40 +357,22 @@ class _SignedOutLanding extends StatelessWidget {
         ),
         const SizedBox(height: 32),
 
-        // Primary CTA
         GestureDetector(
           onTap: onSignIn,
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.accentGold,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Text(
-              'Create free account',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.primaryDark),
-            ),
+            decoration: BoxDecoration(color: AppTheme.accentGold, borderRadius: BorderRadius.circular(14)),
+            child: const Text('Create free account', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.primaryDark)),
           ),
         ),
         const SizedBox(height: 12),
-
-        // Sign in link
         GestureDetector(
           onTap: onSignIn,
-          child: Text(
-            'Already have an account? Sign in',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
-          ),
+          child: Text('Already have an account? Sign in', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.5))),
         ),
         const SizedBox(height: 8),
-        Text(
-          'No card required · Cancel anytime',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
-        ),
+        Text('No card required · Cancel anytime', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.3))),
       ],
     );
   }
@@ -492,13 +385,7 @@ class _FeatureRow extends StatelessWidget {
   final String free;
   final bool iridescent;
 
-  const _FeatureRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.free,
-    this.iridescent = false,
-  });
+  const _FeatureRow({required this.icon, required this.title, required this.subtitle, required this.free, this.iridescent = false});
 
   @override
   Widget build(BuildContext context) {
@@ -512,12 +399,7 @@ class _FeatureRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: iridescent ? null : Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.2)),
           ),
-          foregroundDecoration: iridescent
-              ? BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: _IridescentBorder(),
-                )
-              : null,
+          foregroundDecoration: iridescent ? BoxDecoration(borderRadius: BorderRadius.circular(12), border: _IridescentBorder()) : null,
           child: Icon(icon, color: AppTheme.accentGold, size: 20),
         ),
         const SizedBox(width: 14),
@@ -527,9 +409,7 @@ class _FeatureRow extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(
-                    child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                  ),
+                  Expanded(child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -576,7 +456,6 @@ class _FreePill extends StatelessWidget {
 class _UsageCard extends StatelessWidget {
   final int createsRemaining;
   final int aiCreditsRemaining;
-
   const _UsageCard({required this.createsRemaining, required this.aiCreditsRemaining});
 
   @override
@@ -595,7 +474,7 @@ class _UsageCard extends StatelessWidget {
           _UsageStat(value: '$aiCreditsRemaining', label: 'AI credit left'),
           Container(width: 0.5, height: 36, color: AppTheme.accentGold.withValues(alpha: 0.2), margin: const EdgeInsets.symmetric(horizontal: 20)),
           GestureDetector(
-            onTap: () {}, // TODO: open paywall
+            onTap: () {},
             child: Column(
               children: [
                 Text('Go Premium', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.85))),
@@ -641,18 +520,12 @@ class _CreateCTA extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.accentGold,
-          borderRadius: BorderRadius.circular(14),
-        ),
+        decoration: BoxDecoration(color: AppTheme.accentGold, borderRadius: BorderRadius.circular(14)),
         child: Row(
           children: [
             Container(
               width: 42, height: 42,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
               child: const Icon(Icons.edit_outlined, color: AppTheme.primaryDark, size: 20),
             ),
             const SizedBox(width: 14),
@@ -684,20 +557,13 @@ class _AiCTA extends StatelessWidget {
   final bool isPremium;
   final bool isSignedIn;
 
-  const _AiCTA({
-    required this.onTap,
-    required this.creditsRemaining,
-    required this.isPremium,
-    required this.isSignedIn,
-  });
+  const _AiCTA({required this.onTap, required this.creditsRemaining, required this.isPremium, required this.isSignedIn});
 
   @override
   Widget build(BuildContext context) {
     final creditLabel = isPremium
         ? '$creditsRemaining today'
-        : !isSignedIn || creditsRemaining > 0
-            ? '$creditsRemaining credit'
-            : 'Premium';
+        : !isSignedIn || creditsRemaining > 0 ? '$creditsRemaining credit' : 'Premium';
 
     return GestureDetector(
       onTap: onTap,
@@ -706,22 +572,14 @@ class _AiCTA extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppTheme.surfaceDark,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppTheme.surfaceLight.withValues(alpha: 0.15),
-          ),
+          border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.15)),
         ),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: _IridescentBorder(),
-        ),
+        foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: _IridescentBorder()),
         child: Row(
           children: [
             Container(
               width: 42, height: 42,
-              decoration: BoxDecoration(
-                color: AppTheme.accentGold.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: AppTheme.accentGold.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
               child: const Icon(Icons.auto_awesome, color: AppTheme.accentGold, size: 20),
             ),
             const SizedBox(width: 14),
@@ -766,20 +624,13 @@ class _IridescentBorder extends BoxBorder {
     final rrect = borderRadius != null
         ? borderRadius.toRRect(rect)
         : RRect.fromRectAndRadius(rect, const Radius.circular(14));
-
     final paint = Paint()
       ..shader = SweepGradient(
-        colors: const [
-          Color(0xFFc9a84c),
-          Color(0xFFb464c8),
-          Color(0xFF50b4c8),
-          Color(0xFFc9a84c),
-        ],
+        colors: const [Color(0xFFc9a84c), Color(0xFFb464c8), Color(0xFF50b4c8), Color(0xFFc9a84c)],
         stops: const [0.0, 0.33, 0.66, 1.0],
       ).createShader(rect)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-
     canvas.drawRRect(rrect, paint);
   }
 
@@ -799,56 +650,61 @@ class _CreationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          // Thumbnail — iridescent border for AI, plain for manual
-          _CreationThumb(isAi: cocktail.isAiGenerated),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(cocktail.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                const SizedBox(height: 3),
-                Text(
-                  '${cocktail.baseSpirit} · ${cocktail.method} · ${cocktail.glass}',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
-                ),
-              ],
-            ),
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CocktailCreatorScreen(database: database, existing: cocktail),
           ),
-          if (cocktail.isAiGenerated)
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          children: [
+            _CreationThumb(isAi: cocktail.isAiGenerated),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(cocktail.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 3),
+                  Text('${cocktail.baseSpirit} · ${cocktail.method} · ${cocktail.glass}', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withValues(alpha: 0.5))),
+                ],
+              ),
+            ),
+            if (cocktail.isAiGenerated)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentGold.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.25)),
+                ),
+                child: Text('AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.8))),
+              ),
             Container(
-              margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.accentGold.withValues(alpha: 0.1),
+                color: AppTheme.surfaceLight.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.25)),
+                border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.3)),
               ),
-              child: Text('AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.8))),
+              child: Text('Yours', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.6))),
             ),
-          // "Yours" pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceLight.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.3)),
-            ),
-            child: Text('Yours', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.6))),
-          ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: AppTheme.textSecondary.withValues(alpha: 0.3), size: 18),
-        ],
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, color: AppTheme.textSecondary.withValues(alpha: 0.3), size: 18),
+          ],
+        ),
       ),
     );
   }
@@ -867,12 +723,7 @@ class _CreationThumb extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: isAi ? null : Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.3)),
       ),
-      foregroundDecoration: isAi
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: _IridescentBorder(),
-            )
-          : null,
+      foregroundDecoration: isAi ? BoxDecoration(borderRadius: BorderRadius.circular(10), border: _IridescentBorder()) : null,
       child: const Icon(Icons.local_bar_rounded, color: AppTheme.accentGold, size: 20),
     );
   }
@@ -884,22 +735,16 @@ class _CreationThumb extends StatelessWidget {
 
 class _EmptyCreations extends StatelessWidget {
   const _EmptyCreations();
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Icon(Icons.local_bar_outlined, size: 44, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
         const SizedBox(height: 12),
-        Text(
-          'No creations yet',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
-        ),
+        Text('No creations yet', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.4))),
         const SizedBox(height: 6),
-        Text(
-          'Your cocktails will appear here once created.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
-        ),
+        Text('Your cocktails will appear here once created.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.3))),
       ],
     );
   }
