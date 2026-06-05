@@ -29,7 +29,9 @@ class AuthService extends ChangeNotifier {
   // ── Sign in methods ────────────────────────────────────────────────────────
 
   Future<UserCredential> signInWithGoogle() async {
-    final googleUser = await GoogleSignIn().signIn();
+    final googleUser = await GoogleSignIn(
+      clientId: '880092017001-he9qun849u5sjv813ksn4bo22ipemkb1.apps.googleusercontent.com',
+    ).signIn();
     if (googleUser == null) throw Exception('Google sign in cancelled');
 
     final googleAuth = await googleUser.authentication;
