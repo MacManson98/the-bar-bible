@@ -12,7 +12,10 @@ class AuthService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   User? get currentUser => _auth.currentUser;
-  bool get isSignedIn => currentUser != null;
+  bool get isSignedIn {
+    final user = currentUser;
+    return user != null && !user.isAnonymous;
+  }
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   static const int _freeCreateLimit = 5;
@@ -120,7 +123,9 @@ class AuthService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> getUserLimits() async {
     final user = currentUser;
-    if (user == null) return {'creates_used': 0, 'ai_credits_used': 0, 'is_premium': false};
+    if (user == null || user.isAnonymous) {
+      return {'creates_used': 0, 'ai_credits_used': 0, 'is_premium': false};
+    }
 
     final doc = await _firestore.collection('users').doc(user.uid).get();
     if (!doc.exists) {

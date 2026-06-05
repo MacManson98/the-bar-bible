@@ -122,6 +122,12 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
       final purchase = context.read<PurchaseService>();
       final isEditing = widget.existing != null;
 
+      if (!auth.isSignedIn) {
+        setState(() => _isSaving = false);
+        _showError('Create a free account to save cocktails.');
+        return;
+      }
+
       if (!isEditing) {
         final canCreate = await auth.canCreateCocktail(purchase.isPremium);
         if (!canCreate && mounted) {

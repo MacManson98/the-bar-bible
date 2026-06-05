@@ -105,32 +105,46 @@ class _CreateTabState extends State<_CreateTab> {
   }
 
   Future<void> _loadData() async {
-    final auth = context.read<AuthService>();
-    final purchase = context.read<PurchaseService>();
-    final creations = await widget.database.getUserCocktails();
+    try {
+      final auth = context.read<AuthService>();
+      final purchase = context.read<PurchaseService>();
+      final creations = auth.isSignedIn
+          ? await widget.database.getUserCocktails()
+          : <UserCocktail>[];
 
-    if (!auth.isSignedIn) {
+      if (!auth.isSignedIn) {
+        if (mounted) {
+          setState(() {
+            _creations = creations;
+            _createsRemaining = 5;
+            _aiCreditsRemaining = 1;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final creates = await auth.createsRemaining(purchase.isPremium);
+      final ai = await auth.aiCreditsRemaining(purchase.isPremium);
+
       if (mounted) {
         setState(() {
           _creations = creations;
+          _createsRemaining = creates;
+          _aiCreditsRemaining = ai;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[BackBarScreen] Failed to load data: $e');
+      if (mounted) {
+        setState(() {
+          _creations = [];
           _createsRemaining = 5;
           _aiCreditsRemaining = 1;
           _isLoading = false;
         });
       }
-      return;
-    }
-
-    final creates = await auth.createsRemaining(purchase.isPremium);
-    final ai = await auth.aiCreditsRemaining(purchase.isPremium);
-
-    if (mounted) {
-      setState(() {
-        _creations = creations;
-        _createsRemaining = creates;
-        _aiCreditsRemaining = ai;
-        _isLoading = false;
-      });
     }
   }
 
