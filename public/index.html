@@ -198,6 +198,13 @@
       <h2>New Cocktail</h2>
       <div class="form-grid">
         <div class="form-group"><label>Name *</label><input type="text" id="f-name" placeholder="e.g. Espresso Martini"></div>
+        <div class="form-group"><label>Cocktail Type *</label>
+          <select id="f-category">
+            <option value="cocktail">Cocktail</option>
+            <option value="mocktail">Mocktail</option>
+            <option value="shot">Shot</option>
+          </select>
+        </div>
         <div class="form-group"><label>Base Spirit *</label>
           <select id="f-spirit">
             <option value="">Select...</option>
@@ -455,6 +462,7 @@
 
     const data = {
       name,
+      category: document.getElementById('f-category').value,
       base_spirit: document.getElementById('f-spirit').value,
       method: document.getElementById('f-method').value,
       glass: document.getElementById('f-glass').value.trim(),
@@ -493,7 +501,7 @@
 
   function resetForm() {
     ['f-name','f-glass','f-garnish','f-tags','f-instructions','f-history','f-tasting'].forEach(id => document.getElementById(id).value = '');
-    ['f-spirit','f-method','f-ice','f-difficulty'].forEach(id => document.getElementById(id).selectedIndex = 0);
+    ['f-category','f-spirit','f-method','f-ice','f-difficulty'].forEach(id => document.getElementById(id).selectedIndex = 0);
     document.getElementById('f-premium').checked = false;
     document.getElementById('ingredients-list').innerHTML = '';
     addIngredientRow();
@@ -518,6 +526,14 @@
     document.getElementById('modal-body').innerHTML = `
       <div class="form-grid" style="margin-bottom:15px">
         <div class="form-group"><label>Name</label><input type="text" id="e-name" value="${c.name || ''}"></div>
+        <div class="form-group"><label>Cocktail Type</label>
+          <select id="e-category">
+            ${[
+              { value: 'cocktail', label: 'Cocktail' },
+              { value: 'mocktail', label: 'Mocktail' },
+              { value: 'shot', label: 'Shot' },
+            ].map(t => `<option value="${t.value}" ${(c.category || 'cocktail')===t.value?'selected':''}>${t.label}</option>`).join('')}
+          </select></div>
         <div class="form-group"><label>Base Spirit</label>
           <select id="e-spirit"><option value="">Select...</option>
             ${['Vodka','Gin','Rum','Whiskey','Tequila','Brandy','Cachaca','Wine','Other'].map(s => `<option ${c.base_spirit===s?'selected':''}>${s}</option>`).join('')}
@@ -577,6 +593,7 @@
 
     const data = {
       name,
+      category: document.getElementById('e-category').value,
       base_spirit: document.getElementById('e-spirit').value,
       method: document.getElementById('e-method').value,
       glass: document.getElementById('e-glass').value.trim(),

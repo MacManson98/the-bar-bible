@@ -86,9 +86,11 @@ class _AuthSheetState extends State<AuthSheet> {
 
   String _friendlyError(Object e) {
     final msg = e.toString();
-    if (msg.contains('wrong-password') || msg.contains('invalid-credential')) {
+    if (msg.contains('wrong-password') || msg.contains('invalid-credential') || msg.contains('INVALID_LOGIN_CREDENTIALS')) {
       return 'Incorrect email or password.';
     }
+    if (msg.contains('identity token is null')) return 'Apple Sign In failed. Please try again.';
+    if (msg.contains('user-disabled')) return 'This account has been disabled.';
     if (msg.contains('email-already-in-use')) return 'An account with this email already exists.';
     if (msg.contains('weak-password')) return 'Password must be at least 6 characters.';
     if (msg.contains('invalid-email')) return 'Please enter a valid email address.';

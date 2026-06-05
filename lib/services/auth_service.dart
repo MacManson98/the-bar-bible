@@ -61,7 +61,12 @@ class AuthService extends ChangeNotifier {
     final oauthCredential = OAuthProvider('apple.com').credential(
       idToken: appleCredential.identityToken,
       rawNonce: rawNonce,
+      accessToken: appleCredential.authorizationCode,
     );
+
+    if (appleCredential.identityToken == null) {
+      throw Exception('Apple Sign In failed: identity token is null');
+    }
 
     final result = await _auth.signInWithCredential(oauthCredential);
     await _ensureUserDoc(result.user!);

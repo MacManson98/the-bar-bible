@@ -98,6 +98,7 @@ class FirestoreSyncService {
           tags: Value(tags),
           imagePath: Value(data['image_path'] as String?),
           imageUrl: Value(data['image_url'] as String?),
+          category: Value(data['category'] as String? ?? 'cocktail'),
           isPremium: Value(isPremium),
         );
 
