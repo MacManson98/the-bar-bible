@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
 import 'cocktail_creator_screen.dart';
+import 'paywall_screen.dart';
 
 class BackBarScreen extends StatefulWidget {
   final AppDatabase database;
@@ -238,7 +239,10 @@ class _CreateTabState extends State<_CreateTab> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PaywallScreen()));
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.accentGold,
                   foregroundColor: AppTheme.primaryDark,
@@ -488,7 +492,7 @@ class _UsageCard extends StatelessWidget {
           _UsageStat(value: '$aiCreditsRemaining', label: 'AI credit left'),
           Container(width: 0.5, height: 36, color: AppTheme.accentGold.withValues(alpha: 0.2), margin: const EdgeInsets.symmetric(horizontal: 20)),
           GestureDetector(
-            onTap: () {},
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaywallScreen())),
             child: Column(
               children: [
                 Text('Go Premium', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.accentGold.withValues(alpha: 0.85))),
