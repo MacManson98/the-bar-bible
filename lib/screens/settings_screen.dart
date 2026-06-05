@@ -377,7 +377,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const _SettingTile(
               icon: Icons.info_outline,
               title: 'Version',
-              subtitle: '1.1.0 (Build 11)',
+              subtitle: '1.2.0 (Build 15)',
             ),
             const _SettingTile(
               icon: Icons.local_bar_outlined,
@@ -475,7 +475,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Version 1.1.0 (Build 11)',
+              'Version 1.2.0 (Build 15)',
               style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
