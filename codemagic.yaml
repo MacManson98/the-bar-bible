@@ -25,6 +25,14 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles
 
+      - name: Set up entitlements
+        script: |
+          /usr/libexec/PlistBuddy -c "Set :CODE_SIGN_ENTITLEMENTS Runner/Runner.entitlements" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          # Set entitlements for all build configurations
+          xcodebuild -project ios/Runner.xcodeproj \
+            -target Runner \
+            -showBuildSettings 2>/dev/null | grep CODE_SIGN_ENTITLEMENTS || true
+
       - name: Get Flutter packages
         script: | 
           flutter packages pub get
