@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -530,304 +531,318 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
       body: SafeArea(
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.menu_book,
-                              color: AppTheme.accentGold,
-                              size: 32,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'BROWSE',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 2,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4),
-                        Padding(
-                          padding: EdgeInsets.only(left: 44),
-                          child: Text(
-                            'Drinks Reference Library',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textSecondary,
-                              letterSpacing: 1,
-                            ),
+            : NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                  // Pinned: BROWSE title
+                  SliverToBoxAdapter(
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Theme.of(context).dividerColor,
+                            width: 1,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryDark,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: AppTheme.surfaceLight.withValues(alpha: 0.3),
-                        ),
                       ),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      indicatorColor: AppTheme.accentGold,
-                      indicatorWeight: 2,
-                      indicatorSize: TabBarIndicatorSize.label,
-                      labelColor: AppTheme.accentGold,
-                      unselectedLabelColor: AppTheme.textSecondary,
-                      labelStyle: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                      unselectedLabelStyle: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      tabs: const [
-                        Tab(text: 'Cocktails'),
-                        Tab(text: 'Mocktails'),
-                        Tab(text: 'Shots'),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search $_activeLabel...',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () {
-                                      setState(() => searchQuery = '');
-                                      _applyFilters();
-                                    },
-                                  )
-                                : null,
-                          ),
-                          onChanged: (value) {
-                            searchQuery = value;
-                            _applyFilters();
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            ElevatedButton(
-                              onPressed: _showFiltersSheet,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: hasActiveFilters
-                                    ? AppTheme.accentGold
-                                    : AppTheme.surfaceDark,
-                                foregroundColor: hasActiveFilters
-                                    ? AppTheme.primaryDark
-                                    : AppTheme.textPrimary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: BorderSide(
-                                    color: hasActiveFilters
-                                        ? AppTheme.accentGold
-                                        : AppTheme.surfaceLight,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.filter_list, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    hasActiveFilters
-                                        ? 'FILTERS (${_getActiveFilterCount()})'
-                                        : 'FILTERS',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Spacer(),
-                            DropdownButton<String>(
-                              value: sortBy,
-                              dropdownColor: AppTheme.surfaceDark,
-                              style: const TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 12,
-                              ),
-                              underline: Container(),
-                              icon: const Icon(
-                                Icons.sort,
-                                color: AppTheme.textSecondary,
-                                size: 18,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'alphabetical',
-                                  child: Text('A\u2013Z'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'difficulty',
-                                  child: Text('Difficulty'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                setState(() => sortBy = value!);
-                                _applyFilters();
-                              },
-                            ),
-                          ],
-                        ),
-                        if (hasActiveFilters) ...[
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              ...selectedSpirits.map(
-                                (s) => _ActiveFilterPill(
-                                  label: s,
-                                  onRemove: () {
-                                    setState(() => selectedSpirits.remove(s));
-                                    _applyFilters();
-                                  },
-                                ),
+                              Icon(
+                                Icons.menu_book,
+                                color: AppTheme.accentGold,
+                                size: 32,
                               ),
-                              ...selectedFlavors.map(
-                                (f) => _ActiveFilterPill(
-                                  label: f,
-                                  onRemove: () {
-                                    setState(() => selectedFlavors.remove(f));
-                                    _applyFilters();
-                                  },
-                                ),
-                              ),
-                              ...selectedDifficulties.map(
-                                (d) => _ActiveFilterPill(
-                                  label: '$d\u2605',
-                                  onRemove: () {
-                                    setState(
-                                      () => selectedDifficulties.remove(d),
-                                    );
-                                    _applyFilters();
-                                  },
+                              SizedBox(width: 12),
+                              Text(
+                                'BROWSE',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
                                 ),
                               ),
                             ],
                           ),
+                          SizedBox(height: 4),
+                          Padding(
+                            padding: EdgeInsets.only(left: 44),
+                            child: Text(
+                              'Drinks Reference Library',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: Row(
+                  // Collapsing: search + filters + pills + count
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _PremiumFilterPill(
-                          label: 'All',
-                          selected: premiumFilter == 'all',
-                          onTap: () { setState(() => premiumFilter = 'all'); _applyFilters(); },
-                        ),
-                        const SizedBox(width: 8),
-                        _PremiumFilterPill(
-                          label: 'Free',
-                          selected: premiumFilter == 'free',
-                          onTap: () { setState(() => premiumFilter = 'free'); _applyFilters(); },
-                        ),
-                        const SizedBox(width: 8),
-                        _PremiumFilterPill(
-                          label: 'Premium',
-                          selected: premiumFilter == 'premium',
-                          onTap: () { setState(() => premiumFilter = 'premium'); _applyFilters(); },
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 16,
-                          color: AppTheme.accentGold,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          '${filteredCocktails.length} ${filteredCocktails.length == 1 ? _activeLabelSingular : _activeLabel}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1,
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              TextField(
+                                decoration: InputDecoration(
+                                  hintText: 'Search $_activeLabel...',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear),
+                                          onPressed: () {
+                                            setState(() => searchQuery = '');
+                                            _applyFilters();
+                                          },
+                                        )
+                                      : null,
+                                ),
+                                onChanged: (value) {
+                                  searchQuery = value;
+                                  _applyFilters();
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  ElevatedButton(
+                                    onPressed: _showFiltersSheet,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: hasActiveFilters
+                                          ? AppTheme.accentGold
+                                          : AppTheme.surfaceDark,
+                                      foregroundColor: hasActiveFilters
+                                          ? AppTheme.primaryDark
+                                          : AppTheme.textPrimary,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        side: BorderSide(
+                                          color: hasActiveFilters
+                                              ? AppTheme.accentGold
+                                              : AppTheme.surfaceLight,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.filter_list, size: 20),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          hasActiveFilters
+                                              ? 'FILTERS (${_getActiveFilterCount()})'
+                                              : 'FILTERS',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  DropdownButton<String>(
+                                    value: sortBy,
+                                    dropdownColor: AppTheme.surfaceDark,
+                                    style: const TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                    underline: Container(),
+                                    icon: const Icon(
+                                      Icons.sort,
+                                      color: AppTheme.textSecondary,
+                                      size: 18,
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: 'alphabetical',
+                                        child: Text('A\u2013Z'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'difficulty',
+                                        child: Text('Difficulty'),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() => sortBy = value!);
+                                      _applyFilters();
+                                    },
+                                  ),
+                                ],
+                              ),
+                              if (hasActiveFilters) ...[
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ...selectedSpirits.map(
+                                      (s) => _ActiveFilterPill(
+                                        label: s,
+                                        onRemove: () {
+                                          setState(() => selectedSpirits.remove(s));
+                                          _applyFilters();
+                                        },
+                                      ),
+                                    ),
+                                    ...selectedFlavors.map(
+                                      (f) => _ActiveFilterPill(
+                                        label: f,
+                                        onRemove: () {
+                                          setState(() => selectedFlavors.remove(f));
+                                          _applyFilters();
+                                        },
+                                      ),
+                                    ),
+                                    ...selectedDifficulties.map(
+                                      (d) => _ActiveFilterPill(
+                                        label: '$d\u2605',
+                                        onRemove: () {
+                                          setState(
+                                            () => selectedDifficulties.remove(d),
+                                          );
+                                          _applyFilters();
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                          child: Row(
+                            children: [
+                              _PremiumFilterPill(
+                                label: 'All',
+                                selected: premiumFilter == 'all',
+                                onTap: () { setState(() => premiumFilter = 'all'); _applyFilters(); },
+                              ),
+                              const SizedBox(width: 8),
+                              _PremiumFilterPill(
+                                label: 'Free',
+                                selected: premiumFilter == 'free',
+                                onTap: () { setState(() => premiumFilter = 'free'); _applyFilters(); },
+                              ),
+                              const SizedBox(width: 8),
+                              _PremiumFilterPill(
+                                label: 'Premium',
+                                selected: premiumFilter == 'premium',
+                                onTap: () { setState(() => premiumFilter = 'premium'); _applyFilters(); },
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 4,
+                                height: 16,
+                                color: AppTheme.accentGold,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '${filteredCocktails.length} ${filteredCocktails.length == 1 ? _activeLabelSingular : _activeLabel}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: filteredCocktails.isEmpty
-                        ? _EmptyState(
-                            hasFilters: hasActiveFilters,
-                            onClear: _clearFilters,
-                            label: _activeLabel.toUpperCase(),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(
-                              left: 20,
-                              right: 20,
-                              top: 8,
-                              bottom: 100,
-                            ),
-                            itemCount: filteredCocktails.length,
-                            itemBuilder: (context, index) {
-                              final cocktail = filteredCocktails[index];
-                              return _CocktailCard(
-                                cocktail: cocktail,
-                                onTap: () {
-                                  final purchaseService = context.read<PurchaseService>();
-                                  if (cocktail.isPremium && !purchaseService.isPremium) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const PaywallScreen(),
-                                      ),
-                                    );
-                                  } else {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => CocktailDetailScreen(
+                ],
+                body: Column(
+                  children: [
+                    // Pinned TabBar inside body
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryDark,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: AppTheme.surfaceLight.withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ),
+                      child: TabBar(
+                        controller: _tabController,
+                        indicatorColor: AppTheme.accentGold,
+                        indicatorWeight: 2,
+                        indicatorSize: TabBarIndicatorSize.label,
+                        labelColor: AppTheme.accentGold,
+                        unselectedLabelColor: AppTheme.textSecondary,
+                        labelStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                        unselectedLabelStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        tabs: const [
+                          Tab(text: 'Cocktails'),
+                          Tab(text: 'Mocktails'),
+                          Tab(text: 'Shots'),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: filteredCocktails.isEmpty
+                          ? _EmptyState(
+                              hasFilters: hasActiveFilters,
+                              onClear: _clearFilters,
+                              label: _activeLabel.toUpperCase(),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(
+                                left: 20,
+                                right: 20,
+                                top: 8,
+                                bottom: 100,
+                              ),
+                              itemCount: filteredCocktails.length,
+                              itemBuilder: (context, index) {
+                                final cocktail = filteredCocktails[index];
+                                return _CocktailCard(
+                                  cocktail: cocktail,
+                                  onTap: () {
+                                    final purchaseService = context.read<PurchaseService>();
+                                    if (cocktail.isPremium && !purchaseService.isPremium) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const PaywallScreen(),
+                                        ),
+                                      );
+                                    } else {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => CocktailDetailScreen(
                                           database: widget.database,
                                           cocktail: cocktail,
                                         ),
@@ -841,6 +856,7 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
                   ),
                 ],
               ),
+      ),
       ),
     );
   }
@@ -1005,23 +1021,43 @@ class _CocktailCardState extends State<_CocktailCard> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: _resolvedImagePath != null
-                      ? (_resolvedImagePath!.startsWith('http')
-                          ? CachedNetworkImage(
-                              imageUrl: _resolvedImagePath!,
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => _imageFallback(),
-                            )
-                          : Image.asset(
-                              _resolvedImagePath!,
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _imageFallback(),
-                            ))
-                      : _imageFallback(),
+                  child: Stack(
+                    children: [
+                      _resolvedImagePath != null
+                          ? (_resolvedImagePath!.startsWith('http')
+                              ? CachedNetworkImage(
+                                  imageUrl: _resolvedImagePath!,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => _imageFallback(),
+                                )
+                              : Image.asset(
+                                  _resolvedImagePath!,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _imageFallback(),
+                                ))
+                          : _imageFallback(),
+                      if (isLocked)
+                        Positioned.fill(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+                            child: Container(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.lock,
+                                  color: AppTheme.accentGold,
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Container(

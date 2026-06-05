@@ -930,44 +930,6 @@ class MyBarScreenState extends State<MyBarScreen>
               onClearBar: _clearCurrentBarWithConfirm,
               onDeleteBar: _deleteBarWithConfirm,
             ),
-            // ── Pinned top controls (stat card, search, nudge) ──────────
-            if (!inCategoryMode)
-              FadeTransition(
-                opacity: _headerFade,
-                child: Container(
-                  color: AppTheme.primaryDark,
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!inSearchMode) ...[
-                        _StatCard(
-                          cocktailCount: analytics.exactMatchCount,
-                          stockedCount: _barIngredientIds.length,
-                          totalCount: _allIngredients.length,
-                          onTap: widget.onNavigateToFinder,
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      _IngredientSearchField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        onChanged: _setSearchQuery,
-                        onClear: _clearSearchInput,
-                      ),
-                      if (!inSearchMode && hasSuggestion) ...[
-                        const SizedBox(height: 10),
-                        _SuggestionNudge(
-                          suggestion: suggestion,
-                          isBusy: suggestionIsBusy,
-                          onAdd: _handleSuggestionAdd,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            // ── Scrollable content area ───────────────────────────────────
             Expanded(
               child: FadeTransition(
                 opacity: _headerFade,
@@ -985,25 +947,71 @@ class MyBarScreenState extends State<MyBarScreen>
                         onTapWithContext: (id, ctx) => _ingredientRowContexts[id] = ctx,
                         onBack: _closeCategory,
                       )
-                    : CustomScrollView(
+                    : NestedScrollView(
                         controller: _listScrollController,
-                        slivers: [
-                          if (inSearchMode)
-                            _SearchResultsSliver(
-                              results: _searchResults,
-                              barIngredientIds: _barIngredientIds,
-                              busyIngredientIds: _busyIngredientIds,
-                              onToggle: _toggleIngredient,
-                              onTapWithContext: (id, ctx) => _ingredientRowContexts[id] = ctx,
-                            )
-                          else
-                            _CategoryGridSliver(
-                              allIngredients: _allIngredients,
-                              barIngredientIds: _barIngredientIds,
-                              onTapCategory: _openCategory,
+                        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                          if (!inSearchMode)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _StatCard(
+                                      cocktailCount: analytics.exactMatchCount,
+                                      stockedCount: _barIngredientIds.length,
+                                      totalCount: _allIngredients.length,
+                                      onTap: widget.onNavigateToFinder,
+                                    ),
+                                    if (hasSuggestion) ...[
+                                      const SizedBox(height: 10),
+                                      _SuggestionNudge(
+                                        suggestion: suggestion,
+                                        isBusy: suggestionIsBusy,
+                                        onAdd: _handleSuggestionAdd,
+                                      ),
+                                    ],
+                                    const SizedBox(height: 10),
+                                  ],
+                                ),
+                              ),
                             ),
-                          const SliverToBoxAdapter(child: SizedBox(height: 24)),
                         ],
+                        body: Column(
+                          children: [
+                            Container(
+                              color: AppTheme.primaryDark,
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                              child: _IngredientSearchField(
+                                controller: _searchController,
+                                focusNode: _searchFocusNode,
+                                onChanged: _setSearchQuery,
+                                onClear: _clearSearchInput,
+                              ),
+                            ),
+                            Expanded(
+                              child: CustomScrollView(
+                                slivers: [
+                                  if (inSearchMode)
+                                    _SearchResultsSliver(
+                                      results: _searchResults,
+                                      barIngredientIds: _barIngredientIds,
+                                      busyIngredientIds: _busyIngredientIds,
+                                      onToggle: _toggleIngredient,
+                                      onTapWithContext: (id, ctx) => _ingredientRowContexts[id] = ctx,
+                                    )
+                                  else
+                                    _CategoryGridSliver(
+                                      allIngredients: _allIngredients,
+                                      barIngredientIds: _barIngredientIds,
+                                      onTapCategory: _openCategory,
+                                    ),
+                                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
               ),
             ),

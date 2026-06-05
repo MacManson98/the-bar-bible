@@ -468,50 +468,56 @@ class FinderScreenState extends State<FinderScreen>
       body: SafeArea(
         child: _activeBar == null
             ? _buildEmptyBarState()
-            : Column(
-                children: [
-                  FadeTransition(
-                    opacity: _heroFade,
-                    child: ScaleTransition(
-                      scale: _heroScale,
-                      child: _buildHeroHeader(
-                        readyCount: _filteredExactCache.length,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  _buildSearchRow(),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) {
-                        final slide =
-                            Tween<Offset>(
-                              begin: const Offset(0.02, 0),
-                              end: Offset.zero,
-                            ).animate(
-                              CurvedAnimation(
-                                parent: animation,
-                                curve: Curves.easeOutCubic,
-                              ),
-                            );
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(position: slide, child: child),
-                        );
-                      },
-                      child: Opacity(
-                        key: ValueKey(
-                          '${_activeBar?.id ?? -1}_$_searchQuery$_spiritFilter${_flavorFilters.join(',')}',
+            : NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                  SliverToBoxAdapter(
+                    child: FadeTransition(
+                      opacity: _heroFade,
+                      child: ScaleTransition(
+                        scale: _heroScale,
+                        child: _buildHeroHeader(
+                          readyCount: _filteredExactCache.length,
                         ),
-                        opacity: 1.0,
-                        child: _buildResultsForMode(_modeResultsCache),
                       ),
                     ),
                   ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 6)),
                 ],
+                body: Column(
+                  children: [
+                    _buildSearchRow(),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 260),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) {
+                          final slide =
+                              Tween<Offset>(
+                                begin: const Offset(0.02, 0),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              );
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(position: slide, child: child),
+                          );
+                        },
+                        child: Opacity(
+                          key: ValueKey(
+                            '${_activeBar?.id ?? -1}_$_searchQuery$_spiritFilter${_flavorFilters.join(',')}',
+                          ),
+                          opacity: 1.0,
+                          child: _buildResultsForMode(_modeResultsCache),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
       ),
     );
@@ -1850,7 +1856,6 @@ class FinderScreenState extends State<FinderScreen>
         color: AppTheme.accentGold.withValues(alpha: 0.025),
       ),
       child: ListView.builder(
-        controller: _resultsScrollController,
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 100),
         itemCount: allItems.length,
         itemBuilder: (context, index) => allItems[index],
@@ -2263,7 +2268,6 @@ class FinderScreenState extends State<FinderScreen>
         _activeRailTitle != null &&
         _viewMode == _FinderViewMode.list;
     final list = ListView.builder(
-      controller: _resultsScrollController,
       padding: const EdgeInsets.fromLTRB(0, 14, 0, 100),
       itemCount: filtered.length + (showRailFilterHeader ? 1 : 0),
       itemBuilder: (context, index) {
