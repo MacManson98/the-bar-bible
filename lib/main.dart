@@ -12,6 +12,7 @@ import 'data/database.dart';
 import 'data/flavor_data.dart';
 import 'services/firestore_sync_service.dart';
 import 'services/purchase_service.dart';
+import 'services/auth_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/cocktail_detail_screen.dart';
 import 'screens/paywall_screen.dart';
@@ -19,6 +20,7 @@ import 'screens/splash_screen.dart';
 import 'screens/my_bar_screen.dart';
 import 'screens/my_bar_tab_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/back_bar_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,12 +29,18 @@ void main() async {
   final purchaseService = PurchaseService();
   await purchaseService.init();
 
+  final authService = AuthService();
   final database = await initDatabase();
 
-  runApp(ChangeNotifierProvider.value(
-    value: purchaseService,
-    child: CocktailSpecsApp(database: database),
-  ));
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: purchaseService),
+        ChangeNotifierProvider.value(value: authService),
+      ],
+      child: CocktailSpecsApp(database: database),
+    ),
+  );
 }
 
 Future<AppDatabase> initDatabase() async {
@@ -72,7 +80,9 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   static const int _homeTabIndex = 0;
   static const int _browseTabIndex = 1;
-  static const int _myBarTabIndex = 2;
+  static const int _backBarTabIndex = 2; // ignore: unused_field
+  static const int _myBarTabIndex = 3;
+  static const int _settingsTabIndex = 4; // ignore: unused_field
 
   int _selectedIndex = _homeTabIndex;
   String _activeBarName = 'My Bar';
@@ -102,6 +112,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         },
       ),
       CocktailsListScreen(database: widget.database),
+      BackBarScreen(database: widget.database),
       MyBarTabScreen(
         key: _myBarTabKey,
         database: widget.database,
@@ -224,6 +235,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Icon(Icons.menu_book, size: 24),
               ),
               label: 'Browse',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.lock_open_outlined, size: 24),
+              ),
+              activeIcon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.lock_open, size: 24),
+              ),
+              label: 'Back Bar',
             ),
             BottomNavigationBarItem(
               icon: Padding(

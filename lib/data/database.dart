@@ -98,6 +98,37 @@ class ShoppingList extends Table {
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+// User-created cocktails
+class UserCocktails extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get method => text()(); // shake, stir, build, blend
+  TextColumn get methodInstructions => text().nullable()();
+  TextColumn get glass => text()();
+  TextColumn get ice => text().nullable()();
+  TextColumn get garnish => text().nullable()();
+  TextColumn get baseSpirit => text()();
+  IntColumn get difficulty => integer().withDefault(const Constant(1))();
+  TextColumn get tags => text().nullable()();
+  TextColumn get notes => text().nullable()();
+  TextColumn get category => text().withDefault(const Constant('cocktail'))();
+  BoolColumn get isAiGenerated => boolean().withDefault(const Constant(false))();
+  TextColumn get firestoreId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+// Ingredients for user-created cocktails
+class UserCocktailIngredients extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userCocktailId => integer().references(UserCocktails, #id)();
+  TextColumn get ingredientName => text()(); // free text, not FK to ingredients
+  RealColumn get amount => real()();
+  TextColumn get unit => text()(); // ml, oz, dash, etc
+  TextColumn get prepNote => text().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+}
+
 // Favorites table - simple, fast access to favorited cocktails
 class Favorites extends Table {
   TextColumn get firestoreId => text()(); // Firestore document ID (stable across syncs)
@@ -119,13 +150,15 @@ class Favorites extends Table {
     SavedBarIngredients,
     ShoppingList,
     Favorites,
+    UserCocktails,
+    UserCocktailIngredients,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -214,6 +247,39 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
       }
       if (from <= 15) {
         await customStatement('ALTER TABLE cocktails ADD COLUMN image_url TEXT');
+      }
+      if (from <= 16) {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS user_cocktails (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            method TEXT NOT NULL,
+            method_instructions TEXT,
+            glass TEXT NOT NULL,
+            ice TEXT,
+            garnish TEXT,
+            base_spirit TEXT NOT NULL,
+            difficulty INTEGER NOT NULL DEFAULT 1,
+            tags TEXT,
+            notes TEXT,
+            category TEXT NOT NULL DEFAULT 'cocktail',
+            is_ai_generated INTEGER NOT NULL DEFAULT 0,
+            firestore_id TEXT,
+            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+          )
+        ''');
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS user_cocktail_ingredients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_cocktail_id INTEGER NOT NULL REFERENCES user_cocktails(id) ON DELETE CASCADE,
+            ingredient_name TEXT NOT NULL,
+            amount REAL NOT NULL,
+            unit TEXT NOT NULL,
+            prep_note TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
       }
       if (from <= 10) {
         // Create tables that exist in Drift schema but may be absent
@@ -340,5 +406,51 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
       mode: InsertMode.insertOrIgnore,
     );
     return inserted != 0;
+  }
+
+  // ── User Cocktail helper methods ──────────────────────────────────────────
+
+  Future<List<UserCocktail>> getUserCocktails() async {
+    return await (select(userCocktails)
+          ..orderBy([(u) => OrderingTerm.desc(u.createdAt)]))
+        .get();
+  }
+
+  Future<UserCocktail> insertUserCocktail(UserCocktailsCompanion entry) async {
+    final id = await into(userCocktails).insert(entry);
+    return await (select(userCocktails)..where((u) => u.id.equals(id))).getSingle();
+  }
+
+  Future<void> updateUserCocktail(UserCocktailsCompanion entry) async {
+    await (update(userCocktails)..where((u) => u.id.equals(entry.id.value)))
+        .write(entry);
+  }
+
+  Future<void> deleteUserCocktail(int id) async {
+    await (delete(userCocktailIngredients)
+          ..where((u) => u.userCocktailId.equals(id)))
+        .go();
+    await (delete(userCocktails)..where((u) => u.id.equals(id))).go();
+  }
+
+  Future<List<UserCocktailIngredient>> getUserCocktailIngredients(
+    int userCocktailId,
+  ) async {
+    return await (select(userCocktailIngredients)
+          ..where((u) => u.userCocktailId.equals(userCocktailId))
+          ..orderBy([(u) => OrderingTerm.asc(u.sortOrder)]))
+        .get();
+  }
+
+  Future<void> replaceUserCocktailIngredients(
+    int userCocktailId,
+    List<UserCocktailIngredientsCompanion> ingredients,
+  ) async {
+    await (delete(userCocktailIngredients)
+          ..where((u) => u.userCocktailId.equals(userCocktailId)))
+        .go();
+    for (final ingredient in ingredients) {
+      await into(userCocktailIngredients).insert(ingredient);
+    }
   }
 }

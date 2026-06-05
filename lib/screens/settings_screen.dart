@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
+import '../services/auth_service.dart';
+import 'auth_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppDatabase database;
@@ -15,6 +19,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool useOz = false;
+  bool strictMatching = false;
+  String defaultSort = 'match'; // 'match' | 'name' | 'difficulty'
   bool isLoading = true;
 
   @override
@@ -27,6 +33,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       useOz = prefs.getBool('use_oz') ?? false;
+      strictMatching = prefs.getBool('strict_matching') ?? false;
+      defaultSort = prefs.getString('default_sort') ?? 'match';
       isLoading = false;
     });
   }
@@ -35,6 +43,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use_oz', value);
     setState(() => useOz = value);
+  }
+
+  Future<void> _toggleStrictMatching(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('strict_matching', value);
+    setState(() => strictMatching = value);
+  }
+
+  Future<void> _setDefaultSort(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('default_sort', value);
+    setState(() => defaultSort = value);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link')),
+        );
+      }
+    }
   }
 
   Future<void> _clearRecentlyViewed() async {
@@ -167,6 +198,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _buildHeader(),
 
+            // ── Account ───────────────────────────────────────────────────
+            const _SectionHeader(title: 'ACCOUNT'),
+            Consumer<AuthService>(
+              builder: (context, auth, _) {
+                if (!auth.isSignedIn || auth.currentUser?.email == null) {
+                  return _SettingTile(
+                    icon: Icons.person_outline,
+                    title: 'Sign in',
+                    subtitle: 'Access Back Bar features',
+                    trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                    onTap: () => showAuthSheet(context),
+                  );
+                }
+                return Column(
+                  children: [
+                    _SettingTile(
+                      icon: Icons.person_outline,
+                      title: auth.currentUser!.email!,
+                      subtitle: 'Signed in',
+                      trailing: TextButton(
+                        onPressed: () async {
+                          await auth.signOut();
+                        },
+                        child: Text('Sign out', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.8), fontSize: 13)),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            const _SectionDivider(),
+
             // ── Measurements ──────────────────────────────────────────────
             const _SectionHeader(title: 'MEASUREMENTS'),
             Padding(
@@ -200,6 +264,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const _SectionDivider(),
 
+            // ── Preferences ───────────────────────────────────────────────
+            const _SectionHeader(title: 'PREFERENCES'),
+            _SettingTile(
+              icon: Icons.tune,
+              title: 'Ingredient Matching',
+              subtitle: strictMatching
+                  ? 'Strict — exact ingredients only'
+                  : 'Flexible — allows substitutions',
+              trailing: Switch(
+                value: strictMatching,
+                onChanged: (v) {
+                  HapticFeedback.selectionClick();
+                  _toggleStrictMatching(v);
+                },
+                activeThumbColor: AppTheme.accentGold,
+                activeTrackColor: AppTheme.accentGold.withValues(alpha: 0.3),
+                inactiveThumbColor: AppTheme.textSecondary,
+                inactiveTrackColor: AppTheme.surfaceLight,
+              ),
+            ),
+            _SettingTile(
+              icon: Icons.sort,
+              title: 'Default Sort',
+              subtitle: defaultSort == 'match'
+                  ? 'Best Match'
+                  : defaultSort == 'name'
+                      ? 'A–Z'
+                      : 'Difficulty',
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+              onTap: () async {
+                final picked = await showModalBottomSheet<String>(
+                  context: context,
+                  backgroundColor: AppTheme.surfaceDark,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  builder: (ctx) => Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Default Sort', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                        const SizedBox(height: 16),
+                        _SortOption(label: 'Best Match', value: 'match', current: defaultSort, onTap: (v) => Navigator.pop(ctx, v)),
+                        _SortOption(label: 'A–Z', value: 'name', current: defaultSort, onTap: (v) => Navigator.pop(ctx, v)),
+                        _SortOption(label: 'Difficulty', value: 'difficulty', current: defaultSort, onTap: (v) => Navigator.pop(ctx, v)),
+                      ],
+                    ),
+                  ),
+                );
+                if (picked != null) {
+                  HapticFeedback.selectionClick();
+                  _setDefaultSort(picked);
+                }
+              },
+            ),
+
+            const _SectionDivider(),
+
             // ── My Bar ────────────────────────────────────────────────────
             const _SectionHeader(title: 'MY BAR'),
             _SettingTile(
@@ -228,12 +352,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const _SectionDivider(),
 
+            // ── Support ───────────────────────────────────────────────────
+            const _SectionHeader(title: 'SUPPORT'),
+            _SettingTile(
+              icon: Icons.star_outline,
+              iconColor: AppTheme.accentGold,
+              title: 'Rate the App',
+              subtitle: 'Enjoying The Bar Bible? Leave a review',
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+              onTap: () => _launchUrl('https://apps.apple.com/app/id0000000000'), // TODO: replace with real App Store ID
+            ),
+            _SettingTile(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Privacy Policy',
+              subtitle: 'How we handle your data',
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+              onTap: () => _launchUrl('https://thebarbible.app/privacy'), // TODO: replace with real URL
+            ),
+
+            const _SectionDivider(),
+
             // ── About ─────────────────────────────────────────────────────
             const _SectionHeader(title: 'ABOUT'),
             const _SettingTile(
               icon: Icons.info_outline,
               title: 'Version',
-              subtitle: '1.0.0 (Build 9)',
+              subtitle: '1.1.0 (Build 11)',
             ),
             const _SettingTile(
               icon: Icons.local_bar_outlined,
@@ -331,7 +475,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Version 1.0.0 (Build 9)',
+              'Version 1.1.0 (Build 11)',
               style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
@@ -546,6 +690,48 @@ class _CreditRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SortOption extends StatelessWidget {
+  final String label;
+  final String value;
+  final String current;
+  final void Function(String) onTap;
+
+  const _SortOption({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == current;
+    return InkWell(
+      onTap: () => onTap(value),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  color: selected ? AppTheme.accentGold : AppTheme.textPrimary,
+                ),
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check, color: AppTheme.accentGold, size: 18),
+          ],
+        ),
+      ),
     );
   }
 }

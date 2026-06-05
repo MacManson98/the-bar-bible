@@ -3495,6 +3495,1364 @@ class FavoritesCompanion extends UpdateCompanion<Favorite> {
   }
 }
 
+class $UserCocktailsTable extends UserCocktails
+    with TableInfo<$UserCocktailsTable, UserCocktail> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserCocktailsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _methodMeta = const VerificationMeta('method');
+  @override
+  late final GeneratedColumn<String> method = GeneratedColumn<String>(
+    'method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _methodInstructionsMeta =
+      const VerificationMeta('methodInstructions');
+  @override
+  late final GeneratedColumn<String> methodInstructions =
+      GeneratedColumn<String>(
+        'method_instructions',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _glassMeta = const VerificationMeta('glass');
+  @override
+  late final GeneratedColumn<String> glass = GeneratedColumn<String>(
+    'glass',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _iceMeta = const VerificationMeta('ice');
+  @override
+  late final GeneratedColumn<String> ice = GeneratedColumn<String>(
+    'ice',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _garnishMeta = const VerificationMeta(
+    'garnish',
+  );
+  @override
+  late final GeneratedColumn<String> garnish = GeneratedColumn<String>(
+    'garnish',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _baseSpiritMeta = const VerificationMeta(
+    'baseSpirit',
+  );
+  @override
+  late final GeneratedColumn<String> baseSpirit = GeneratedColumn<String>(
+    'base_spirit',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _difficultyMeta = const VerificationMeta(
+    'difficulty',
+  );
+  @override
+  late final GeneratedColumn<int> difficulty = GeneratedColumn<int>(
+    'difficulty',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
+  @override
+  late final GeneratedColumn<String> tags = GeneratedColumn<String>(
+    'tags',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('cocktail'),
+  );
+  static const VerificationMeta _isAiGeneratedMeta = const VerificationMeta(
+    'isAiGenerated',
+  );
+  @override
+  late final GeneratedColumn<bool> isAiGenerated = GeneratedColumn<bool>(
+    'is_ai_generated',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_ai_generated" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _firestoreIdMeta = const VerificationMeta(
+    'firestoreId',
+  );
+  @override
+  late final GeneratedColumn<String> firestoreId = GeneratedColumn<String>(
+    'firestore_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    method,
+    methodInstructions,
+    glass,
+    ice,
+    garnish,
+    baseSpirit,
+    difficulty,
+    tags,
+    notes,
+    category,
+    isAiGenerated,
+    firestoreId,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_cocktails';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UserCocktail> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('method')) {
+      context.handle(
+        _methodMeta,
+        method.isAcceptableOrUnknown(data['method']!, _methodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_methodMeta);
+    }
+    if (data.containsKey('method_instructions')) {
+      context.handle(
+        _methodInstructionsMeta,
+        methodInstructions.isAcceptableOrUnknown(
+          data['method_instructions']!,
+          _methodInstructionsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('glass')) {
+      context.handle(
+        _glassMeta,
+        glass.isAcceptableOrUnknown(data['glass']!, _glassMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_glassMeta);
+    }
+    if (data.containsKey('ice')) {
+      context.handle(
+        _iceMeta,
+        ice.isAcceptableOrUnknown(data['ice']!, _iceMeta),
+      );
+    }
+    if (data.containsKey('garnish')) {
+      context.handle(
+        _garnishMeta,
+        garnish.isAcceptableOrUnknown(data['garnish']!, _garnishMeta),
+      );
+    }
+    if (data.containsKey('base_spirit')) {
+      context.handle(
+        _baseSpiritMeta,
+        baseSpirit.isAcceptableOrUnknown(data['base_spirit']!, _baseSpiritMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_baseSpiritMeta);
+    }
+    if (data.containsKey('difficulty')) {
+      context.handle(
+        _difficultyMeta,
+        difficulty.isAcceptableOrUnknown(data['difficulty']!, _difficultyMeta),
+      );
+    }
+    if (data.containsKey('tags')) {
+      context.handle(
+        _tagsMeta,
+        tags.isAcceptableOrUnknown(data['tags']!, _tagsMeta),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('is_ai_generated')) {
+      context.handle(
+        _isAiGeneratedMeta,
+        isAiGenerated.isAcceptableOrUnknown(
+          data['is_ai_generated']!,
+          _isAiGeneratedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('firestore_id')) {
+      context.handle(
+        _firestoreIdMeta,
+        firestoreId.isAcceptableOrUnknown(
+          data['firestore_id']!,
+          _firestoreIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UserCocktail map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserCocktail(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      method: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method'],
+      )!,
+      methodInstructions: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method_instructions'],
+      ),
+      glass: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}glass'],
+      )!,
+      ice: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ice'],
+      ),
+      garnish: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}garnish'],
+      ),
+      baseSpirit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}base_spirit'],
+      )!,
+      difficulty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}difficulty'],
+      )!,
+      tags: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      isAiGenerated: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_ai_generated'],
+      )!,
+      firestoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}firestore_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UserCocktailsTable createAlias(String alias) {
+    return $UserCocktailsTable(attachedDatabase, alias);
+  }
+}
+
+class UserCocktail extends DataClass implements Insertable<UserCocktail> {
+  final int id;
+  final String name;
+  final String method;
+  final String? methodInstructions;
+  final String glass;
+  final String? ice;
+  final String? garnish;
+  final String baseSpirit;
+  final int difficulty;
+  final String? tags;
+  final String? notes;
+  final String category;
+  final bool isAiGenerated;
+  final String? firestoreId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const UserCocktail({
+    required this.id,
+    required this.name,
+    required this.method,
+    this.methodInstructions,
+    required this.glass,
+    this.ice,
+    this.garnish,
+    required this.baseSpirit,
+    required this.difficulty,
+    this.tags,
+    this.notes,
+    required this.category,
+    required this.isAiGenerated,
+    this.firestoreId,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['method'] = Variable<String>(method);
+    if (!nullToAbsent || methodInstructions != null) {
+      map['method_instructions'] = Variable<String>(methodInstructions);
+    }
+    map['glass'] = Variable<String>(glass);
+    if (!nullToAbsent || ice != null) {
+      map['ice'] = Variable<String>(ice);
+    }
+    if (!nullToAbsent || garnish != null) {
+      map['garnish'] = Variable<String>(garnish);
+    }
+    map['base_spirit'] = Variable<String>(baseSpirit);
+    map['difficulty'] = Variable<int>(difficulty);
+    if (!nullToAbsent || tags != null) {
+      map['tags'] = Variable<String>(tags);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['category'] = Variable<String>(category);
+    map['is_ai_generated'] = Variable<bool>(isAiGenerated);
+    if (!nullToAbsent || firestoreId != null) {
+      map['firestore_id'] = Variable<String>(firestoreId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  UserCocktailsCompanion toCompanion(bool nullToAbsent) {
+    return UserCocktailsCompanion(
+      id: Value(id),
+      name: Value(name),
+      method: Value(method),
+      methodInstructions: methodInstructions == null && nullToAbsent
+          ? const Value.absent()
+          : Value(methodInstructions),
+      glass: Value(glass),
+      ice: ice == null && nullToAbsent ? const Value.absent() : Value(ice),
+      garnish: garnish == null && nullToAbsent
+          ? const Value.absent()
+          : Value(garnish),
+      baseSpirit: Value(baseSpirit),
+      difficulty: Value(difficulty),
+      tags: tags == null && nullToAbsent ? const Value.absent() : Value(tags),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      category: Value(category),
+      isAiGenerated: Value(isAiGenerated),
+      firestoreId: firestoreId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(firestoreId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory UserCocktail.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserCocktail(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      method: serializer.fromJson<String>(json['method']),
+      methodInstructions: serializer.fromJson<String?>(
+        json['methodInstructions'],
+      ),
+      glass: serializer.fromJson<String>(json['glass']),
+      ice: serializer.fromJson<String?>(json['ice']),
+      garnish: serializer.fromJson<String?>(json['garnish']),
+      baseSpirit: serializer.fromJson<String>(json['baseSpirit']),
+      difficulty: serializer.fromJson<int>(json['difficulty']),
+      tags: serializer.fromJson<String?>(json['tags']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      category: serializer.fromJson<String>(json['category']),
+      isAiGenerated: serializer.fromJson<bool>(json['isAiGenerated']),
+      firestoreId: serializer.fromJson<String?>(json['firestoreId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'method': serializer.toJson<String>(method),
+      'methodInstructions': serializer.toJson<String?>(methodInstructions),
+      'glass': serializer.toJson<String>(glass),
+      'ice': serializer.toJson<String?>(ice),
+      'garnish': serializer.toJson<String?>(garnish),
+      'baseSpirit': serializer.toJson<String>(baseSpirit),
+      'difficulty': serializer.toJson<int>(difficulty),
+      'tags': serializer.toJson<String?>(tags),
+      'notes': serializer.toJson<String?>(notes),
+      'category': serializer.toJson<String>(category),
+      'isAiGenerated': serializer.toJson<bool>(isAiGenerated),
+      'firestoreId': serializer.toJson<String?>(firestoreId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  UserCocktail copyWith({
+    int? id,
+    String? name,
+    String? method,
+    Value<String?> methodInstructions = const Value.absent(),
+    String? glass,
+    Value<String?> ice = const Value.absent(),
+    Value<String?> garnish = const Value.absent(),
+    String? baseSpirit,
+    int? difficulty,
+    Value<String?> tags = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    String? category,
+    bool? isAiGenerated,
+    Value<String?> firestoreId = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => UserCocktail(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    method: method ?? this.method,
+    methodInstructions: methodInstructions.present
+        ? methodInstructions.value
+        : this.methodInstructions,
+    glass: glass ?? this.glass,
+    ice: ice.present ? ice.value : this.ice,
+    garnish: garnish.present ? garnish.value : this.garnish,
+    baseSpirit: baseSpirit ?? this.baseSpirit,
+    difficulty: difficulty ?? this.difficulty,
+    tags: tags.present ? tags.value : this.tags,
+    notes: notes.present ? notes.value : this.notes,
+    category: category ?? this.category,
+    isAiGenerated: isAiGenerated ?? this.isAiGenerated,
+    firestoreId: firestoreId.present ? firestoreId.value : this.firestoreId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  UserCocktail copyWithCompanion(UserCocktailsCompanion data) {
+    return UserCocktail(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      method: data.method.present ? data.method.value : this.method,
+      methodInstructions: data.methodInstructions.present
+          ? data.methodInstructions.value
+          : this.methodInstructions,
+      glass: data.glass.present ? data.glass.value : this.glass,
+      ice: data.ice.present ? data.ice.value : this.ice,
+      garnish: data.garnish.present ? data.garnish.value : this.garnish,
+      baseSpirit: data.baseSpirit.present
+          ? data.baseSpirit.value
+          : this.baseSpirit,
+      difficulty: data.difficulty.present
+          ? data.difficulty.value
+          : this.difficulty,
+      tags: data.tags.present ? data.tags.value : this.tags,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      category: data.category.present ? data.category.value : this.category,
+      isAiGenerated: data.isAiGenerated.present
+          ? data.isAiGenerated.value
+          : this.isAiGenerated,
+      firestoreId: data.firestoreId.present
+          ? data.firestoreId.value
+          : this.firestoreId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserCocktail(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('method: $method, ')
+          ..write('methodInstructions: $methodInstructions, ')
+          ..write('glass: $glass, ')
+          ..write('ice: $ice, ')
+          ..write('garnish: $garnish, ')
+          ..write('baseSpirit: $baseSpirit, ')
+          ..write('difficulty: $difficulty, ')
+          ..write('tags: $tags, ')
+          ..write('notes: $notes, ')
+          ..write('category: $category, ')
+          ..write('isAiGenerated: $isAiGenerated, ')
+          ..write('firestoreId: $firestoreId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    method,
+    methodInstructions,
+    glass,
+    ice,
+    garnish,
+    baseSpirit,
+    difficulty,
+    tags,
+    notes,
+    category,
+    isAiGenerated,
+    firestoreId,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserCocktail &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.method == this.method &&
+          other.methodInstructions == this.methodInstructions &&
+          other.glass == this.glass &&
+          other.ice == this.ice &&
+          other.garnish == this.garnish &&
+          other.baseSpirit == this.baseSpirit &&
+          other.difficulty == this.difficulty &&
+          other.tags == this.tags &&
+          other.notes == this.notes &&
+          other.category == this.category &&
+          other.isAiGenerated == this.isAiGenerated &&
+          other.firestoreId == this.firestoreId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String> method;
+  final Value<String?> methodInstructions;
+  final Value<String> glass;
+  final Value<String?> ice;
+  final Value<String?> garnish;
+  final Value<String> baseSpirit;
+  final Value<int> difficulty;
+  final Value<String?> tags;
+  final Value<String?> notes;
+  final Value<String> category;
+  final Value<bool> isAiGenerated;
+  final Value<String?> firestoreId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const UserCocktailsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.method = const Value.absent(),
+    this.methodInstructions = const Value.absent(),
+    this.glass = const Value.absent(),
+    this.ice = const Value.absent(),
+    this.garnish = const Value.absent(),
+    this.baseSpirit = const Value.absent(),
+    this.difficulty = const Value.absent(),
+    this.tags = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.category = const Value.absent(),
+    this.isAiGenerated = const Value.absent(),
+    this.firestoreId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  UserCocktailsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required String method,
+    this.methodInstructions = const Value.absent(),
+    required String glass,
+    this.ice = const Value.absent(),
+    this.garnish = const Value.absent(),
+    required String baseSpirit,
+    this.difficulty = const Value.absent(),
+    this.tags = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.category = const Value.absent(),
+    this.isAiGenerated = const Value.absent(),
+    this.firestoreId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : name = Value(name),
+       method = Value(method),
+       glass = Value(glass),
+       baseSpirit = Value(baseSpirit);
+  static Insertable<UserCocktail> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? method,
+    Expression<String>? methodInstructions,
+    Expression<String>? glass,
+    Expression<String>? ice,
+    Expression<String>? garnish,
+    Expression<String>? baseSpirit,
+    Expression<int>? difficulty,
+    Expression<String>? tags,
+    Expression<String>? notes,
+    Expression<String>? category,
+    Expression<bool>? isAiGenerated,
+    Expression<String>? firestoreId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (method != null) 'method': method,
+      if (methodInstructions != null) 'method_instructions': methodInstructions,
+      if (glass != null) 'glass': glass,
+      if (ice != null) 'ice': ice,
+      if (garnish != null) 'garnish': garnish,
+      if (baseSpirit != null) 'base_spirit': baseSpirit,
+      if (difficulty != null) 'difficulty': difficulty,
+      if (tags != null) 'tags': tags,
+      if (notes != null) 'notes': notes,
+      if (category != null) 'category': category,
+      if (isAiGenerated != null) 'is_ai_generated': isAiGenerated,
+      if (firestoreId != null) 'firestore_id': firestoreId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  UserCocktailsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? method,
+    Value<String?>? methodInstructions,
+    Value<String>? glass,
+    Value<String?>? ice,
+    Value<String?>? garnish,
+    Value<String>? baseSpirit,
+    Value<int>? difficulty,
+    Value<String?>? tags,
+    Value<String?>? notes,
+    Value<String>? category,
+    Value<bool>? isAiGenerated,
+    Value<String?>? firestoreId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return UserCocktailsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      method: method ?? this.method,
+      methodInstructions: methodInstructions ?? this.methodInstructions,
+      glass: glass ?? this.glass,
+      ice: ice ?? this.ice,
+      garnish: garnish ?? this.garnish,
+      baseSpirit: baseSpirit ?? this.baseSpirit,
+      difficulty: difficulty ?? this.difficulty,
+      tags: tags ?? this.tags,
+      notes: notes ?? this.notes,
+      category: category ?? this.category,
+      isAiGenerated: isAiGenerated ?? this.isAiGenerated,
+      firestoreId: firestoreId ?? this.firestoreId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (method.present) {
+      map['method'] = Variable<String>(method.value);
+    }
+    if (methodInstructions.present) {
+      map['method_instructions'] = Variable<String>(methodInstructions.value);
+    }
+    if (glass.present) {
+      map['glass'] = Variable<String>(glass.value);
+    }
+    if (ice.present) {
+      map['ice'] = Variable<String>(ice.value);
+    }
+    if (garnish.present) {
+      map['garnish'] = Variable<String>(garnish.value);
+    }
+    if (baseSpirit.present) {
+      map['base_spirit'] = Variable<String>(baseSpirit.value);
+    }
+    if (difficulty.present) {
+      map['difficulty'] = Variable<int>(difficulty.value);
+    }
+    if (tags.present) {
+      map['tags'] = Variable<String>(tags.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (isAiGenerated.present) {
+      map['is_ai_generated'] = Variable<bool>(isAiGenerated.value);
+    }
+    if (firestoreId.present) {
+      map['firestore_id'] = Variable<String>(firestoreId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserCocktailsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('method: $method, ')
+          ..write('methodInstructions: $methodInstructions, ')
+          ..write('glass: $glass, ')
+          ..write('ice: $ice, ')
+          ..write('garnish: $garnish, ')
+          ..write('baseSpirit: $baseSpirit, ')
+          ..write('difficulty: $difficulty, ')
+          ..write('tags: $tags, ')
+          ..write('notes: $notes, ')
+          ..write('category: $category, ')
+          ..write('isAiGenerated: $isAiGenerated, ')
+          ..write('firestoreId: $firestoreId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $UserCocktailIngredientsTable extends UserCocktailIngredients
+    with TableInfo<$UserCocktailIngredientsTable, UserCocktailIngredient> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserCocktailIngredientsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _userCocktailIdMeta = const VerificationMeta(
+    'userCocktailId',
+  );
+  @override
+  late final GeneratedColumn<int> userCocktailId = GeneratedColumn<int>(
+    'user_cocktail_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES user_cocktails (id)',
+    ),
+  );
+  static const VerificationMeta _ingredientNameMeta = const VerificationMeta(
+    'ingredientName',
+  );
+  @override
+  late final GeneratedColumn<String> ingredientName = GeneratedColumn<String>(
+    'ingredient_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _unitMeta = const VerificationMeta('unit');
+  @override
+  late final GeneratedColumn<String> unit = GeneratedColumn<String>(
+    'unit',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _prepNoteMeta = const VerificationMeta(
+    'prepNote',
+  );
+  @override
+  late final GeneratedColumn<String> prepNote = GeneratedColumn<String>(
+    'prep_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    userCocktailId,
+    ingredientName,
+    amount,
+    unit,
+    prepNote,
+    sortOrder,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_cocktail_ingredients';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UserCocktailIngredient> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_cocktail_id')) {
+      context.handle(
+        _userCocktailIdMeta,
+        userCocktailId.isAcceptableOrUnknown(
+          data['user_cocktail_id']!,
+          _userCocktailIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_userCocktailIdMeta);
+    }
+    if (data.containsKey('ingredient_name')) {
+      context.handle(
+        _ingredientNameMeta,
+        ingredientName.isAcceptableOrUnknown(
+          data['ingredient_name']!,
+          _ingredientNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ingredientNameMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('unit')) {
+      context.handle(
+        _unitMeta,
+        unit.isAcceptableOrUnknown(data['unit']!, _unitMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_unitMeta);
+    }
+    if (data.containsKey('prep_note')) {
+      context.handle(
+        _prepNoteMeta,
+        prepNote.isAcceptableOrUnknown(data['prep_note']!, _prepNoteMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UserCocktailIngredient map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserCocktailIngredient(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      userCocktailId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_cocktail_id'],
+      )!,
+      ingredientName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ingredient_name'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount'],
+      )!,
+      unit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}unit'],
+      )!,
+      prepNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prep_note'],
+      ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $UserCocktailIngredientsTable createAlias(String alias) {
+    return $UserCocktailIngredientsTable(attachedDatabase, alias);
+  }
+}
+
+class UserCocktailIngredient extends DataClass
+    implements Insertable<UserCocktailIngredient> {
+  final int id;
+  final int userCocktailId;
+  final String ingredientName;
+  final double amount;
+  final String unit;
+  final String? prepNote;
+  final int sortOrder;
+  const UserCocktailIngredient({
+    required this.id,
+    required this.userCocktailId,
+    required this.ingredientName,
+    required this.amount,
+    required this.unit,
+    this.prepNote,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_cocktail_id'] = Variable<int>(userCocktailId);
+    map['ingredient_name'] = Variable<String>(ingredientName);
+    map['amount'] = Variable<double>(amount);
+    map['unit'] = Variable<String>(unit);
+    if (!nullToAbsent || prepNote != null) {
+      map['prep_note'] = Variable<String>(prepNote);
+    }
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  UserCocktailIngredientsCompanion toCompanion(bool nullToAbsent) {
+    return UserCocktailIngredientsCompanion(
+      id: Value(id),
+      userCocktailId: Value(userCocktailId),
+      ingredientName: Value(ingredientName),
+      amount: Value(amount),
+      unit: Value(unit),
+      prepNote: prepNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(prepNote),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory UserCocktailIngredient.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserCocktailIngredient(
+      id: serializer.fromJson<int>(json['id']),
+      userCocktailId: serializer.fromJson<int>(json['userCocktailId']),
+      ingredientName: serializer.fromJson<String>(json['ingredientName']),
+      amount: serializer.fromJson<double>(json['amount']),
+      unit: serializer.fromJson<String>(json['unit']),
+      prepNote: serializer.fromJson<String?>(json['prepNote']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userCocktailId': serializer.toJson<int>(userCocktailId),
+      'ingredientName': serializer.toJson<String>(ingredientName),
+      'amount': serializer.toJson<double>(amount),
+      'unit': serializer.toJson<String>(unit),
+      'prepNote': serializer.toJson<String?>(prepNote),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  UserCocktailIngredient copyWith({
+    int? id,
+    int? userCocktailId,
+    String? ingredientName,
+    double? amount,
+    String? unit,
+    Value<String?> prepNote = const Value.absent(),
+    int? sortOrder,
+  }) => UserCocktailIngredient(
+    id: id ?? this.id,
+    userCocktailId: userCocktailId ?? this.userCocktailId,
+    ingredientName: ingredientName ?? this.ingredientName,
+    amount: amount ?? this.amount,
+    unit: unit ?? this.unit,
+    prepNote: prepNote.present ? prepNote.value : this.prepNote,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+  UserCocktailIngredient copyWithCompanion(
+    UserCocktailIngredientsCompanion data,
+  ) {
+    return UserCocktailIngredient(
+      id: data.id.present ? data.id.value : this.id,
+      userCocktailId: data.userCocktailId.present
+          ? data.userCocktailId.value
+          : this.userCocktailId,
+      ingredientName: data.ingredientName.present
+          ? data.ingredientName.value
+          : this.ingredientName,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      unit: data.unit.present ? data.unit.value : this.unit,
+      prepNote: data.prepNote.present ? data.prepNote.value : this.prepNote,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserCocktailIngredient(')
+          ..write('id: $id, ')
+          ..write('userCocktailId: $userCocktailId, ')
+          ..write('ingredientName: $ingredientName, ')
+          ..write('amount: $amount, ')
+          ..write('unit: $unit, ')
+          ..write('prepNote: $prepNote, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    userCocktailId,
+    ingredientName,
+    amount,
+    unit,
+    prepNote,
+    sortOrder,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserCocktailIngredient &&
+          other.id == this.id &&
+          other.userCocktailId == this.userCocktailId &&
+          other.ingredientName == this.ingredientName &&
+          other.amount == this.amount &&
+          other.unit == this.unit &&
+          other.prepNote == this.prepNote &&
+          other.sortOrder == this.sortOrder);
+}
+
+class UserCocktailIngredientsCompanion
+    extends UpdateCompanion<UserCocktailIngredient> {
+  final Value<int> id;
+  final Value<int> userCocktailId;
+  final Value<String> ingredientName;
+  final Value<double> amount;
+  final Value<String> unit;
+  final Value<String?> prepNote;
+  final Value<int> sortOrder;
+  const UserCocktailIngredientsCompanion({
+    this.id = const Value.absent(),
+    this.userCocktailId = const Value.absent(),
+    this.ingredientName = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.unit = const Value.absent(),
+    this.prepNote = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  });
+  UserCocktailIngredientsCompanion.insert({
+    this.id = const Value.absent(),
+    required int userCocktailId,
+    required String ingredientName,
+    required double amount,
+    required String unit,
+    this.prepNote = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  }) : userCocktailId = Value(userCocktailId),
+       ingredientName = Value(ingredientName),
+       amount = Value(amount),
+       unit = Value(unit);
+  static Insertable<UserCocktailIngredient> custom({
+    Expression<int>? id,
+    Expression<int>? userCocktailId,
+    Expression<String>? ingredientName,
+    Expression<double>? amount,
+    Expression<String>? unit,
+    Expression<String>? prepNote,
+    Expression<int>? sortOrder,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userCocktailId != null) 'user_cocktail_id': userCocktailId,
+      if (ingredientName != null) 'ingredient_name': ingredientName,
+      if (amount != null) 'amount': amount,
+      if (unit != null) 'unit': unit,
+      if (prepNote != null) 'prep_note': prepNote,
+      if (sortOrder != null) 'sort_order': sortOrder,
+    });
+  }
+
+  UserCocktailIngredientsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? userCocktailId,
+    Value<String>? ingredientName,
+    Value<double>? amount,
+    Value<String>? unit,
+    Value<String?>? prepNote,
+    Value<int>? sortOrder,
+  }) {
+    return UserCocktailIngredientsCompanion(
+      id: id ?? this.id,
+      userCocktailId: userCocktailId ?? this.userCocktailId,
+      ingredientName: ingredientName ?? this.ingredientName,
+      amount: amount ?? this.amount,
+      unit: unit ?? this.unit,
+      prepNote: prepNote ?? this.prepNote,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userCocktailId.present) {
+      map['user_cocktail_id'] = Variable<int>(userCocktailId.value);
+    }
+    if (ingredientName.present) {
+      map['ingredient_name'] = Variable<String>(ingredientName.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<double>(amount.value);
+    }
+    if (unit.present) {
+      map['unit'] = Variable<String>(unit.value);
+    }
+    if (prepNote.present) {
+      map['prep_note'] = Variable<String>(prepNote.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserCocktailIngredientsCompanion(')
+          ..write('id: $id, ')
+          ..write('userCocktailId: $userCocktailId, ')
+          ..write('ingredientName: $ingredientName, ')
+          ..write('amount: $amount, ')
+          ..write('unit: $unit, ')
+          ..write('prepNote: $prepNote, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3510,6 +4868,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SavedBarIngredientsTable(this);
   late final $ShoppingListTable shoppingList = $ShoppingListTable(this);
   late final $FavoritesTable favorites = $FavoritesTable(this);
+  late final $UserCocktailsTable userCocktails = $UserCocktailsTable(this);
+  late final $UserCocktailIngredientsTable userCocktailIngredients =
+      $UserCocktailIngredientsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3524,6 +4885,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savedBarIngredients,
     shoppingList,
     favorites,
+    userCocktails,
+    userCocktailIngredients,
   ];
 }
 
@@ -6778,6 +8141,919 @@ typedef $$FavoritesTableProcessedTableManager =
       Favorite,
       PrefetchHooks Function()
     >;
+typedef $$UserCocktailsTableCreateCompanionBuilder =
+    UserCocktailsCompanion Function({
+      Value<int> id,
+      required String name,
+      required String method,
+      Value<String?> methodInstructions,
+      required String glass,
+      Value<String?> ice,
+      Value<String?> garnish,
+      required String baseSpirit,
+      Value<int> difficulty,
+      Value<String?> tags,
+      Value<String?> notes,
+      Value<String> category,
+      Value<bool> isAiGenerated,
+      Value<String?> firestoreId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$UserCocktailsTableUpdateCompanionBuilder =
+    UserCocktailsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> method,
+      Value<String?> methodInstructions,
+      Value<String> glass,
+      Value<String?> ice,
+      Value<String?> garnish,
+      Value<String> baseSpirit,
+      Value<int> difficulty,
+      Value<String?> tags,
+      Value<String?> notes,
+      Value<String> category,
+      Value<bool> isAiGenerated,
+      Value<String?> firestoreId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$UserCocktailsTableReferences
+    extends BaseReferences<_$AppDatabase, $UserCocktailsTable, UserCocktail> {
+  $$UserCocktailsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<
+    $UserCocktailIngredientsTable,
+    List<UserCocktailIngredient>
+  >
+  _userCocktailIngredientsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.userCocktailIngredients,
+        aliasName: $_aliasNameGenerator(
+          db.userCocktails.id,
+          db.userCocktailIngredients.userCocktailId,
+        ),
+      );
+
+  $$UserCocktailIngredientsTableProcessedTableManager
+  get userCocktailIngredientsRefs {
+    final manager = $$UserCocktailIngredientsTableTableManager(
+      $_db,
+      $_db.userCocktailIngredients,
+    ).filter((f) => f.userCocktailId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _userCocktailIngredientsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$UserCocktailsTableFilterComposer
+    extends Composer<_$AppDatabase, $UserCocktailsTable> {
+  $$UserCocktailsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get methodInstructions => $composableBuilder(
+    column: $table.methodInstructions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get glass => $composableBuilder(
+    column: $table.glass,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ice => $composableBuilder(
+    column: $table.ice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get garnish => $composableBuilder(
+    column: $table.garnish,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get baseSpirit => $composableBuilder(
+    column: $table.baseSpirit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get difficulty => $composableBuilder(
+    column: $table.difficulty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tags => $composableBuilder(
+    column: $table.tags,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isAiGenerated => $composableBuilder(
+    column: $table.isAiGenerated,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> userCocktailIngredientsRefs(
+    Expression<bool> Function($$UserCocktailIngredientsTableFilterComposer f) f,
+  ) {
+    final $$UserCocktailIngredientsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.userCocktailIngredients,
+          getReferencedColumn: (t) => t.userCocktailId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$UserCocktailIngredientsTableFilterComposer(
+                $db: $db,
+                $table: $db.userCocktailIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$UserCocktailsTableOrderingComposer
+    extends Composer<_$AppDatabase, $UserCocktailsTable> {
+  $$UserCocktailsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get methodInstructions => $composableBuilder(
+    column: $table.methodInstructions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get glass => $composableBuilder(
+    column: $table.glass,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ice => $composableBuilder(
+    column: $table.ice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get garnish => $composableBuilder(
+    column: $table.garnish,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get baseSpirit => $composableBuilder(
+    column: $table.baseSpirit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get difficulty => $composableBuilder(
+    column: $table.difficulty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tags => $composableBuilder(
+    column: $table.tags,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isAiGenerated => $composableBuilder(
+    column: $table.isAiGenerated,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UserCocktailsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UserCocktailsTable> {
+  $$UserCocktailsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get method =>
+      $composableBuilder(column: $table.method, builder: (column) => column);
+
+  GeneratedColumn<String> get methodInstructions => $composableBuilder(
+    column: $table.methodInstructions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get glass =>
+      $composableBuilder(column: $table.glass, builder: (column) => column);
+
+  GeneratedColumn<String> get ice =>
+      $composableBuilder(column: $table.ice, builder: (column) => column);
+
+  GeneratedColumn<String> get garnish =>
+      $composableBuilder(column: $table.garnish, builder: (column) => column);
+
+  GeneratedColumn<String> get baseSpirit => $composableBuilder(
+    column: $table.baseSpirit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get difficulty => $composableBuilder(
+    column: $table.difficulty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tags =>
+      $composableBuilder(column: $table.tags, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<bool> get isAiGenerated => $composableBuilder(
+    column: $table.isAiGenerated,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get firestoreId => $composableBuilder(
+    column: $table.firestoreId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> userCocktailIngredientsRefs<T extends Object>(
+    Expression<T> Function($$UserCocktailIngredientsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$UserCocktailIngredientsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.userCocktailIngredients,
+          getReferencedColumn: (t) => t.userCocktailId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$UserCocktailIngredientsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.userCocktailIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$UserCocktailsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UserCocktailsTable,
+          UserCocktail,
+          $$UserCocktailsTableFilterComposer,
+          $$UserCocktailsTableOrderingComposer,
+          $$UserCocktailsTableAnnotationComposer,
+          $$UserCocktailsTableCreateCompanionBuilder,
+          $$UserCocktailsTableUpdateCompanionBuilder,
+          (UserCocktail, $$UserCocktailsTableReferences),
+          UserCocktail,
+          PrefetchHooks Function({bool userCocktailIngredientsRefs})
+        > {
+  $$UserCocktailsTableTableManager(_$AppDatabase db, $UserCocktailsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UserCocktailsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UserCocktailsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UserCocktailsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> method = const Value.absent(),
+                Value<String?> methodInstructions = const Value.absent(),
+                Value<String> glass = const Value.absent(),
+                Value<String?> ice = const Value.absent(),
+                Value<String?> garnish = const Value.absent(),
+                Value<String> baseSpirit = const Value.absent(),
+                Value<int> difficulty = const Value.absent(),
+                Value<String?> tags = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<bool> isAiGenerated = const Value.absent(),
+                Value<String?> firestoreId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => UserCocktailsCompanion(
+                id: id,
+                name: name,
+                method: method,
+                methodInstructions: methodInstructions,
+                glass: glass,
+                ice: ice,
+                garnish: garnish,
+                baseSpirit: baseSpirit,
+                difficulty: difficulty,
+                tags: tags,
+                notes: notes,
+                category: category,
+                isAiGenerated: isAiGenerated,
+                firestoreId: firestoreId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required String method,
+                Value<String?> methodInstructions = const Value.absent(),
+                required String glass,
+                Value<String?> ice = const Value.absent(),
+                Value<String?> garnish = const Value.absent(),
+                required String baseSpirit,
+                Value<int> difficulty = const Value.absent(),
+                Value<String?> tags = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<bool> isAiGenerated = const Value.absent(),
+                Value<String?> firestoreId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => UserCocktailsCompanion.insert(
+                id: id,
+                name: name,
+                method: method,
+                methodInstructions: methodInstructions,
+                glass: glass,
+                ice: ice,
+                garnish: garnish,
+                baseSpirit: baseSpirit,
+                difficulty: difficulty,
+                tags: tags,
+                notes: notes,
+                category: category,
+                isAiGenerated: isAiGenerated,
+                firestoreId: firestoreId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$UserCocktailsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({userCocktailIngredientsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (userCocktailIngredientsRefs) db.userCocktailIngredients,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (userCocktailIngredientsRefs)
+                    await $_getPrefetchedData<
+                      UserCocktail,
+                      $UserCocktailsTable,
+                      UserCocktailIngredient
+                    >(
+                      currentTable: table,
+                      referencedTable: $$UserCocktailsTableReferences
+                          ._userCocktailIngredientsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$UserCocktailsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).userCocktailIngredientsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.userCocktailId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$UserCocktailsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UserCocktailsTable,
+      UserCocktail,
+      $$UserCocktailsTableFilterComposer,
+      $$UserCocktailsTableOrderingComposer,
+      $$UserCocktailsTableAnnotationComposer,
+      $$UserCocktailsTableCreateCompanionBuilder,
+      $$UserCocktailsTableUpdateCompanionBuilder,
+      (UserCocktail, $$UserCocktailsTableReferences),
+      UserCocktail,
+      PrefetchHooks Function({bool userCocktailIngredientsRefs})
+    >;
+typedef $$UserCocktailIngredientsTableCreateCompanionBuilder =
+    UserCocktailIngredientsCompanion Function({
+      Value<int> id,
+      required int userCocktailId,
+      required String ingredientName,
+      required double amount,
+      required String unit,
+      Value<String?> prepNote,
+      Value<int> sortOrder,
+    });
+typedef $$UserCocktailIngredientsTableUpdateCompanionBuilder =
+    UserCocktailIngredientsCompanion Function({
+      Value<int> id,
+      Value<int> userCocktailId,
+      Value<String> ingredientName,
+      Value<double> amount,
+      Value<String> unit,
+      Value<String?> prepNote,
+      Value<int> sortOrder,
+    });
+
+final class $$UserCocktailIngredientsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $UserCocktailIngredientsTable,
+          UserCocktailIngredient
+        > {
+  $$UserCocktailIngredientsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $UserCocktailsTable _userCocktailIdTable(_$AppDatabase db) =>
+      db.userCocktails.createAlias(
+        $_aliasNameGenerator(
+          db.userCocktailIngredients.userCocktailId,
+          db.userCocktails.id,
+        ),
+      );
+
+  $$UserCocktailsTableProcessedTableManager get userCocktailId {
+    final $_column = $_itemColumn<int>('user_cocktail_id')!;
+
+    final manager = $$UserCocktailsTableTableManager(
+      $_db,
+      $_db.userCocktails,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userCocktailIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$UserCocktailIngredientsTableFilterComposer
+    extends Composer<_$AppDatabase, $UserCocktailIngredientsTable> {
+  $$UserCocktailIngredientsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ingredientName => $composableBuilder(
+    column: $table.ingredientName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get unit => $composableBuilder(
+    column: $table.unit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prepNote => $composableBuilder(
+    column: $table.prepNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$UserCocktailsTableFilterComposer get userCocktailId {
+    final $$UserCocktailsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userCocktailId,
+      referencedTable: $db.userCocktails,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserCocktailsTableFilterComposer(
+            $db: $db,
+            $table: $db.userCocktails,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserCocktailIngredientsTableOrderingComposer
+    extends Composer<_$AppDatabase, $UserCocktailIngredientsTable> {
+  $$UserCocktailIngredientsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ingredientName => $composableBuilder(
+    column: $table.ingredientName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get unit => $composableBuilder(
+    column: $table.unit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prepNote => $composableBuilder(
+    column: $table.prepNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$UserCocktailsTableOrderingComposer get userCocktailId {
+    final $$UserCocktailsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userCocktailId,
+      referencedTable: $db.userCocktails,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserCocktailsTableOrderingComposer(
+            $db: $db,
+            $table: $db.userCocktails,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserCocktailIngredientsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UserCocktailIngredientsTable> {
+  $$UserCocktailIngredientsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get ingredientName => $composableBuilder(
+    column: $table.ingredientName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get unit =>
+      $composableBuilder(column: $table.unit, builder: (column) => column);
+
+  GeneratedColumn<String> get prepNote =>
+      $composableBuilder(column: $table.prepNote, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  $$UserCocktailsTableAnnotationComposer get userCocktailId {
+    final $$UserCocktailsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userCocktailId,
+      referencedTable: $db.userCocktails,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UserCocktailsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.userCocktails,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserCocktailIngredientsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UserCocktailIngredientsTable,
+          UserCocktailIngredient,
+          $$UserCocktailIngredientsTableFilterComposer,
+          $$UserCocktailIngredientsTableOrderingComposer,
+          $$UserCocktailIngredientsTableAnnotationComposer,
+          $$UserCocktailIngredientsTableCreateCompanionBuilder,
+          $$UserCocktailIngredientsTableUpdateCompanionBuilder,
+          (UserCocktailIngredient, $$UserCocktailIngredientsTableReferences),
+          UserCocktailIngredient,
+          PrefetchHooks Function({bool userCocktailId})
+        > {
+  $$UserCocktailIngredientsTableTableManager(
+    _$AppDatabase db,
+    $UserCocktailIngredientsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UserCocktailIngredientsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$UserCocktailIngredientsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$UserCocktailIngredientsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> userCocktailId = const Value.absent(),
+                Value<String> ingredientName = const Value.absent(),
+                Value<double> amount = const Value.absent(),
+                Value<String> unit = const Value.absent(),
+                Value<String?> prepNote = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+              }) => UserCocktailIngredientsCompanion(
+                id: id,
+                userCocktailId: userCocktailId,
+                ingredientName: ingredientName,
+                amount: amount,
+                unit: unit,
+                prepNote: prepNote,
+                sortOrder: sortOrder,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int userCocktailId,
+                required String ingredientName,
+                required double amount,
+                required String unit,
+                Value<String?> prepNote = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+              }) => UserCocktailIngredientsCompanion.insert(
+                id: id,
+                userCocktailId: userCocktailId,
+                ingredientName: ingredientName,
+                amount: amount,
+                unit: unit,
+                prepNote: prepNote,
+                sortOrder: sortOrder,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$UserCocktailIngredientsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({userCocktailId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (userCocktailId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.userCocktailId,
+                                referencedTable:
+                                    $$UserCocktailIngredientsTableReferences
+                                        ._userCocktailIdTable(db),
+                                referencedColumn:
+                                    $$UserCocktailIngredientsTableReferences
+                                        ._userCocktailIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$UserCocktailIngredientsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UserCocktailIngredientsTable,
+      UserCocktailIngredient,
+      $$UserCocktailIngredientsTableFilterComposer,
+      $$UserCocktailIngredientsTableOrderingComposer,
+      $$UserCocktailIngredientsTableAnnotationComposer,
+      $$UserCocktailIngredientsTableCreateCompanionBuilder,
+      $$UserCocktailIngredientsTableUpdateCompanionBuilder,
+      (UserCocktailIngredient, $$UserCocktailIngredientsTableReferences),
+      UserCocktailIngredient,
+      PrefetchHooks Function({bool userCocktailId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6800,4 +9076,11 @@ class $AppDatabaseManager {
       $$ShoppingListTableTableManager(_db, _db.shoppingList);
   $$FavoritesTableTableManager get favorites =>
       $$FavoritesTableTableManager(_db, _db.favorites);
+  $$UserCocktailsTableTableManager get userCocktails =>
+      $$UserCocktailsTableTableManager(_db, _db.userCocktails);
+  $$UserCocktailIngredientsTableTableManager get userCocktailIngredients =>
+      $$UserCocktailIngredientsTableTableManager(
+        _db,
+        _db.userCocktailIngredients,
+      );
 }
