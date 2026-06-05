@@ -23,15 +23,10 @@ workflows:
           set -x
           keychain initialize
           keychain add-certificates
+          # Add Sign In with Apple entitlement to all build configs
+          plutil -replace buildSettings.CODE_SIGN_ENTITLEMENTS -string "Runner/Runner.entitlements" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          sed -i '' 's/VERSIONING_SYSTEM = "apple-generic";/CODE_SIGN_ENTITLEMENTS = Runner\/Runner.entitlements;\n\t\t\t\tVERSIONING_SYSTEM = "apple-generic";/g' ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
           xcode-project use-profiles
-
-      - name: Set up entitlements
-        script: |
-          /usr/libexec/PlistBuddy -c "Set :CODE_SIGN_ENTITLEMENTS Runner/Runner.entitlements" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
-          # Set entitlements for all build configurations
-          xcodebuild -project ios/Runner.xcodeproj \
-            -target Runner \
-            -showBuildSettings 2>/dev/null | grep CODE_SIGN_ENTITLEMENTS || true
 
       - name: Get Flutter packages
         script: | 

@@ -1,4 +1,4 @@
-﻿// !$*UTF8*$!
+// !$*UTF8*$!
 {
 	archiveVersion = 1;
 	classes = {
@@ -371,7 +371,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tomcon.thebarbible;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
-				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
@@ -551,7 +550,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tomcon.thebarbible;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
-				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -574,7 +572,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tomcon.thebarbible;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
-				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
