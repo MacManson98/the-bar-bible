@@ -31,6 +31,13 @@ void main() async {
 
   final authService = AuthService();
   authService.setPurchaseService(purchaseService);
+
+  // Link any already-signed-in Firebase user to RevenueCat on startup.
+  final existingUser = authService.currentUser;
+  if (existingUser != null && !existingUser.isAnonymous) {
+    await purchaseService.loginUser(existingUser.uid);
+  }
+
   final database = await initDatabase();
 
   runApp(

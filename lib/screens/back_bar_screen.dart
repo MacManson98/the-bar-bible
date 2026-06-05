@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
 import 'cocktail_creator_screen.dart';
+import 'ai_generator_screen.dart';
 import 'paywall_screen.dart';
 
 class BackBarScreen extends StatefulWidget {
@@ -197,9 +198,18 @@ class _CreateTabState extends State<_CreateTab> {
       return;
     }
 
-    // TODO: Navigate to AI generator screen (Phase 5)
+    // TODO removed — navigate to AI generator screen
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('AI generator coming soon!')));
+      final created = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AiGeneratorScreen(database: widget.database),
+        ),
+      );
+      if (created == true && mounted) {
+        await auth.incrementAiCreditsUsed(purchase.isPremium);
+        await _loadData();
+      }
     }
   }
 

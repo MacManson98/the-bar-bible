@@ -7,15 +7,18 @@ import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
 import '../services/purchase_service.dart';
+import '../services/ai_service.dart';
 
 class CocktailCreatorScreen extends StatefulWidget {
   final AppDatabase database;
   final UserCocktail? existing; // non-null when editing
+  final AiCocktailSpec? aiPrefill; // non-null when creating from AI generation
 
   const CocktailCreatorScreen({
     super.key,
     required this.database,
     this.existing,
+    this.aiPrefill,
   });
 
   @override
@@ -69,6 +72,34 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
       _category = e.category;
       _difficulty = e.difficulty;
       _loadExistingIngredients();
+      return;
+    }
+
+    // Populate from AI prefill
+    final ai = widget.aiPrefill;
+    if (ai != null) {
+      _nameController.text = ai.name;
+      _glassController.text = ai.glass;
+      _iceController.text = ai.ice ?? '';
+      _garnishController.text = ai.garnish ?? '';
+      _notesController.text = ai.notes ?? '';
+      _tagsController.text = ai.tags ?? '';
+      _method = _capitalize(ai.method);
+      _baseSpirit = _spirits.contains(ai.baseSpirit) ? ai.baseSpirit : 'Other';
+      _category = ai.category;
+      _difficulty = ai.difficulty;
+      if (ai.ingredients.isNotEmpty) {
+        _ingredients = ai.ingredients.map((i) {
+          final row = _IngredientRow();
+          row.nameController.text = i.name;
+          row.amountController.text = i.amount == i.amount.truncateToDouble()
+              ? i.amount.toInt().toString()
+              : i.amount.toString();
+          row.unit = i.unit;
+          row.prepNoteController.text = i.prepNote ?? '';
+          return row;
+        }).toList();
+      }
     }
   }
 
@@ -149,7 +180,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         tags: Value(_tagsController.text.trim().isEmpty ? null : _tagsController.text.trim()),
         notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
         category: Value(_category),
-        isAiGenerated: const Value(false),
+        isAiGenerated: Value(widget.aiPrefill != null),
         updatedAt: Value(DateTime.now()),
       );
 

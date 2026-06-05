@@ -22,18 +22,24 @@ class PurchaseService extends ChangeNotifier {
 
   /// Initialise RevenueCat — call once at app startup.
   Future<void> init() async {
-    await Purchases.setLogLevel(LogLevel.debug);
-    final config = PurchasesConfiguration(_iosApiKey);
-    await Purchases.configure(config);
+    try {
+      await Purchases.setLogLevel(LogLevel.debug);
+      final config = PurchasesConfiguration(_iosApiKey);
+      await Purchases.configure(config);
+      debugPrint('[PurchaseService] RevenueCat configured successfully');
 
-    Purchases.addCustomerInfoUpdateListener((info) {
-      _customerInfo = info;
-      _isPremium = _checkEntitlement(info);
-      notifyListeners();
-    });
+      Purchases.addCustomerInfoUpdateListener((info) {
+        debugPrint('[PurchaseService] customerInfoUpdate: appUserId=${info.originalAppUserId}');
+        _customerInfo = info;
+        _isPremium = _checkEntitlement(info);
+        notifyListeners();
+      });
 
-    await refreshStatus();
-    await _loadOfferings();
+      await refreshStatus();
+      await _loadOfferings();
+    } catch (e, st) {
+      debugPrint('[PurchaseService] init FAILED: $e\n$st');
+    }
   }
 
   Future<void> _loadOfferings() async {

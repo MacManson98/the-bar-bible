@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
+import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -20,7 +22,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool useOz = false;
   bool strictMatching = false;
-  String defaultSort = 'match'; // 'match' | 'name' | 'difficulty'
+  String defaultSort = 'match';
   bool isLoading = true;
 
   @override
@@ -180,6 +182,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return result ?? false;
   }
 
+  Future<void> _showRevenueCatDebug() async {
+    String appUserId = 'unknown';
+    String entitlements = 'none';
+    String isPremiumRC = 'unknown';
+    String error = '';
+
+    try {
+      appUserId = await Purchases.appUserID;
+      final info = await Purchases.getCustomerInfo();
+      isPremiumRC = info.entitlements.active.isNotEmpty.toString();
+      entitlements = info.entitlements.active.isEmpty
+          ? 'none'
+          : info.entitlements.active.keys.join(', ');
+    } catch (e) {
+      error = e.toString();
+    }
+
+    if (!mounted) return;
+
+    final purchase = context.read<PurchaseService>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'RevenueCat Debug',
+          style: TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DebugRow(label: 'APP USER ID', value: appUserId),
+              const SizedBox(height: 12),
+              _DebugRow(label: 'IS PREMIUM (LOCAL)', value: purchase.isPremium.toString()),
+              const SizedBox(height: 12),
+              _DebugRow(label: 'IS PREMIUM (RC)', value: isPremiumRC),
+              const SizedBox(height: 12),
+              _DebugRow(label: 'ENTITLEMENTS', value: entitlements),
+              if (error.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _DebugRow(label: 'ERROR', value: error, isError: true),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: appUserId));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('App User ID copied')),
+              );
+            },
+            child: const Text('COPY ID', style: TextStyle(color: AppTheme.accentGold)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CLOSE', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreditsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text(
+          'THE BAR BIBLE',
+          style: TextStyle(
+            letterSpacing: 2,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.accentGold,
+          ),
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Version 1.2.1 (Build 19)',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Essential cocktail reference for bartenders and enthusiasts.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            SizedBox(height: 16),
+            Divider(color: AppTheme.surfaceLight),
+            SizedBox(height: 12),
+            _CreditRow(label: 'Framework', value: 'Flutter & Dart'),
+            SizedBox(height: 8),
+            _CreditRow(label: 'Database', value: 'IBA Official Cocktails'),
+            SizedBox(height: 8),
+            _CreditRow(label: 'Developer', value: 'MacManson98'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'CLOSE',
+              style: TextStyle(
+                color: AppTheme.accentGold,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -330,11 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.history,
               title: 'Clear Recently Viewed',
               subtitle: 'Remove cocktail view history from home screen',
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: AppTheme.textSecondary,
-                size: 20,
-              ),
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
               onTap: _clearRecentlyViewed,
             ),
             _SettingTile(
@@ -342,11 +465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               iconColor: Colors.redAccent.withValues(alpha: 0.8),
               title: 'Reset Bar Ingredients',
               subtitle: 'Remove all ingredients from your saved bar',
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: AppTheme.textSecondary,
-                size: 20,
-              ),
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
               onTap: _resetBarIngredients,
             ),
 
@@ -360,14 +479,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'Rate the App',
               subtitle: 'Enjoying The Bar Bible? Leave a review',
               trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
-              onTap: () => _launchUrl('https://apps.apple.com/app/id0000000000'), // TODO: replace with real App Store ID
+              onTap: () => _launchUrl('https://apps.apple.com/app/id0000000000'),
             ),
             _SettingTile(
               icon: Icons.privacy_tip_outlined,
               title: 'Privacy Policy',
               subtitle: 'How we handle your data',
               trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
-              onTap: () => _launchUrl('https://thebarbible.app/privacy'), // TODO: replace with real URL
+              onTap: () => _launchUrl('https://thebarbible.app/privacy'),
             ),
 
             const _SectionDivider(),
@@ -377,7 +496,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const _SettingTile(
               icon: Icons.info_outline,
               title: 'Version',
-              subtitle: '1.2.0 (Build 15)',
+              subtitle: '1.2.1 (Build 19)',
             ),
             const _SettingTile(
               icon: Icons.local_bar_outlined,
@@ -385,14 +504,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: 'IBA Official Cocktails',
             ),
             _SettingTile(
+              icon: Icons.bug_report_outlined,
+              iconColor: Colors.orangeAccent,
+              title: 'RevenueCat Debug',
+              subtitle: 'View SDK status and App User ID',
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+              onTap: _showRevenueCatDebug,
+            ),
+            _SettingTile(
               icon: Icons.favorite_outline,
               title: 'Credits',
               subtitle: 'Built with Flutter & Dart',
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: AppTheme.textSecondary,
-                size: 20,
-              ),
+              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
               onTap: _showCreditsDialog,
             ),
 
@@ -454,64 +577,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  void _showCreditsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceDark,
-        title: const Text(
-          'THE BAR BIBLE',
-          style: TextStyle(
-            letterSpacing: 2,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.accentGold,
-          ),
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Version 1.2.0 (Build 15)',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Essential cocktail reference for bartenders and enthusiasts.',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            SizedBox(height: 16),
-            Divider(color: AppTheme.surfaceLight),
-            SizedBox(height: 12),
-            _CreditRow(label: 'Framework', value: 'Flutter & Dart'),
-            SizedBox(height: 8),
-            _CreditRow(label: 'Database', value: 'IBA Official Cocktails'),
-            SizedBox(height: 8),
-            _CreditRow(label: 'Developer', value: 'MacManson98'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'CLOSE',
-              style: TextStyle(
-                color: AppTheme.accentGold,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -580,11 +645,7 @@ class _SettingTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: iconColor ?? AppTheme.textSecondary,
-              size: 22,
-            ),
+            Icon(icon, color: iconColor ?? AppTheme.textSecondary, size: 22),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -653,8 +714,7 @@ class _UnitButton extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.bold,
               letterSpacing: 1,
-              color:
-                  isSelected ? AppTheme.primaryDark : AppTheme.textPrimary,
+              color: isSelected ? AppTheme.primaryDark : AppTheme.textPrimary,
             ),
           ),
         ),
@@ -687,6 +747,41 @@ class _CreditRow extends StatelessWidget {
             fontSize: 13,
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DebugRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool isError;
+
+  const _DebugRow({required this.label, required this.value, this.isError = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            color: isError ? Colors.redAccent : AppTheme.textPrimary,
+            fontFamily: 'monospace',
           ),
         ),
       ],
