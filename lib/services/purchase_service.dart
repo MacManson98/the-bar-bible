@@ -1,29 +1,30 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 /// Manages RevenueCat purchases and premium entitlement checks.
 class PurchaseService extends ChangeNotifier {
   static const String _iosApiKey = 'appl_IRvvIbtoajxOjwxJhkdiUrnDSxg';
   static const String _entitlementId = 'The Bar Bible Pro';
-  static const String _offeringId = 'Premium Unlock';
 
   bool _isPremium = false;
   bool _isLoading = false;
   CustomerInfo? _customerInfo;
+  Offering? _currentOffering;
 
   bool get isPremium => _isPremium;
   bool get isLoading => _isLoading;
+  Offering? get currentOffering => _currentOffering;
 
-  /// Initialise Firebase Auth + RevenueCat — call once at app startup.
+  // Convenience getters for each package
+  Package? get weeklyPackage => _currentOffering?.weekly;
+  Package? get monthlyPackage => _currentOffering?.monthly;
+  Package? get annualPackage => _currentOffering?.annual;
+
+  /// Initialise RevenueCat — call once at app startup.
   Future<void> init() async {
     await Purchases.setLogLevel(LogLevel.debug);
-
     final config = PurchasesConfiguration(_iosApiKey);
     await Purchases.configure(config);
-
-    // Sign in anonymously so purchases are tied to a Firebase UID
-    await _ensureSignedIn();
 
     Purchases.addCustomerInfoUpdateListener((info) {
       _customerInfo = info;
@@ -32,21 +33,16 @@ class PurchaseService extends ChangeNotifier {
     });
 
     await refreshStatus();
+    await _loadOfferings();
   }
 
-  /// Ensure user is signed in (anonymously if needed).
-  Future<void> _ensureSignedIn() async {
+  Future<void> _loadOfferings() async {
     try {
-      final auth = FirebaseAuth.instance;
-      if (auth.currentUser == null) {
-        await auth.signInAnonymously();
-      }
-      final uid = auth.currentUser?.uid;
-      if (uid != null) {
-        await Purchases.logIn(uid);
-      }
+      final offerings = await Purchases.getOfferings();
+      _currentOffering = offerings.current;
+      notifyListeners();
     } catch (e) {
-      debugPrint('[PurchaseService] Auth error: $e');
+      debugPrint('[PurchaseService] Failed to load offerings: $e');
     }
   }
 
@@ -61,26 +57,12 @@ class PurchaseService extends ChangeNotifier {
     }
   }
 
-  /// Purchase premium unlock.
-  Future<bool> purchasePremium() async {
+  /// Purchase a specific package.
+  Future<bool> purchasePackage(Package package) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final offerings = await Purchases.getOfferings();
-      final offering = offerings.getOffering(_offeringId) ?? offerings.current;
-
-      if (offering == null) {
-        debugPrint('[PurchaseService] No offering found');
-        return false;
-      }
-
-      final package = offering.lifetime;
-      if (package == null) {
-        debugPrint('[PurchaseService] No lifetime package found');
-        return false;
-      }
-
       final info = await Purchases.purchasePackage(package);
       _customerInfo = info;
       _isPremium = _checkEntitlement(info);
@@ -97,6 +79,29 @@ class PurchaseService extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Purchase premium — uses selected plan index (0=weekly, 1=monthly, 2=annual).
+  Future<bool> purchasePremium({int planIndex = 1}) async {
+    Package? package;
+    switch (planIndex) {
+      case 0:
+        package = weeklyPackage;
+        break;
+      case 1:
+        package = monthlyPackage;
+        break;
+      case 2:
+        package = annualPackage;
+        break;
+    }
+
+    if (package == null) {
+      debugPrint('[PurchaseService] No package found for plan index $planIndex');
+      return false;
+    }
+
+    return purchasePackage(package);
   }
 
   /// Restore previous purchases.
