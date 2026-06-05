@@ -104,6 +104,27 @@ class PurchaseService extends ChangeNotifier {
     return purchasePackage(package);
   }
 
+  /// Log in to RevenueCat with the Firebase UID so entitlements are linked.
+  Future<void> loginUser(String uid) async {
+    try {
+      await Purchases.logIn(uid);
+      await refreshStatus();
+    } catch (e) {
+      debugPrint('[PurchaseService] logIn error: $e');
+    }
+  }
+
+  /// Log out of RevenueCat (on sign-out).
+  Future<void> logoutUser() async {
+    try {
+      await Purchases.logOut();
+      _isPremium = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[PurchaseService] logOut error: $e');
+    }
+  }
+
   /// Restore previous purchases.
   Future<bool> restorePurchases() async {
     _isLoading = true;

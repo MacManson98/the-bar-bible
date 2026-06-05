@@ -30,6 +30,7 @@ void main() async {
   await purchaseService.init();
 
   final authService = AuthService();
+  authService.setPurchaseService(purchaseService);
   final database = await initDatabase();
 
   runApp(
