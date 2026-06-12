@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:http/http.dart' as http;
 
 class AiCocktailSpec {
@@ -93,10 +94,21 @@ class AiIngredient {
 
 class AiService {
   static const String _apiUrl = 'https://api.anthropic.com/v1/messages';
+  static const String _remoteConfigKey = 'anthropic_api_key';
 
-  // Replace with your actual Anthropic API key.
-  // For production, load from Firebase Remote Config or a secrets manager.
-  static const String _apiKey = 'YOUR_ANTHROPIC_API_KEY';
+  // Fallback used only if Remote Config hasn't fetched yet.
+  // Replace with your real key — Remote Config will override this in production.
+  static const String _fallbackApiKey = 'YOUR_ANTHROPIC_API_KEY';
+
+  static Future<String> _getApiKey() async {
+    try {
+      final rc = FirebaseRemoteConfig.instance;
+      await rc.fetchAndActivate();
+      final key = rc.getString(_remoteConfigKey);
+      if (key.isNotEmpty) return key;
+    } catch (_) {}
+    return _fallbackApiKey;
+  }
 
   static const String _systemPrompt = '''
 You are an expert bartender and cocktail recipe creator. Generate a cocktail recipe based on the user description.
@@ -133,16 +145,17 @@ Rules:
 ''';
 
   Future<AiCocktailSpec> generateCocktail(String prompt) async {
+    final apiKey = await _getApiKey();
     final response = await http
         .post(
           Uri.parse(_apiUrl),
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': _apiKey,
+            'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
           },
           body: jsonEncode({
-            'model': 'claude-opus-4-6',
+            'model': 'claude-haiku-4-5',
             'max_tokens': 1024,
             'system': _systemPrompt,
             'messages': [

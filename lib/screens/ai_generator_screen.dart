@@ -168,7 +168,7 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
               ),
             ),
             const SizedBox(height: 32),
-            SizedBox(
+            const SizedBox(
               width: 120,
               child: LinearProgressIndicator(
                 backgroundColor: AppTheme.surfaceLight,

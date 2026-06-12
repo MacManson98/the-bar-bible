@@ -161,8 +161,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Cocktail? pick;
     String reasoning = '';
 
+    // Prefer non-premium cocktails for the pick pool
+    final freeCocktails = cocktails.where((c) => !c.isPremium).toList();
+    final pickPool = freeCocktails.isNotEmpty ? freeCocktails : cocktails;
+
     if (favorites.isNotEmpty) {
-      final notFavorited = cocktails.where(
+      final notFavorited = pickPool.where(
         (c) => !favorites.any((f) => f.id == c.id),
       ).toList();
 
@@ -191,14 +195,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     } else {
       final classics = ['Negroni', 'Old Fashioned', 'Margarita', 'Daiquiri', 'Manhattan', 'Martini'];
-      final classicCocktails = cocktails.where((c) => classics.contains(c.name)).toList();
+      final classicCocktails = pickPool.where((c) => classics.contains(c.name)).toList();
       if (classicCocktails.isNotEmpty) {
         classicCocktails.shuffle();
         pick = classicCocktails.first;
         reasoning = 'A timeless classic';
-      } else if (cocktails.isNotEmpty) {
-        cocktails.shuffle();
-        pick = cocktails.first;
+      } else if (pickPool.isNotEmpty) {
+        pickPool.shuffle();
+        pick = pickPool.first;
         reasoning = 'Discover something new';
       }
     }
@@ -249,7 +253,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _shufflePick() {
     if (_allCocktails.length <= 1) return;
-    final candidates = _allCocktails.where((c) => c.id != _tonightsPick?.id).toList();
+    final purchaseService = context.read<PurchaseService>();
+    // Prefer free cocktails for free users; fall back to all if needed
+    final pool = !purchaseService.isPremium
+        ? _allCocktails.where((c) => !c.isPremium).toList()
+        : _allCocktails;
+    final candidates = (pool.isEmpty ? _allCocktails : pool)
+        .where((c) => c.id != _tonightsPick?.id)
+        .toList();
     if (candidates.isEmpty) return;
     candidates.shuffle();
     setState(() {

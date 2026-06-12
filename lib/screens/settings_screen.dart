@@ -9,6 +9,9 @@ import '../data/database.dart';
 import '../services/auth_service.dart';
 import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
+import 'admin_staging_screen.dart';
+import 'admin_cocktail_editor_screen.dart';
+import 'admin_user_management_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppDatabase database;
@@ -357,6 +360,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             const _SectionDivider(),
+
+            // ── Admin ─────────────────────────────────────────────────────
+            Consumer<AuthService>(
+              builder: (context, auth, _) {
+                if (!auth.isAdmin) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionHeader(title: 'ADMIN'),
+                    _SettingTile(
+                      icon: Icons.pending_actions,
+                      iconColor: AppTheme.accentGold,
+                      title: 'Staging Queue',
+                      subtitle: 'Review and approve submitted cocktails',
+                      trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AdminStagingScreen(database: widget.database)),
+                      ),
+                    ),
+                    _SettingTile(
+                      icon: Icons.add_circle_outline,
+                      iconColor: AppTheme.accentGold,
+                      title: 'Add New Cocktail',
+                      subtitle: 'Add directly to the live database',
+                      trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AdminCocktailEditorScreen(database: widget.database)),
+                      ),
+                    ),
+                    _SettingTile(
+                      icon: Icons.manage_accounts,
+                      iconColor: AppTheme.accentGold,
+                      title: 'User Management',
+                      subtitle: 'Grant or revoke admin and premium access',
+                      trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AdminUserManagementScreen()),
+                      ),
+                    ),
+                    const _SectionDivider(),
+                  ],
+                );
+              },
+            ),
 
             // ── Measurements ──────────────────────────────────────────────
             const _SectionHeader(title: 'MEASUREMENTS'),

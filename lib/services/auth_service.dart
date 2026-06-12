@@ -13,6 +13,8 @@ class AuthService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   PurchaseService? _purchaseService;
 
+  bool _isAdmin = false;
+
   void setPurchaseService(PurchaseService ps) => _purchaseService = ps;
 
   User? get currentUser => _auth.currentUser;
@@ -22,12 +24,40 @@ class AuthService extends ChangeNotifier {
   }
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  /// True only if the Firestore user doc has isAdmin: true.
+  /// Never writable from the app — set manually in Firebase console only.
+  bool get isAdmin => _isAdmin;
+
+  /// Admins are always treated as premium regardless of RevenueCat.
+  bool get isEffectivelyPremium =>
+      _isAdmin || (_purchaseService?.isPremium ?? false);
+
   static const int _freeCreateLimit = 5;
   static const int _freeAiLimit = 1;
   static const int _premiumDailyAiLimit = 20;
 
   AuthService() {
-    _auth.authStateChanges().listen((_) => notifyListeners());
+    _auth.authStateChanges().listen((user) {
+      if (user != null && !user.isAnonymous) {
+        _loadAdminStatus(user.uid);
+      } else {
+        _isAdmin = false;
+      }
+      notifyListeners();
+    });
+  }
+
+  Future<void> _loadAdminStatus(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      final admin = doc.data()?['is_admin'] as bool? ?? false;
+      if (_isAdmin != admin) {
+        _isAdmin = admin;
+        notifyListeners();
+      }
+    } catch (_) {
+      _isAdmin = false;
+    }
   }
 
   // ── Sign in methods ────────────────────────────────────────────────────────
@@ -47,6 +77,7 @@ class AuthService extends ChangeNotifier {
     final result = await _auth.signInWithCredential(credential);
     await _ensureUserDoc(result.user!);
     await _purchaseService?.loginUser(result.user!.uid);
+    await _loadAdminStatus(result.user!.uid);
     notifyListeners();
     return result;
   }
@@ -76,6 +107,7 @@ class AuthService extends ChangeNotifier {
     final result = await _auth.signInWithCredential(oauthCredential);
     await _ensureUserDoc(result.user!);
     await _purchaseService?.loginUser(result.user!.uid);
+    await _loadAdminStatus(result.user!.uid);
     notifyListeners();
     return result;
   }
@@ -87,6 +119,7 @@ class AuthService extends ChangeNotifier {
     );
     await _ensureUserDoc(result.user!);
     await _purchaseService?.loginUser(result.user!.uid);
+    await _loadAdminStatus(result.user!.uid);
     notifyListeners();
     return result;
   }
@@ -106,6 +139,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _isAdmin = false;
     await _purchaseService?.logoutUser();
     await GoogleSignIn().signOut();
     await _auth.signOut();

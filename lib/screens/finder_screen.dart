@@ -18,6 +18,7 @@ import '../data/ingredient_data.dart';
 import '../widgets/bar_selector_dropdown.dart';
 import '../services/purchase_service.dart';
 import 'cocktail_detail_screen.dart';
+import 'paywall_screen.dart';
 
 enum _FinderMode { canMake, oneAway, all }
 
@@ -249,12 +250,7 @@ class FinderScreenState extends State<FinderScreen>
     _allCocktails = await widget.database
         .select(widget.database.cocktails)
         .get();
-    // Filter out premium cocktails for free users
-    if (!mounted) return;
-    final purchaseService = context.read<PurchaseService>();
-    if (!purchaseService.isPremium) {
-      _allCocktails = _allCocktails.where((c) => !c.isPremium).toList();
-    }
+    // All cocktails load — premium ones are shown with a lock badge for free users
     if (widget.categoryFilter != null) {
       _allCocktails = _allCocktails
           .where((c) => c.category == widget.categoryFilter)
@@ -2852,6 +2848,8 @@ class FinderScreenState extends State<FinderScreen>
   }
 
   Widget _cocktailCard(CocktailMatch match, Color accentColor, bool isExact) {
+    final isPremium = match.cocktail.isPremium;
+    final isLocked = isPremium && !context.read<PurchaseService>().isPremium;
     final showReadyStatus = isExact && _mode != _FinderMode.canMake;
     final isCanMakeMode = _mode == _FinderMode.canMake;
     return Padding(
@@ -2859,15 +2857,22 @@ class FinderScreenState extends State<FinderScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CocktailDetailScreen(
-                cocktail: match.cocktail,
-                database: widget.database,
+          onTap: () {
+            if (isLocked) {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const PaywallScreen()));
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CocktailDetailScreen(
+                  cocktail: match.cocktail,
+                  database: widget.database,
+                ),
               ),
-            ),
-          ),
+            );
+          },
           borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.all(15),
@@ -2875,29 +2880,82 @@ class FinderScreenState extends State<FinderScreen>
               color: AppTheme.surfaceDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isCanMakeMode
-                    ? AppTheme.accentGold.withValues(alpha: 0.22)
-                    : (isExact
-                          ? accentColor.withValues(alpha: 0.4)
-                          : AppTheme.surfaceLight),
+                color: isLocked
+                    ? AppTheme.surfaceLight
+                    : isCanMakeMode
+                        ? AppTheme.accentGold.withValues(alpha: 0.22)
+                        : (isExact
+                              ? accentColor.withValues(alpha: 0.4)
+                              : AppTheme.surfaceLight),
                 width: isCanMakeMode ? 1.0 : (isExact ? 1.5 : 1),
               ),
             ),
             child: Row(
               children: [
-                _CocktailThumb(cocktail: match.cocktail),
+                Stack(
+                  children: [
+                    _CocktailThumb(cocktail: match.cocktail),
+                    if (isLocked)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryDark,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Icon(
+                            Icons.lock,
+                            size: 11,
+                            color: AppTheme.accentGold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        match.cocktail.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              match.cocktail.name,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: isLocked
+                                    ? AppTheme.textSecondary
+                                    : AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (isLocked)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accentGold.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: AppTheme.accentGold.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: const Text(
+                                'PRO',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.accentGold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       if (!isExact || showReadyStatus)
                         const SizedBox(height: 4),
@@ -2949,9 +3007,7 @@ class FinderScreenState extends State<FinderScreen>
                             match.cocktail.baseSpirit,
                             style: TextStyle(
                               fontSize: 11,
-                              color: AppTheme.textSecondary.withValues(
-                                alpha: 0.9,
-                              ),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.9),
                             ),
                           ),
                           Container(
@@ -2967,9 +3023,7 @@ class FinderScreenState extends State<FinderScreen>
                             match.cocktail.method.toUpperCase(),
                             style: TextStyle(
                               fontSize: 11,
-                              color: AppTheme.textSecondary.withValues(
-                                alpha: 0.9,
-                              ),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.9),
                             ),
                           ),
                           Container(
@@ -2985,9 +3039,7 @@ class FinderScreenState extends State<FinderScreen>
                             match.cocktail.glass,
                             style: TextStyle(
                               fontSize: 11,
-                              color: AppTheme.textSecondary.withValues(
-                                alpha: 0.9,
-                              ),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.9),
                             ),
                           ),
                         ],
@@ -2995,9 +3047,11 @@ class FinderScreenState extends State<FinderScreen>
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: AppTheme.textSecondary,
+                Icon(
+                  isLocked ? Icons.lock_outline : Icons.chevron_right,
+                  color: isLocked
+                      ? AppTheme.accentGold.withValues(alpha: 0.6)
+                      : AppTheme.textSecondary,
                   size: 18,
                 ),
               ],
@@ -3194,6 +3248,13 @@ class _FinderRailTileState extends State<_FinderRailTile> {
       },
       onTap: () async {
         if (_openingDetail || !mounted) return;
+        // Check if locked
+        final purchaseService = context.read<PurchaseService>();
+        if (widget.match.cocktail.isPremium && !purchaseService.isPremium) {
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const PaywallScreen()));
+          return;
+        }
         _openingDetail = true;
         try {
           await Navigator.push(
@@ -3206,9 +3267,7 @@ class _FinderRailTileState extends State<_FinderRailTile> {
             ),
           );
         } finally {
-          if (mounted) {
-            _openingDetail = false;
-          }
+          if (mounted) _openingDetail = false;
         }
       },
       child: AnimatedScale(
