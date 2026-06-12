@@ -118,6 +118,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _onTabTapped(_myBarTabIndex);
           _myBarTabKey.currentState?.switchToCocktails();
         },
+        onSwitchBar: _switchBarFromPill,
       ),
       CocktailsListScreen(database: widget.database),
       BackBarScreen(database: widget.database),

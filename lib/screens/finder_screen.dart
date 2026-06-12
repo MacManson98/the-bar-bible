@@ -675,6 +675,11 @@ class FinderScreenState extends State<FinderScreen>
 
   // â”€â”€ Hero Header â”€â”€
   Widget _buildHeroHeader({required int readyCount}) {
+    final categoryLabel = widget.categoryFilter == 'mocktail'
+        ? 'mocktails'
+        : widget.categoryFilter == 'shot'
+            ? 'shots'
+            : 'cocktails';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -747,7 +752,7 @@ class FinderScreenState extends State<FinderScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            'cocktails you can make right now',
+            '$categoryLabel you can make right now',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1681,8 +1686,7 @@ class FinderScreenState extends State<FinderScreen>
         : null;
     final curatedMatches = curatedSection?.preview ?? const [];
     final bestUnlock = _computeBestUnlock();
-    final oneAwayCount = _filteredMissing1Cache.length;
-    final allItems = _buildMainListItems(canMake, curatedMatches, bestUnlock, oneAwayCount);
+    final allItems = _buildMainListItems(canMake, curatedMatches, bestUnlock);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1700,7 +1704,6 @@ class FinderScreenState extends State<FinderScreen>
     List<CocktailMatch> canMake,
     List<CocktailMatch> curatedMatches,
     _BestUnlock? bestUnlock,
-    int oneAwayCount,
   ) {
     final items = <Widget>[];
 
@@ -1753,7 +1756,46 @@ class FinderScreenState extends State<FinderScreen>
     }
 
     if (bestUnlock != null) items.add(_buildBestUnlockCard(bestUnlock));
-    if (oneAwayCount > 0) items.add(_buildOneAwayNudge(oneAwayCount));
+
+    // 1-away section inline
+    if (_filteredMissing1Cache.isNotEmpty) {
+      items.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: AppTheme.surfaceLight,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '1 AWAY  ·  ${_filteredMissing1Cache.length}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: const Color(0xFFE8A838).withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: AppTheme.surfaceLight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      for (final m in _filteredMissing1Cache) {
+        items.add(_cocktailCard(m, const Color(0xFFE8A838), false));
+      }
+    }
+
     items.add(const SizedBox(height: 8));
     return items;
   }
@@ -1939,7 +1981,6 @@ class FinderScreenState extends State<FinderScreen>
   }
 
   void _showOneAwaySheet() {
-    // Sort by cocktail name for consistency
     final items = List<CocktailMatch>.from(_filteredMissing1Cache)
       ..sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
 
@@ -1973,107 +2014,207 @@ class FinderScreenState extends State<FinderScreen>
                 ),
                 // Header
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                  child: Row(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '1 INGREDIENT AWAY',
-                              style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.w700,
-                                color: AppTheme.accentGold.withValues(alpha: 0.85),
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${items.length} cocktail${items.length == 1 ? '' : 's'} within reach',
-                              style: const TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w800,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
+                      Text(
+                        '1 INGREDIENT AWAY',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.accentGold.withValues(alpha: 0.85),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${items.length} cocktail${items.length == 1 ? '' : 's'} within reach',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Add one more ingredient to unlock these',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
-                  child: Divider(color: AppTheme.surfaceLight, height: 1),
-                ),
+                const Divider(height: 1, color: AppTheme.surfaceLight),
                 // List
                 Expanded(
-                  child: ListView.builder(
+                  child: ListView.separated(
                     controller: scrollController,
-                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                     itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final m = items[index];
                       final missing = m.missingIngredients.isNotEmpty
                           ? m.missingIngredients.first
                           : 'Unknown';
-                      return InkWell(
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CocktailDetailScreen(
-                                cocktail: m.cocktail,
-                                database: widget.database,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      m.cocktail.name,
-                                      style: const TextStyle(
-                                        fontSize: 15, fontWeight: FontWeight.w700,
-                                        color: AppTheme.textPrimary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Row(
-                                      children: [
-                                        Container(
-                                          width: 6, height: 6,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFE8A838).withValues(alpha: 0.85),
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Need: $missing',
-                                          style: const TextStyle(
-                                            fontSize: 11, fontWeight: FontWeight.w600,
-                                            color: Color(0xFFE8A838),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                      final isLocked = m.cocktail.isPremium &&
+                          !context.read<PurchaseService>().isPremium;
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(context);
+                            if (isLocked) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const PaywallScreen()),
+                              );
+                              return;
+                            }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CocktailDetailScreen(
+                                  cocktail: m.cocktail,
+                                  database: widget.database,
                                 ),
                               ),
-                              const Icon(
-                                Icons.chevron_right,
-                                size: 18,
-                                color: AppTheme.textSecondary,
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryDark,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppTheme.surfaceLight,
                               ),
-                            ],
+                            ),
+                            child: Row(
+                              children: [
+                                Stack(
+                                  children: [
+                                    _CocktailThumb(
+                                        cocktail: m.cocktail, size: 52),
+                                    if (isLocked)
+                                      Positioned(
+                                        right: 0, bottom: 0,
+                                        child: Container(
+                                          width: 16, height: 16,
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryDark,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: const Icon(Icons.lock,
+                                              size: 10,
+                                              color: AppTheme.accentGold),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              m.cocktail.name,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: isLocked
+                                                    ? AppTheme.textSecondary
+                                                    : AppTheme.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isLocked)
+                                            Container(
+                                              padding: const EdgeInsets
+                                                  .symmetric(
+                                                  horizontal: 5,
+                                                  vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.accentGold
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: AppTheme.accentGold
+                                                      .withValues(alpha: 0.3),
+                                                ),
+                                              ),
+                                              child: const Text('PRO',
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight:
+                                                        FontWeight.w800,
+                                                    color: AppTheme.accentGold,
+                                                  )),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5),
+                                      // Missing ingredient pill
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE8A838)
+                                              .withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          border: Border.all(
+                                            color: const Color(0xFFE8A838)
+                                                .withValues(alpha: 0.35),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.add_circle_outline,
+                                              size: 11,
+                                              color: Color(0xFFE8A838),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              missing,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFFE8A838),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Icon(
+                                  isLocked
+                                      ? Icons.lock_outline
+                                      : Icons.chevron_right,
+                                  color: isLocked
+                                      ? AppTheme.accentGold
+                                          .withValues(alpha: 0.5)
+                                      : AppTheme.textSecondary,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -2765,6 +2906,11 @@ class FinderScreenState extends State<FinderScreen>
 
   Widget _buildFinderPurposeEmptyState() {
     final barName = _activeBar?.name ?? 'My Bar';
+    final categoryLabel = widget.categoryFilter == 'mocktail'
+        ? 'mocktails'
+        : widget.categoryFilter == 'shot'
+            ? 'shots'
+            : 'cocktails';
     return Center(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(28, 10, 28, 24),
@@ -2789,7 +2935,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
             const SizedBox(height: 18),
             Text(
-              'Showing cocktails you can make\nwith "$barName".',
+              'Showing $categoryLabel you can make\nwith "$barName".',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 16,
@@ -2800,7 +2946,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
             const SizedBox(height: 10),
             Text(
-              'Add ingredients to your bar and this tab will instantly list cocktails that match your inventory.',
+              'Add ingredients to your bar and this tab will instantly list $categoryLabel that match your inventory.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,

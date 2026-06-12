@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math';
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
+import '../data/ingredient_data.dart';
 import '../services/purchase_service.dart';
 import 'cocktail_detail_screen.dart';
 import 'paywall_screen.dart';
@@ -18,6 +19,7 @@ class HomeScreen extends StatefulWidget {
   final String activeBarName;
   final VoidCallback onNavigateToBrowse;
   final VoidCallback onNavigateToFinder;
+  final Future<void> Function(int barId)? onSwitchBar;
 
   const HomeScreen({
     super.key,
@@ -25,6 +27,7 @@ class HomeScreen extends StatefulWidget {
     required this.activeBarName,
     required this.onNavigateToBrowse,
     required this.onNavigateToFinder,
+    this.onSwitchBar,
   });
 
   @override
@@ -34,17 +37,20 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<Cocktail> _allCocktails = [];
   List<Cocktail> _recentlyViewed = [];
+  List<SavedBar> _savedBars = [];
   Cocktail? _tonightsPick;
   String _pickReasoning = '';
   int _favoritesCount = 0;
   int _collectionsCount = 0;
+  int _canMakeCount = 0;
+  int _ingredientCount = 0;
+  int _oneAwayCount = 0;
   bool _isLoading = true;
   String? _loadError;
 
   static const String _recentlyViewedKey = 'recently_viewed_ids';
   static const Duration _homeLoadTimeout = Duration(seconds: 10);
 
-  // Entry animations
   late AnimationController _entryController;
   late List<Animation<double>> _fadeAnims;
   late List<Animation<Offset>> _slideAnims;
@@ -52,34 +58,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-
-    // Staggered entry: 4 sections, each offset by ~100ms
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-
-    _fadeAnims = List.generate(4, (i) {
-      final start = i * 0.15;
+    _fadeAnims = List.generate(5, (i) {
+      final start = i * 0.12;
       final end = (start + 0.5).clamp(0.0, 1.0);
       return CurvedAnimation(
         parent: _entryController,
         curve: Interval(start, end, curve: Curves.easeOut),
       );
     });
-
-    _slideAnims = List.generate(4, (i) {
-      final start = i * 0.15;
+    _slideAnims = List.generate(5, (i) {
+      final start = i * 0.12;
       final end = (start + 0.5).clamp(0.0, 1.0);
-      return Tween<Offset>(
-        begin: const Offset(0, 0.08),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
+      return Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+          .animate(CurvedAnimation(
         parent: _entryController,
         curve: Interval(start, end, curve: Curves.easeOut),
       ));
     });
-
     _loadData();
   }
 
@@ -90,29 +89,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _loadData() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _loadError = null;
-      });
-    }
-
-    debugPrint('[HomeScreen] _loadData: started');
-
+    if (mounted) setState(() { _isLoading = true; _loadError = null; });
     try {
-      final _HomeLoadResult result = await _performHomeLoad().timeout(
+      final result = await _performHomeLoad().timeout(
         _homeLoadTimeout,
-        onTimeout: () {
-          throw TimeoutException(
-            'Home load timed out after ${_homeLoadTimeout.inSeconds} seconds.',
-          );
-        },
+        onTimeout: () => throw TimeoutException('Home load timed out.'),
       );
-
-      debugPrint('[HomeScreen] _loadData: complete');
-
       if (!mounted) return;
-
       setState(() {
         _allCocktails = result.cocktails;
         _tonightsPick = result.pick;
@@ -120,48 +103,87 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _favoritesCount = result.favoritesCount;
         _collectionsCount = result.collectionsCount;
         _recentlyViewed = result.recentlyViewed;
+        _canMakeCount = result.canMakeCount;
+        _ingredientCount = result.ingredientCount;
+        _oneAwayCount = result.oneAwayCount;
+        _savedBars = result.savedBars;
         _isLoading = false;
         _loadError = null;
       });
-
       _entryController.forward(from: 0);
-    } catch (error, stackTrace) {
-      debugPrint('[HomeScreen] _loadData: failed -> $error');
-      debugPrintStack(
-        label: '[HomeScreen] _loadData stack',
-        stackTrace: stackTrace,
-      );
-
+    } catch (error) {
       if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-        _loadError = error.toString();
-      });
+      setState(() { _isLoading = false; _loadError = error.toString(); });
     }
   }
 
   Future<_HomeLoadResult> _performHomeLoad() async {
-    debugPrint('[HomeScreen] load step: cocktails query');
     final cocktails = await widget.database.select(widget.database.cocktails).get();
-    debugPrint('[HomeScreen] load step complete: cocktails (${cocktails.length})');
-
-    debugPrint('[HomeScreen] load step: favorites query');
     final favorites = await widget.database.getFavoriteCocktails();
-    debugPrint('[HomeScreen] load step complete: favorites (${favorites.length})');
-
-    debugPrint('[HomeScreen] load step: collections query');
     final collections = await widget.database.select(widget.database.collections).get();
-    debugPrint('[HomeScreen] load step complete: collections (${collections.length})');
-
-    debugPrint('[HomeScreen] load step: recently viewed');
     final recentlyViewed = await _loadRecentlyViewed(cocktails);
-    debugPrint('[HomeScreen] load step complete: recently viewed (${recentlyViewed.length})');
+    final savedBars = await (widget.database.select(widget.database.savedBars)
+          ..orderBy([(b) => OrderingTerm.desc(b.lastUsed)]))
+        .get();
 
+    // Bar stats
+    final bar = await widget.database.getDefaultSavedBar();
+    int ingredientCount = 0;
+    int canMakeCount = 0;
+    int oneAwayCount = 0;
+
+    if (bar != null) {
+      final barIngredients = await widget.database.getSavedBarIngredients(bar.id);
+      ingredientCount = barIngredients.length;
+
+      if (ingredientCount > 0) {
+        final barIds = barIngredients.map((i) => i.id).toSet();
+        final barCanonicals = <String>{};
+        final allIngredients = await widget.database.select(widget.database.ingredients).get();
+        final ingredientMap = {for (final i in allIngredients) i.id: i};
+
+        for (final id in barIds) {
+          final name = ingredientMap[id]?.name;
+          if (name != null) barCanonicals.add(IngredientEquivalence.normalise(name));
+        }
+
+        final barSubCanonicals = <String>{};
+        for (final canon in barCanonicals) {
+          barSubCanonicals.addAll(IngredientSubstitutions.getSubstitutes(canon));
+        }
+
+        final allCi = await widget.database.select(widget.database.cocktailIngredients).get();
+        final ciBycocktail = <int, List<CocktailIngredient>>{};
+        for (final ci in allCi) {
+          ciBycocktail.putIfAbsent(ci.cocktailId, () => []).add(ci);
+        }
+
+        for (final cocktail in cocktails) {
+          final ciRows = ciBycocktail[cocktail.id] ?? const [];
+          if (ciRows.isEmpty) continue;
+
+          final required = <String>{};
+          for (final ci in ciRows) {
+            final name = ingredientMap[ci.ingredientId]?.name;
+            if (name != null) required.add(IngredientEquivalence.normalise(name));
+          }
+          if (required.isEmpty) continue;
+
+          int missing = 0;
+          for (final canon in required) {
+            if (!barCanonicals.contains(canon) && !barSubCanonicals.contains(canon)) {
+              missing++;
+            }
+          }
+          if (missing == 0) canMakeCount++;
+          if (missing == 1) oneAwayCount++;
+        }
+      }
+    }
+
+    // Tonight's pick — prefer free cocktails
     Cocktail? pick;
     String reasoning = '';
-
-    // Prefer non-premium cocktails for the pick pool
     final freeCocktails = cocktails.where((c) => !c.isPremium).toList();
     final pickPool = freeCocktails.isNotEmpty ? freeCocktails : cocktails;
 
@@ -169,13 +191,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final notFavorited = pickPool.where(
         (c) => !favorites.any((f) => f.id == c.id),
       ).toList();
-
       if (notFavorited.isNotEmpty) {
         final favSpirits = favorites.map((f) => f.baseSpirit.toLowerCase()).toSet();
-        final spiritMatches = notFavorited.where(
-          (c) => favSpirits.contains(c.baseSpirit.toLowerCase()),
-        ).toList();
-
+        final spiritMatches = notFavorited
+            .where((c) => favSpirits.contains(c.baseSpirit.toLowerCase()))
+            .toList();
         if (spiritMatches.isNotEmpty) {
           spiritMatches.shuffle();
           pick = spiritMatches.first;
@@ -210,16 +230,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return _HomeLoadResult(
       cocktails: cocktails,
       recentlyViewed: recentlyViewed,
+      savedBars: savedBars,
       pick: pick,
       reasoning: reasoning,
       favoritesCount: favorites.length,
       collectionsCount: collections.length,
+      canMakeCount: canMakeCount,
+      ingredientCount: ingredientCount,
+      oneAwayCount: oneAwayCount,
     );
   }
 
   Future<List<Cocktail>> _loadRecentlyViewed(List<Cocktail> allCocktails) async {
     try {
-      debugPrint('[HomeScreen] _loadRecentlyViewed: fetching prefs');
       final prefs = await SharedPreferences.getInstance();
       final ids = prefs.getStringList(_recentlyViewedKey) ?? [];
       final result = <Cocktail>[];
@@ -230,15 +253,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (cocktail != null) result.add(cocktail);
         }
       }
-      debugPrint('[HomeScreen] _loadRecentlyViewed: complete (${result.length})');
       return result;
-    } catch (error, stackTrace) {
-      debugPrint('[HomeScreen] _loadRecentlyViewed: failed -> $error');
-      debugPrintStack(
-        label: '[HomeScreen] _loadRecentlyViewed stack',
-        stackTrace: stackTrace,
-      );
-      rethrow;
+    } catch (_) {
+      return [];
     }
   }
 
@@ -254,7 +271,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _shufflePick() {
     if (_allCocktails.length <= 1) return;
     final purchaseService = context.read<PurchaseService>();
-    // Prefer free cocktails for free users; fall back to all if needed
     final pool = !purchaseService.isPremium
         ? _allCocktails.where((c) => !c.isPremium).toList()
         : _allCocktails;
@@ -270,14 +286,77 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     HapticFeedback.mediumImpact();
   }
 
+  Future<void> _showBarSwitcher() async {
+    if (_savedBars.length <= 1) return; // nothing to switch to
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'SWITCH BAR',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                color: AppTheme.accentGold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ..._savedBars.map((bar) {
+              final isActive = bar.name == widget.activeBarName;
+              return InkWell(
+                onTap: isActive
+                    ? null
+                    : () async {
+                        Navigator.pop(ctx);
+                        await widget.onSwitchBar?.call(bar.id);
+                        await _loadData();
+                      },
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          bar.name,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                            color: isActive
+                                ? AppTheme.accentGold
+                                : AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (isActive)
+                        const Icon(Icons.check,
+                            color: AppTheme.accentGold, size: 18),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _viewCocktailDetail(Cocktail cocktail) {
     HapticFeedback.lightImpact();
     final purchaseService = context.read<PurchaseService>();
     if (cocktail.isPremium && !purchaseService.isPremium) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const PaywallScreen()),
-      );
+      Navigator.push(context,
+          MaterialPageRoute(builder: (context) => const PaywallScreen()));
       return;
     }
     _trackRecentlyViewed(cocktail.id);
@@ -292,38 +371,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ).then((_) => _loadData());
   }
 
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    final rng = Random(DateTime.now().day); // Same greeting per day
-
-    if (hour < 12) {
-      const greetings = [
-        'What are we making today?',
-        'Morning. Time to prep.',
-        'Rise and shake.',
-        'Fresh start. Fresh pour.',
-      ];
-      return greetings[rng.nextInt(greetings.length)];
-    } else if (hour < 17) {
-      const greetings = [
-        'What are we pouring?',
-        'Afternoon. Let\'s build something.',
-        'Ready when you are.',
-        'Time to get creative.',
-      ];
-      return greetings[rng.nextInt(greetings.length)];
-    } else {
-      const greetings = [
-        'What are we making tonight?',
-        'Evening. Let\'s pour.',
-        'Ready to pour?',
-        'The bar is open.',
-        'Service time.',
-      ];
-      return greetings[rng.nextInt(greetings.length)];
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loadError != null) {
@@ -335,34 +382,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: AppTheme.accentGold,
-                  size: 40,
-                ),
+                const Icon(Icons.error_outline, color: AppTheme.accentGold, size: 40),
                 const SizedBox(height: 12),
-                const Text(
-                  'Failed to load Home',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                const Text('Failed to load',
+                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                Text(
-                  _loadError!,
-                  style: TextStyle(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.9),
-                    fontSize: 12,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                Text(_loadError!,
+                    style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.9), fontSize: 12),
+                    textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _loadData,
-                  child: const Text('Retry'),
-                ),
+                ElevatedButton(onPressed: _loadData, child: const Text('Retry')),
               ],
             ),
           ),
@@ -381,12 +410,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       backgroundColor: AppTheme.primaryDark,
       body: Stack(
         children: [
-          // ── Subtle background gradient (warm glow at top) ──
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 280,
+            top: 0, left: 0, right: 0, height: 280,
             child: Container(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
@@ -400,159 +425,145 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          // ── Content ──
           SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 100),
+            child: Column(
               children: [
-                // ▸ SECTION 1: Greeting
+
+                // ▸ SECTION 1: Bar context
                 _animatedSection(
                   index: 0,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getGreeting(),
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w300,
-                            color: AppTheme.textPrimary,
-                            letterSpacing: 0.2,
-                            height: 1.3,
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                    child: GestureDetector(
+                      onTap: _savedBars.length > 1 ? _showBarSwitcher : null,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentGold,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          widget.activeBarName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppTheme.textSecondary.withValues(alpha: 0.75),
-                            letterSpacing: 0.2,
+                          const SizedBox(width: 10),
+                          Text(
+                            widget.activeBarName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
-                        ),
-                      ],
+                          if (_ingredientCount > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accentGold.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: AppTheme.accentGold.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Text(
+                                '$_ingredientCount ingredients',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.accentGold,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (_savedBars.length > 1) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.expand_more,
+                              size: 18,
+                              color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                    
-                const SizedBox(height: 24),
-                
-                // ▸ SECTION 2: Tonight's Pick (hero)
-                if (_tonightsPick != null)
-                  _animatedSection(
-                    index: 1,
-                    child: Column(
-                      children: [
-                        _SectionHeader(
-                          label: "TONIGHT'S PICK",
-                          accentColor: AppTheme.accentGold,
-                          trailing: GestureDetector(
-                            onTap: _shufflePick,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.refresh, size: 14, color: AppTheme.accentGold.withValues(alpha: 0.7)),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Shuffle',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppTheme.accentGold.withValues(alpha: 0.7),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        _TonightsPickCard(
-                          cocktail: _tonightsPick!,
-                          reasoning: _pickReasoning,
-                          onTap: () => _viewCocktailDetail(_tonightsPick!),
-                        ),
-                      ],
-                    ),
-                  ),
-                
-                const SizedBox(height: 28),
-                
-                // ▸ SECTION 3: Quick Access Grid
+
+                const SizedBox(height: 12),
+
+                // ▸ SECTION 2: Can Make hero card
                 _animatedSection(
-                  index: 2,
+                  index: 1,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _QuickAccessTile(
-                                icon: Icons.local_bar_outlined,
-                                label: 'Browse All',
-                                onTap: widget.onNavigateToBrowse,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _QuickAccessTile(
-                                icon: Icons.search,
-                                label: 'What Can I Make',
-                                onTap: widget.onNavigateToFinder,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _QuickAccessTile(
-                                icon: Icons.bookmark_border,
-                                label: 'Collections',
-                                count: _collectionsCount,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => CollectionsScreen(database: widget.database),
-                                    ),
-                                  ).then((_) => _loadData());
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _QuickAccessTile(
-                                icon: Icons.favorite_border,
-                                label: 'Favourites',
-                                count: _favoritesCount,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => FavoritesScreen(
-                            database: widget.database,
-                            onNavigateToBrowse: widget.onNavigateToBrowse,
-                          ),
-                                    ),
-                                  ).then((_) => _loadData());
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    child: _CanMakeCard(
+                      canMakeCount: _canMakeCount,
+                      oneAwayCount: _oneAwayCount,
+                      ingredientCount: _ingredientCount,
+                      barName: widget.activeBarName,
+                      onTap: widget.onNavigateToFinder,
                     ),
                   ),
                 ),
-                
+
+                const SizedBox(height: 12),
+
+                // ▸ SECTION 3: Tonight's Pick
+                if (_tonightsPick != null)
+                  Expanded(
+                    flex: 5,
+                    child: _animatedSection(
+                      index: 2,
+                      child: Column(
+                        children: [
+                          _SectionHeader(
+                            label: "TONIGHT'S PICK",
+                            accentColor: AppTheme.accentGold,
+                            trailing: GestureDetector(
+                              onTap: _shufflePick,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.refresh, size: 14,
+                                      color: AppTheme.accentGold.withValues(alpha: 0.7)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Shuffle',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.accentGold.withValues(alpha: 0.7),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: GestureDetector(
+                                onTap: () => _viewCocktailDetail(_tonightsPick!),
+                                child: _TonightsPickCard(
+                                  cocktail: _tonightsPick!,
+                                  reasoning: _pickReasoning,
+                                  onTap: () => _viewCocktailDetail(_tonightsPick!),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 12),
+
                 // ▸ SECTION 4: Recently Viewed
-                if (_recentlyViewed.isNotEmpty) ...[
-                  const SizedBox(height: 28),
+                if (_recentlyViewed.isNotEmpty)
                   _animatedSection(
                     index: 3,
                     child: Column(
@@ -561,9 +572,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           label: 'RECENTLY VIEWED',
                           accentColor: AppTheme.textSecondary,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 10),
                         SizedBox(
-                          height: 100,
+                          height: 90,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -580,7 +591,59 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-                ],
+
+                const SizedBox(height: 12),
+
+                // ▸ SECTION 5: Quick Access
+                _animatedSection(
+                  index: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _QuickAccessTile(
+                            icon: Icons.menu_book_outlined,
+                            label: 'Browse',
+                            onTap: widget.onNavigateToBrowse,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _QuickAccessTile(
+                            icon: Icons.favorite_border,
+                            label: 'Favourites',
+                            count: _favoritesCount,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FavoritesScreen(
+                                  database: widget.database,
+                                  onNavigateToBrowse: widget.onNavigateToBrowse,
+                                ),
+                              ),
+                            ).then((_) => _loadData()),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _QuickAccessTile(
+                            icon: Icons.bookmark_border,
+                            label: 'Collections',
+                            count: _collectionsCount,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    CollectionsScreen(database: widget.database),
+                              ),
+                            ).then((_) => _loadData()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -589,34 +652,182 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// Wraps a section in fade + slide animation
   Widget _animatedSection({required int index, required Widget child}) {
     return FadeTransition(
       opacity: _fadeAnims[index],
-      child: SlideTransition(
-        position: _slideAnims[index],
-        child: child,
-      ),
+      child: SlideTransition(position: _slideAnims[index], child: child),
     );
   }
 }
 
+// ─── Data ────────────────────────────────────────────────────────────────────
+
 class _HomeLoadResult {
   final List<Cocktail> cocktails;
   final List<Cocktail> recentlyViewed;
+  final List<SavedBar> savedBars;
   final Cocktail? pick;
   final String reasoning;
   final int favoritesCount;
   final int collectionsCount;
+  final int canMakeCount;
+  final int ingredientCount;
+  final int oneAwayCount;
 
   const _HomeLoadResult({
     required this.cocktails,
     required this.recentlyViewed,
+    required this.savedBars,
     required this.pick,
     required this.reasoning,
     required this.favoritesCount,
     required this.collectionsCount,
+    required this.canMakeCount,
+    required this.ingredientCount,
+    required this.oneAwayCount,
   });
+}
+
+// ─── Can Make Card ───────────────────────────────────────────────────────────
+
+class _CanMakeCard extends StatelessWidget {
+  final int canMakeCount;
+  final int oneAwayCount;
+  final int ingredientCount;
+  final String barName;
+  final VoidCallback onTap;
+
+  const _CanMakeCard({
+    required this.canMakeCount,
+    required this.oneAwayCount,
+    required this.ingredientCount,
+    required this.barName,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBar = ingredientCount > 0;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.accentGold.withValues(alpha: 0.18),
+              AppTheme.accentGold.withValues(alpha: 0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.35)),
+        ),
+        child: hasBar
+            ? Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '$canMakeCount',
+                              style: const TextStyle(
+                                fontSize: 52,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.accentGold,
+                                height: 1.0,
+                                letterSpacing: -2,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                'cocktails you\ncan make now',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary.withValues(alpha: 0.9),
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (oneAwayCount > 0) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Container(
+                                width: 6, height: 6,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accentGold.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$oneAwayCount more just 1 ingredient away',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentGold.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.3)),
+                    ),
+                    child: const Icon(Icons.arrow_forward, color: AppTheme.accentGold, size: 20),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'What can you make?',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Add ingredients to $barName to find out',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward, color: AppTheme.accentGold, size: 20),
+                ],
+              ),
+      ),
+    );
+  }
 }
 
 // ─── Section Header ──────────────────────────────────────────────────────────
@@ -639,8 +850,7 @@ class _SectionHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 3,
-            height: 16,
+            width: 3, height: 16,
             decoration: BoxDecoration(
               color: accentColor,
               borderRadius: BorderRadius.circular(2),
@@ -700,8 +910,8 @@ class _QuickAccessTileState extends State<_QuickAccessTile> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        height: 88,
-        padding: const EdgeInsets.all(14),
+        height: 80,
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _pressed
               ? AppTheme.surfaceLight.withValues(alpha: 0.6)
@@ -711,47 +921,49 @@ class _QuickAccessTileState extends State<_QuickAccessTile> {
             color: _pressed
                 ? AppTheme.accentGold.withValues(alpha: 0.5)
                 : AppTheme.surfaceLight.withValues(alpha: 0.6),
-            width: 1,
           ),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, color: AppTheme.accentGold, size: 22),
-                const Spacer(),
-                if (widget.count != null && widget.count! > 0)
+                Icon(widget.icon, color: AppTheme.accentGold, size: 20),
+                if (widget.count != null && widget.count! > 0) ...[
+                  const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: AppTheme.accentGold.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: AppTheme.accentGold.withValues(alpha: 0.4),
-                        width: 1,
                       ),
                     ),
                     child: Text(
                       '${widget.count}',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: AppTheme.accentGold,
                       ),
                     ),
                   ),
+                ],
               ],
             ),
-            const Spacer(),
+            const SizedBox(height: 6),
             Text(
               widget.label,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textPrimary,
-                letterSpacing: 0.2,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -778,19 +990,15 @@ class _TonightsPickCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 220,
+        height: 200,
         margin: const EdgeInsets.symmetric(horizontal: 24),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: AppTheme.accentGold.withValues(alpha: 0.2),
-            width: 1,
-          ),
+          border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.2)),
           boxShadow: [
             BoxShadow(
               color: AppTheme.accentGold.withValues(alpha: 0.1),
               blurRadius: 40,
-              spreadRadius: 0,
               offset: const Offset(0, 8),
             ),
           ],
@@ -816,16 +1024,14 @@ class _TonightsPickCard extends StatelessWidget {
                 ),
               ),
               Positioned(
-                left: 20,
-                right: 20,
-                bottom: 20,
+                left: 20, right: 20, bottom: 20,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       cocktail.name.toUpperCase(),
                       style: const TextStyle(
-                        fontSize: 28,
+                        fontSize: 26,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: 1.2,
@@ -833,13 +1039,12 @@ class _TonightsPickCard extends StatelessWidget {
                       ),
                     ),
                     if (reasoning.isNotEmpty) ...[
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Text(
                         reasoning,
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.white.withValues(alpha: 0.6),
-                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ],
@@ -847,8 +1052,7 @@ class _TonightsPickCard extends StatelessWidget {
                 ),
               ),
               Positioned(
-                top: 14,
-                right: 14,
+                top: 14, right: 14,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -895,18 +1099,17 @@ class _RecentlyViewedChip extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              width: 60,
-              height: 60,
+              width: 60, height: 60,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: AppTheme.surfaceLight.withValues(alpha: 0.5),
-                  width: 1,
                 ),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(13),
-                child: ImageUtils.getCocktailImage(cocktail.imagePath, imageUrl: cocktail.imageUrl),
+                child: ImageUtils.getCocktailImage(cocktail.imagePath,
+                    imageUrl: cocktail.imageUrl),
               ),
             ),
             const SizedBox(height: 8),
