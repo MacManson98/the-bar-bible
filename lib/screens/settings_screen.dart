@@ -546,7 +546,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const _SettingTile(
               icon: Icons.info_outline,
               title: 'Version',
-              subtitle: '1.2.1 (Build 19)',
+              subtitle: '1.3.0 (Build 20)',
             ),
             const _SettingTile(
               icon: Icons.local_bar_outlined,

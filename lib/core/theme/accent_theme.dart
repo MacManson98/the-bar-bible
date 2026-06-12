@@ -45,7 +45,6 @@ enum AccentTheme {
     }
   }
 
-  String get _prefsKey => 'accent_theme';
 
   static const _prefsKeyStatic = 'accent_theme';
 
