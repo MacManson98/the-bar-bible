@@ -31,8 +31,8 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
   // ── Controllers ────────────────────────────────────────────────────────────
   final _nameController = TextEditingController();
-  final _glassController = TextEditingController();
-  final _iceController = TextEditingController();
+  final _glassCustomController = TextEditingController();
+  final _iceCustomController = TextEditingController();
   final _garnishController = TextEditingController();
   final _notesController = TextEditingController();
   final _tagsController = TextEditingController();
@@ -41,6 +41,8 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
   String _method = 'Shake';
   String _baseSpirit = 'Gin';
   String _category = 'cocktail';
+  String _glass = 'Coupe';
+  String _ice = 'Cubed';
   int _difficulty = 2;
   List<_IngredientRow> _ingredients = [];
 
@@ -53,6 +55,14 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
   static const _categoryLabels = ['Cocktail', 'Mocktail', 'Shot'];
   static const _units = ['ml', 'oz', 'dash', 'tsp', 'tbsp', 'splash', 'top'];
 
+  static const _glassOptions = [
+    'Coupe', 'Rocks / Old Fashioned', 'Highball', 'Martini', 'Nick & Nora',
+    'Hurricane', 'Tiki Mug', 'Champagne Flute', 'Wine Glass', 'Shot Glass', 'Other',
+  ];
+  static const _iceOptions = [
+    'Cubed', 'Large Cube', 'Crushed', 'Cracked', 'No Ice', 'Other',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -62,8 +72,22 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
     final e = widget.existing;
     if (e != null) {
       _nameController.text = e.name;
-      _glassController.text = e.glass;
-      _iceController.text = e.ice ?? '';
+      // Glass
+      final storedGlass = e.glass;
+      if (_glassOptions.contains(storedGlass)) {
+        _glass = storedGlass;
+      } else {
+        _glass = 'Other';
+        _glassCustomController.text = storedGlass;
+      }
+      // Ice
+      final storedIce = e.ice ?? '';
+      if (_iceOptions.contains(storedIce) || storedIce.isEmpty) {
+        _ice = storedIce.isEmpty ? 'Cubed' : storedIce;
+      } else {
+        _ice = 'Other';
+        _iceCustomController.text = storedIce;
+      }
       _garnishController.text = e.garnish ?? '';
       _notesController.text = e.notes ?? '';
       _tagsController.text = e.tags ?? '';
@@ -79,8 +103,22 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
     final ai = widget.aiPrefill;
     if (ai != null) {
       _nameController.text = ai.name;
-      _glassController.text = ai.glass;
-      _iceController.text = ai.ice ?? '';
+      // Glass
+      final aiGlass = ai.glass;
+      if (_glassOptions.contains(aiGlass)) {
+        _glass = aiGlass;
+      } else {
+        _glass = 'Other';
+        _glassCustomController.text = aiGlass;
+      }
+      // Ice
+      final aiIce = ai.ice ?? '';
+      if (_iceOptions.contains(aiIce) || aiIce.isEmpty) {
+        _ice = aiIce.isEmpty ? 'Cubed' : aiIce;
+      } else {
+        _ice = 'Other';
+        _iceCustomController.text = aiIce;
+      }
       _garnishController.text = ai.garnish ?? '';
       _notesController.text = ai.notes ?? '';
       _tagsController.text = ai.tags ?? '';
@@ -125,8 +163,8 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _glassController.dispose();
-    _iceController.dispose();
+    _glassCustomController.dispose();
+    _iceCustomController.dispose();
     _garnishController.dispose();
     _notesController.dispose();
     _tagsController.dispose();
@@ -172,8 +210,11 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         id: isEditing ? Value(widget.existing!.id) : const Value.absent(),
         name: Value(_nameController.text.trim()),
         method: Value(_method.toLowerCase()),
-        glass: Value(_glassController.text.trim()),
-        ice: Value(_iceController.text.trim().isEmpty ? null : _iceController.text.trim()),
+        glass: Value(_glass == 'Other' ? _glassCustomController.text.trim() : _glass),
+        ice: Value(() {
+          final v = _ice == 'Other' ? _iceCustomController.text.trim() : _ice;
+          return v.isEmpty ? null : v;
+        }()),
         garnish: Value(_garnishController.text.trim().isEmpty ? null : _garnishController.text.trim()),
         baseSpirit: Value(_baseSpirit),
         difficulty: Value(_difficulty),
@@ -380,30 +421,47 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
             const SizedBox(height: 16),
 
             _FormField(
-              label: 'Glass',
-              child: TextFormField(
-                controller: _glassController,
-                style: _inputStyle,
-                decoration: _inputDeco('e.g. Coupe, Rocks, Highball'),
-                textCapitalization: TextCapitalization.words,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Glass is required' : null,
+              label: 'Glass Type',
+              child: _DropdownField(
+                value: _glass,
+                items: _glassOptions,
+                onChanged: (v) => setState(() => _glass = v!),
               ),
             ),
+            if (_glass == 'Other') ...[  
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _glassCustomController,
+                style: _inputStyle,
+                decoration: _inputDeco('Enter glass type'),
+                textCapitalization: TextCapitalization.words,
+              ),
+            ],
             const SizedBox(height: 16),
 
             Row(
               children: [
                 Expanded(
                   child: _FormField(
-                    label: 'Ice',
-                    child: TextFormField(
-                      controller: _iceController,
-                      style: _inputStyle,
-                      decoration: _inputDeco('e.g. Cubed, Crushed'),
-                      textCapitalization: TextCapitalization.words,
+                    label: 'Ice Type',
+                    child: _DropdownField(
+                      value: _ice,
+                      items: _iceOptions,
+                      onChanged: (v) => setState(() => _ice = v!),
                     ),
                   ),
                 ),
+                if (_ice == 'Other') ...[  
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _iceCustomController,
+                      style: _inputStyle,
+                      decoration: _inputDeco('Enter ice type'),
+                      textCapitalization: TextCapitalization.words,
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 12),
                 Expanded(
                   child: _FormField(

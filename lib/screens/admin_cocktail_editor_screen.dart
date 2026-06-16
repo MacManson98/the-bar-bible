@@ -36,29 +36,56 @@ class _AdminCocktailEditorScreenState
 
   late final TextEditingController _nameCtrl;
   late final TextEditingController _methodInstructionsCtrl;
-  late final TextEditingController _glassCtrl;
-  late final TextEditingController _iceCtrl;
+  late final TextEditingController _glassCustomCtrl;
+  late final TextEditingController _iceCustomCtrl;
   late final TextEditingController _garnishCtrl;
   late final TextEditingController _tagsCtrl;
   late final TextEditingController _historyCtrl;
   late final TextEditingController _tastingNotesCtrl;
   late final TextEditingController _imageUrlCtrl;
 
-  String _method = 'shake';
+  // Stored as display value (capitalised); lowercased on save where needed
+  String _method = 'Shake';
   String _baseSpirit = 'Gin';
-  String _category = 'cocktail';
+  String _category = 'Cocktail';
+  String _glass = 'Coupe';
+  String _ice = 'Cubed';
   int _difficulty = 2;
   bool _isPremium = false;
 
   final List<_IngredientRow> _ingredients = [];
 
-  static const _methods = ['shake', 'stir', 'build', 'blend', 'throw'];
+  // Display values — stored/saved as-is (Firestore is fine with capitalised values)
+  static const _methodValues = ['Shake', 'Stir', 'Build', 'Blend', 'Throw', 'Roll'];
   static const _spirits = [
     'Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Tequila',
     'Mezcal', 'Brandy', 'Cognac', 'Champagne', 'Wine', 'Beer',
     'Non-Alcoholic', 'Other',
   ];
-  static const _categories = ['cocktail', 'mocktail', 'shot'];
+  static const _categoryValues = ['Cocktail', 'Mocktail', 'Shot'];
+
+  static const _glassOptions = [
+    'Coupe',
+    'Rocks / Old Fashioned',
+    'Highball',
+    'Martini',
+    'Nick & Nora',
+    'Hurricane',
+    'Tiki Mug',
+    'Champagne Flute',
+    'Wine Glass',
+    'Shot Glass',
+    'Other',
+  ];
+
+  static const _iceOptions = [
+    'Cubed',
+    'Large Cube',
+    'Crushed',
+    'Cracked',
+    'No Ice',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -67,8 +94,6 @@ class _AdminCocktailEditorScreenState
     _nameCtrl = TextEditingController(text: d['name'] as String? ?? '');
     _methodInstructionsCtrl =
         TextEditingController(text: d['method_instructions'] as String? ?? '');
-    _glassCtrl = TextEditingController(text: d['glass'] as String? ?? '');
-    _iceCtrl = TextEditingController(text: d['ice'] as String? ?? '');
     _garnishCtrl = TextEditingController(text: d['garnish'] as String? ?? '');
     _tagsCtrl = TextEditingController(
         text: (d['tags'] as List?)?.join(', ') ?? d['tags'] as String? ?? '');
@@ -78,11 +103,40 @@ class _AdminCocktailEditorScreenState
     _imageUrlCtrl =
         TextEditingController(text: d['image_url'] as String? ?? '');
 
-    _method = d['method'] as String? ?? 'shake';
+    // Method: normalise stored value to capitalised display value
+    final storedMethod = d['method'] as String? ?? 'shake';
+    final normMethod = _capitalize(storedMethod);
+    _method = _methodValues.contains(normMethod) ? normMethod : 'Shake';
+
     _baseSpirit = d['base_spirit'] as String? ?? 'Gin';
-    _category = d['category'] as String? ?? 'cocktail';
+    if (!_spirits.contains(_baseSpirit)) _baseSpirit = 'Other';
+
+    final storedCategory = d['category'] as String? ?? 'cocktail';
+    final normCategory = _capitalize(storedCategory);
+    _category = _categoryValues.contains(normCategory) ? normCategory : 'Cocktail';
+
     _difficulty = (d['difficulty'] as num?)?.toInt() ?? 2;
     _isPremium = d['is_premium'] as bool? ?? false;
+
+    // Glass
+    final storedGlass = d['glass'] as String? ?? '';
+    if (_glassOptions.contains(storedGlass)) {
+      _glass = storedGlass;
+      _glassCustomCtrl = TextEditingController();
+    } else {
+      _glass = 'Other';
+      _glassCustomCtrl = TextEditingController(text: storedGlass);
+    }
+
+    // Ice
+    final storedIce = d['ice'] as String? ?? '';
+    if (_iceOptions.contains(storedIce)) {
+      _ice = storedIce.isEmpty ? 'Cubed' : storedIce;
+      _iceCustomCtrl = TextEditingController();
+    } else {
+      _ice = storedIce.isEmpty ? 'Cubed' : 'Other';
+      _iceCustomCtrl = TextEditingController(text: storedIce);
+    }
 
     final rawIngredients = d['ingredients'] as List? ?? [];
     for (final ing in rawIngredients) {
@@ -99,12 +153,15 @@ class _AdminCocktailEditorScreenState
     if (_ingredients.isEmpty) _addIngredient();
   }
 
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
+
   @override
   void dispose() {
     _nameCtrl.dispose();
     _methodInstructionsCtrl.dispose();
-    _glassCtrl.dispose();
-    _iceCtrl.dispose();
+    _glassCustomCtrl.dispose();
+    _iceCustomCtrl.dispose();
     _garnishCtrl.dispose();
     _tagsCtrl.dispose();
     _historyCtrl.dispose();
@@ -147,6 +204,20 @@ class _AdminCocktailEditorScreenState
       maxWidth: 1200,
     );
     if (picked == null || !mounted) return;
+
+    // Basic file-type guard — reject anything that isn't jpg/jpeg/png/webp
+    final ext = picked.name.split('.').last.toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only JPG, PNG or WebP images are allowed.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _pickedImage = picked;
@@ -206,6 +277,12 @@ class _AdminCocktailEditorScreenState
     });
   }
 
+  String get _resolvedGlass =>
+      _glass == 'Other' ? _glassCustomCtrl.text.trim() : _glass;
+
+  String get _resolvedIce =>
+      _ice == 'Other' ? _iceCustomCtrl.text.trim() : _ice;
+
   Map<String, dynamic> _buildPayload({bool staging = false}) {
     final tagsRaw = _tagsCtrl.text.trim();
     final tagsList = tagsRaw.isEmpty
@@ -229,18 +306,18 @@ class _AdminCocktailEditorScreenState
 
     final payload = <String, dynamic>{
       'name': _nameCtrl.text.trim(),
-      'method': _method,
+      'method': _method.toLowerCase(), // keep Firestore values lowercase for back-compat
       'method_instructions': _methodInstructionsCtrl.text.trim().isEmpty
           ? null
           : _methodInstructionsCtrl.text.trim(),
-      'glass': _glassCtrl.text.trim(),
-      'ice': _iceCtrl.text.trim().isEmpty ? null : _iceCtrl.text.trim(),
+      'glass': _resolvedGlass,
+      'ice': _resolvedIce.isEmpty ? null : _resolvedIce,
       'garnish':
           _garnishCtrl.text.trim().isEmpty ? null : _garnishCtrl.text.trim(),
       'base_spirit': _baseSpirit,
       'difficulty': _difficulty,
       'tags': tagsList,
-      'category': _category,
+      'category': _category.toLowerCase(), // keep lowercase for back-compat
       'is_premium': _isPremium,
       'history':
           _historyCtrl.text.trim().isEmpty ? null : _historyCtrl.text.trim(),
@@ -263,6 +340,12 @@ class _AdminCocktailEditorScreenState
 
   Future<void> _save({required bool toLive}) async {
     if (!_formKey.currentState!.validate()) return;
+    if (_glass == 'Other' && _glassCustomCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a glass type.')),
+      );
+      return;
+    }
     if (_isUploadingImage) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please wait for image upload to finish.')),
@@ -360,22 +443,104 @@ class _AdminCocktailEditorScreenState
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
           children: [
             _sectionLabel('BASICS'),
-            _field(_nameCtrl, 'Name', required: true),
+
+            // Name
+            _labeledField(
+              'Cocktail Name',
+              TextFormField(
+                controller: _nameCtrl,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                decoration: _inputDecoration('e.g. Strawberry Southside'),
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+            ),
             const SizedBox(height: 12),
-            _dropdownRow('Method', _method, _methods,
-                (v) => setState(() => _method = v!)),
+
+            // Method
+            _labeledField(
+              'Method',
+              _dropdownWithValue<String>(
+                value: _method,
+                items: _methodValues,
+                onChanged: (v) => setState(() => _method = v!),
+              ),
+            ),
             const SizedBox(height: 12),
-            _dropdownRow('Spirit', _baseSpirit, _spirits,
-                (v) => setState(() => _baseSpirit = v!)),
+
+            // Base Spirit
+            _labeledField(
+              'Base Spirit',
+              _dropdownWithValue<String>(
+                value: _baseSpirit,
+                items: _spirits,
+                onChanged: (v) => setState(() => _baseSpirit = v!),
+              ),
+            ),
             const SizedBox(height: 12),
-            _dropdownRow('Category', _category, _categories,
-                (v) => setState(() => _category = v!)),
+
+            // Category
+            _labeledField(
+              'Category',
+              _dropdownWithValue<String>(
+                value: _category,
+                items: _categoryValues,
+                onChanged: (v) => setState(() => _category = v!),
+              ),
+            ),
             const SizedBox(height: 12),
-            _field(_glassCtrl, 'Glass', required: true),
+
+            // Glass
+            _labeledField(
+              'Glass Type',
+              _dropdownWithValue<String>(
+                value: _glass,
+                items: _glassOptions,
+                onChanged: (v) => setState(() => _glass = v!),
+              ),
+            ),
+            if (_glass == 'Other') ...[
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _glassCustomCtrl,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                decoration: _inputDecoration('Enter glass type'),
+                textCapitalization: TextCapitalization.words,
+              ),
+            ],
             const SizedBox(height: 12),
-            _field(_iceCtrl, 'Ice'),
+
+            // Ice
+            _labeledField(
+              'Ice Type',
+              _dropdownWithValue<String>(
+                value: _ice,
+                items: _iceOptions,
+                onChanged: (v) => setState(() => _ice = v!),
+              ),
+            ),
+            if (_ice == 'Other') ...[
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _iceCustomCtrl,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                decoration: _inputDecoration('Enter ice type'),
+                textCapitalization: TextCapitalization.words,
+              ),
+            ],
             const SizedBox(height: 12),
-            _field(_garnishCtrl, 'Garnish'),
+
+            // Garnish
+            _labeledField(
+              'Garnish',
+              TextFormField(
+                controller: _garnishCtrl,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                decoration: _inputDecoration('e.g. Lime Wheel, Mint Sprig'),
+                textCapitalization: TextCapitalization.words,
+              ),
+            ),
             const SizedBox(height: 16),
 
             // Difficulty
@@ -423,9 +588,20 @@ class _AdminCocktailEditorScreenState
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
                   children: [
-                    Expanded(flex: 3, child: _fieldRaw(ing.nameCtrl, 'Name')),
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: ing.nameCtrl,
+                        style: const TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13),
+                        textCapitalization: TextCapitalization.words,
+                        decoration: _inputDecoration('Ingredient'),
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(flex: 2, child: _fieldRaw(ing.amountCtrl, 'ml')),
+                    Expanded(
+                        flex: 2,
+                        child: _fieldRaw(ing.amountCtrl, 'Amount (ml)')),
                     const SizedBox(width: 8),
                     Expanded(
                         flex: 2, child: _fieldRaw(ing.prepNoteCtrl, 'Note')),
@@ -463,7 +639,7 @@ class _AdminCocktailEditorScreenState
             _field(_tastingNotesCtrl, 'Tasting Notes', maxLines: 2),
             const SizedBox(height: 16),
 
-            // ── Image ──────────────────────────────────────────────────
+            // Image
             _sectionLabel('IMAGE'),
             _buildImagePicker(),
             const SizedBox(height: 32),
@@ -529,7 +705,6 @@ class _AdminCocktailEditorScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Preview area
         GestureDetector(
           onTap: _isUploadingImage ? null : _pickAndUploadImage,
           child: Container(
@@ -544,7 +719,6 @@ class _AdminCocktailEditorScreenState
           ),
         ),
         const SizedBox(height: 10),
-        // Action buttons row
         Row(
           children: [
             Expanded(
@@ -569,8 +743,7 @@ class _AdminCocktailEditorScreenState
                 label: const Text('Remove'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.redAccent,
-                  side: const BorderSide(
-                      color: Colors.redAccent),
+                  side: const BorderSide(color: Colors.redAccent),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
@@ -578,7 +751,6 @@ class _AdminCocktailEditorScreenState
             ],
           ],
         ),
-        // Manual URL fallback
         const SizedBox(height: 10),
         _field(_imageUrlCtrl, 'Or paste image URL manually'),
       ],
@@ -664,6 +836,24 @@ class _AdminCocktailEditorScreenState
     );
   }
 
+  /// A field with a small label above it — consistent with creator screen style
+  Widget _labeledField(String label, Widget child) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary.withValues(alpha: 0.7)),
+        ),
+        const SizedBox(height: 6),
+        child,
+      ],
+    );
+  }
+
   Widget _field(TextEditingController ctrl, String hint,
       {bool required = false, int maxLines = 1}) {
     return TextFormField(
@@ -671,6 +861,9 @@ class _AdminCocktailEditorScreenState
       maxLines: maxLines,
       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: _inputDecoration(hint),
+      textCapitalization: maxLines == 1
+          ? TextCapitalization.words
+          : TextCapitalization.sentences,
       validator: required
           ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
           : null,
@@ -685,16 +878,32 @@ class _AdminCocktailEditorScreenState
     );
   }
 
-  Widget _dropdownRow(String label, String value, List<String> options,
-      ValueChanged<String?> onChanged) {
-    return DropdownButtonFormField<String>(
-      initialValue: options.contains(value) ? value : options.first,
-      dropdownColor: AppTheme.surfaceDark,
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-      decoration: _inputDecoration(label),
-      items:
-          options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-      onChanged: onChanged,
+  Widget _dropdownWithValue<T>({
+    required T value,
+    required List<T> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.surfaceLight),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: items.contains(value) ? value : items.first,
+          isExpanded: true,
+          dropdownColor: AppTheme.surfaceDark,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+          icon: Icon(Icons.expand_more,
+              color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+          items: items
+              .map((o) => DropdownMenuItem<T>(value: o, child: Text(o.toString())))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
     );
   }
 
