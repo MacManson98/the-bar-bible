@@ -425,6 +425,70 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
         selectedDifficulties.length;
   }
 
+  String _activeSortLabel() {
+    switch (sortBy) {
+      case 'alphabetical': return 'Name \u2191';
+      case 'alphabetical_desc': return 'Name \u2193';
+      case 'difficulty': return 'Difficulty \u2191';
+      case 'difficulty_desc': return 'Difficulty \u2193';
+      default: return 'Name \u2191';
+    }
+  }
+
+  void _showSortSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'SORT BY',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.0,
+                color: AppTheme.accentGold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SortOption(
+              label: 'Name',
+              isActive: sortBy == 'alphabetical' || sortBy == 'alphabetical_desc',
+              ascending: sortBy == 'alphabetical',
+              onTap: () {
+                setState(() {
+                  sortBy = (sortBy == 'alphabetical') ? 'alphabetical_desc' : 'alphabetical';
+                });
+                _applyFilters();
+                Navigator.pop(context);
+              },
+            ),
+            _SortOption(
+              label: 'Difficulty',
+              isActive: sortBy == 'difficulty' || sortBy == 'difficulty_desc',
+              ascending: sortBy == 'difficulty',
+              onTap: () {
+                setState(() {
+                  sortBy = (sortBy == 'difficulty') ? 'difficulty_desc' : 'difficulty';
+                });
+                _applyFilters();
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showFiltersSheet() {
     final tempSpirits = Set<String>.from(selectedSpirits);
     final tempFlavors = Set<String>.from(selectedFlavors);
@@ -693,41 +757,33 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
                                     ),
                                   ),
                                   const Spacer(),
-                                  DropdownButton<String>(
-                                    value: sortBy,
-                                    dropdownColor: AppTheme.surfaceDark,
-                                    style: const TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 12,
+                                  GestureDetector(
+                                    onTap: _showSortSheet,
+                                    child: Container(
+                                      height: 42,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.surfaceDark,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: AppTheme.surfaceLight),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'SORT  ·  ${_activeSortLabel()}',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.textPrimary,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    underline: Container(),
-                                    icon: const Icon(
-                                      Icons.sort,
-                                      color: AppTheme.textSecondary,
-                                      size: 18,
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'alphabetical',
-                                        child: Text('A\u2013Z'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'alphabetical_desc',
-                                        child: Text('Z\u2013A'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'difficulty',
-                                        child: Text('Difficulty \u2191'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'difficulty_desc',
-                                        child: Text('Difficulty \u2193'),
-                                      ),
-                                    ],
-                                    onChanged: (value) {
-                                      setState(() => sortBy = value!);
-                                      _applyFilters();
-                                    },
                                   ),
                                 ],
                               ),
@@ -1288,6 +1344,50 @@ class _PremiumFilterPill extends StatelessWidget {
             color: selected ? AppTheme.accentGold : AppTheme.textSecondary,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SortOption extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final bool ascending;
+  final VoidCallback onTap;
+
+  const _SortOption({
+    required this.label,
+    required this.isActive,
+    required this.ascending,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                  color: isActive ? AppTheme.accentGold : AppTheme.textPrimary,
+                ),
+              ),
+            ),
+            if (isActive)
+              Icon(
+                ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                color: AppTheme.accentGold,
+                size: 18,
+              ),
+          ],
         ),
       ),
     );
