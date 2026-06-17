@@ -138,14 +138,26 @@ class FirestoreSyncService {
             ingredientIdMap[ingName] = ingId;
           }
 
-          final amount = (ing['amount_ml'] as num?)?.toDouble() ?? 0.0;
+          // Read unit — fall back to 'ml' for legacy docs without unit field
+          final unit = ing['unit'] as String? ?? 'ml';
+          // For ml/oz use the numeric amount; for others use the string amount
+          final double amount;
+          if (unit == 'ml') {
+            amount = (ing['amount_ml'] as num?)?.toDouble() ?? 0.0;
+          } else if (unit == 'oz') {
+            amount = (ing['amount_oz'] as num?)?.toDouble() ?? 0.0;
+          } else {
+            // Non-liquid: store numeric portion of amount string (e.g. "2" from "2 dash")
+            final raw = ing['amount']?.toString() ?? '';
+            amount = double.tryParse(raw.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+          }
 
           await _db.into(_db.cocktailIngredients).insert(
             CocktailIngredientsCompanion(
               cocktailId: Value(cocktailId),
               ingredientId: Value(ingId),
               amount: Value(amount),
-              unit: const Value('ml'),
+              unit: Value(unit),
               prepNote: Value(ing['prep_note'] as String?),
             ),
           );

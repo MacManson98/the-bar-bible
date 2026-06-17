@@ -7,15 +7,18 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'purchase_service.dart';
+import 'user_sync_service.dart';
 
 class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   PurchaseService? _purchaseService;
+  UserSyncService? _userSyncService;
 
   bool _isAdmin = false;
 
   void setPurchaseService(PurchaseService ps) => _purchaseService = ps;
+  void setUserSyncService(UserSyncService uss) => _userSyncService = uss;
 
   User? get currentUser => _auth.currentUser;
   bool get isSignedIn {
@@ -78,6 +81,7 @@ class AuthService extends ChangeNotifier {
     await _ensureUserDoc(result.user!);
     await _purchaseService?.loginUser(result.user!.uid);
     await _loadAdminStatus(result.user!.uid);
+    await _userSyncService?.pullFromFirestore(result.user!.uid);
     notifyListeners();
     return result;
   }
@@ -108,6 +112,7 @@ class AuthService extends ChangeNotifier {
     await _ensureUserDoc(result.user!);
     await _purchaseService?.loginUser(result.user!.uid);
     await _loadAdminStatus(result.user!.uid);
+    await _userSyncService?.pullFromFirestore(result.user!.uid);
     notifyListeners();
     return result;
   }
@@ -120,6 +125,7 @@ class AuthService extends ChangeNotifier {
     await _ensureUserDoc(result.user!);
     await _purchaseService?.loginUser(result.user!.uid);
     await _loadAdminStatus(result.user!.uid);
+    await _userSyncService?.pullFromFirestore(result.user!.uid);
     notifyListeners();
     return result;
   }

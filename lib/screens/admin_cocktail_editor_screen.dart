@@ -141,12 +141,14 @@ class _AdminCocktailEditorScreenState
     final rawIngredients = d['ingredients'] as List? ?? [];
     for (final ing in rawIngredients) {
       if (ing is Map) {
+        final storedUnit = ing['unit'] as String? ?? 'ml';
+        final unit = _IngredientRow.unitOptions.contains(storedUnit) ? storedUnit : 'ml';
+        final amount = ing['amount']?.toString() ?? (ing['amount_ml'] ?? '').toString();
         _ingredients.add(_IngredientRow(
           nameCtrl: TextEditingController(text: ing['name'] as String? ?? ''),
-          amountCtrl: TextEditingController(
-              text: (ing['amount_ml'] ?? '').toString()),
-          prepNoteCtrl:
-              TextEditingController(text: ing['prep_note'] as String? ?? ''),
+          amountCtrl: TextEditingController(text: amount),
+          prepNoteCtrl: TextEditingController(text: ing['prep_note'] as String? ?? ''),
+          unit: unit,
         ));
       }
     }
@@ -295,13 +297,19 @@ class _AdminCocktailEditorScreenState
 
     final ingredients = _ingredients
         .where((i) => i.nameCtrl.text.trim().isNotEmpty)
-        .map((i) => {
-              'name': i.nameCtrl.text.trim(),
-              'amount_ml': double.tryParse(i.amountCtrl.text.trim()) ?? 0.0,
-              'prep_note': i.prepNoteCtrl.text.trim().isEmpty
-                  ? null
-                  : i.prepNoteCtrl.text.trim(),
-            })
+        .map((i) {
+          final unit = i.unit;
+          final amountStr = i.amountCtrl.text.trim();
+          final amountNum = double.tryParse(amountStr) ?? 0.0;
+          return {
+            'name': i.nameCtrl.text.trim(),
+            'unit': unit,
+            'amount': amountStr,
+            'amount_ml': unit == 'ml' ? amountNum : (unit == 'oz' ? amountNum * 29.5735 : 0.0),
+            'amount_oz': unit == 'oz' ? amountNum : (unit == 'ml' ? amountNum * 0.033814 : 0.0),
+            'prep_note': i.prepNoteCtrl.text.trim().isEmpty ? null : i.prepNoteCtrl.text.trim(),
+          };
+        })
         .toList();
 
     final payload = <String, dynamic>{
@@ -598,11 +606,41 @@ class _AdminCocktailEditorScreenState
                         decoration: _inputDecoration('Ingredient'),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        flex: 2,
-                        child: _fieldRaw(ing.amountCtrl, 'Amount (ml)')),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 60,
+                      child: TextField(
+                        controller: ing.amountCtrl,
+                        style: const TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13),
+                        keyboardType: TextInputType.number,
+                        decoration: _inputDecoration('Amt'),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Unit dropdown
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceDark,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.surfaceLight),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: ing.unit,
+                          dropdownColor: AppTheme.surfaceDark,
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                          icon: const Icon(Icons.expand_more, color: AppTheme.textSecondary, size: 14),
+                          isDense: true,
+                          items: _IngredientRow.unitOptions
+                              .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                              .toList(),
+                          onChanged: (v) => setState(() => ing.unit = v!),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                         flex: 2, child: _fieldRaw(ing.prepNoteCtrl, 'Note')),
                     IconButton(
@@ -935,11 +973,18 @@ class _IngredientRow {
   final TextEditingController nameCtrl;
   final TextEditingController amountCtrl;
   final TextEditingController prepNoteCtrl;
+  String unit;
+
+  static const unitOptions = [
+    'ml', 'oz', 'dash', 'drop', 'barspoon', 'tsp', 'whole',
+    'pcs', 'slice', 'wedge', 'wheel', 'leaves', 'g', 'top', 'float', 'sprinkle',
+  ];
 
   _IngredientRow({
     required this.nameCtrl,
     required this.amountCtrl,
     required this.prepNoteCtrl,
+    this.unit = 'ml',
   });
 
   void dispose() {

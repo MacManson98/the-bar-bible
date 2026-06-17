@@ -8,6 +8,7 @@ import '../data/database.dart' as db;
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
 import '../services/auth_service.dart';
+import '../services/user_sync_service.dart';
 import '../widgets/favorite_button.dart';
 import 'admin_cocktail_editor_screen.dart';
 
@@ -224,22 +225,29 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                 title: Text(collection.name),
                 subtitle: collection.description != null ? Text(collection.description!) : null,
                 onTap: () async {
-                  if (isInCollection) {
-                    await (widget.database.delete(widget.database.collectionCocktails)
-                      ..where((tbl) =>
-                          tbl.collectionId.equals(collection.id) &
-                          tbl.firestoreId.equals(cocktailFsId))).go();
-                  } else {
-                    await widget.database.into(widget.database.collectionCocktails).insert(
-                      db.CollectionCocktailsCompanion.insert(
-                        collectionId: collection.id,
-                        firestoreId: cocktailFsId,
-                      ),
-                    );
-                  }
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                  _showAddToCollectionDialog();
+                    if (isInCollection) {
+                      await (widget.database.delete(widget.database.collectionCocktails)
+                        ..where((tbl) =>
+                            tbl.collectionId.equals(collection.id) &
+                            tbl.firestoreId.equals(cocktailFsId))).go();
+                    } else {
+                      await widget.database.into(widget.database.collectionCocktails).insert(
+                        db.CollectionCocktailsCompanion.insert(
+                          collectionId: collection.id,
+                          firestoreId: cocktailFsId,
+                        ),
+                      );
+                    }
+                    // Push updated collections to Firestore
+                    if (context.mounted) {
+                    final uid = context.read<AuthService>().currentUser?.uid;
+                if (uid != null) {
+                UserSyncService(widget.database).pushCollections(uid);
+                }
+                }
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                _showAddToCollectionDialog();
                 },
               );
             },
@@ -267,12 +275,10 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
     for (final row in results) {
       final cocktailIngredient = row.readTable(widget.database.cocktailIngredients);
       final ingredient = row.readTable(widget.database.ingredients);
-      if (cocktailIngredient.unit == 'ml') {
-        uniqueIngredients[ingredient.id] = _CocktailIngredientWithName(
-          cocktailIngredient: cocktailIngredient,
-          ingredientName: ingredient.name,
-        );
-      }
+      uniqueIngredients[ingredient.id] = _CocktailIngredientWithName(
+        cocktailIngredient: cocktailIngredient,
+        ingredientName: ingredient.name,
+      );
     }
 
     if (!mounted) return;
@@ -283,36 +289,37 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   }
 
   String _getScaledAmount(_CocktailIngredientWithName ing) {
-    final hasTextAmount = ing.cocktailIngredient.amount < 0.1 &&
-        ing.cocktailIngredient.prepNote != null &&
-        ing.cocktailIngredient.prepNote!.isNotEmpty;
+    final unit = ing.cocktailIngredient.unit.toLowerCase();
+    final amount = ing.cocktailIngredient.amount;
+    final scaled = amount * _batchSize;
 
-    if (hasTextAmount) {
-      final prepNote = ing.cocktailIngredient.prepNote!;
-      final numericMatch = RegExp(r'[\d.]+').firstMatch(prepNote);
-      if (numericMatch != null && _batchSize > 1) {
-        final originalAmount = double.tryParse(numericMatch.group(0)!);
-        if (originalAmount != null) {
-          final scaledAmount = originalAmount * _batchSize;
-          final formatted = scaledAmount % 1 == 0
-              ? scaledAmount.toInt().toString()
-              : scaledAmount.toStringAsFixed(1);
-          return prepNote.replaceFirst(numericMatch.group(0)!, formatted);
-        }
-      }
-      return prepNote;
-    } else {
-      final scaledAmount = ing.cocktailIngredient.amount * _batchSize;
-      if (_useOz && ing.cocktailIngredient.unit.toLowerCase() == 'ml') {
-        final ozAmount = scaledAmount * 0.033814;
-        final formatted = ozAmount < 0.1 ? ozAmount.toStringAsFixed(2) : ozAmount.toStringAsFixed(1);
-        return '${formatted}oz';
-      }
-      final formatted = scaledAmount % 1 == 0
-          ? scaledAmount.toInt().toString()
-          : scaledAmount.toStringAsFixed(1);
-      return '$formatted${ing.cocktailIngredient.unit}';
+    // Non-convertible units — display as-is, scale numerically if possible
+    const liquidUnits = {'ml', 'oz'};
+    if (!liquidUnits.contains(unit)) {
+      if (scaled == 0) return unit; // e.g. "top", "float", "sprinkle"
+      final formatted = scaled % 1 == 0
+          ? scaled.toInt().toString()
+          : scaled.toStringAsFixed(1);
+      return '$formatted $unit';
     }
+
+    // ml <-> oz conversion
+    if (_useOz && unit == 'ml') {
+      final oz = scaled * 0.033814;
+      final formatted = oz < 0.1 ? oz.toStringAsFixed(2) : oz.toStringAsFixed(1);
+      return '${formatted}oz';
+    }
+    if (!_useOz && unit == 'oz') {
+      final ml = scaled * 29.5735;
+      final formatted = ml % 1 == 0 ? ml.toInt().toString() : ml.toStringAsFixed(1);
+      return '${formatted}ml';
+    }
+
+    // Same unit, just scale
+    final formatted = scaled % 1 == 0
+        ? scaled.toInt().toString()
+        : scaled.toStringAsFixed(1);
+    return '$formatted$unit';
   }
 
   String _getTotalVolume() {

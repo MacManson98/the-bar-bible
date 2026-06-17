@@ -13,6 +13,7 @@ import 'data/flavor_data.dart';
 import 'services/firestore_sync_service.dart';
 import 'services/purchase_service.dart';
 import 'services/auth_service.dart';
+import 'services/user_sync_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/cocktail_detail_screen.dart';
 import 'screens/paywall_screen.dart';
@@ -32,13 +33,16 @@ void main() async {
   final authService = AuthService();
   authService.setPurchaseService(purchaseService);
 
+  final database = await initDatabase();
+  final userSyncService = UserSyncService(database);
+  authService.setUserSyncService(userSyncService);
+
   // Link any already-signed-in Firebase user to RevenueCat on startup.
   final existingUser = authService.currentUser;
   if (existingUser != null && !existingUser.isAnonymous) {
     await purchaseService.loginUser(existingUser.uid);
+    await userSyncService.pullFromFirestore(existingUser.uid);
   }
-
-  final database = await initDatabase();
 
   runApp(
     MultiProvider(

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../data/database.dart';
 import '../core/theme/app_theme.dart';
+import '../services/auth_service.dart';
+import '../services/user_sync_service.dart';
 
 /// Professional favorite button widget following Instagram/Pinterest pattern
 /// - Heart icon (outline when not favorited, filled when favorited)
@@ -75,6 +78,14 @@ class _FavoriteButtonState extends State<FavoriteButton>
     _animationController.forward().then((_) { _animationController.reverse(); });
     try {
       await widget.database.toggleFavorite(widget.firestoreId);
+
+      // Push to Firestore if signed in
+      if (context.mounted) {
+        final uid = context.read<AuthService>().currentUser?.uid;
+        if (uid != null) {
+          UserSyncService(widget.database).pushFavourites(uid);
+        }
+      }
       
       // Show snackbar if enabled
       if (widget.showSnackbar && mounted) {

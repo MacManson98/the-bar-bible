@@ -129,15 +129,78 @@ Respond ONLY with a JSON object - no markdown fences, no explanation, no preambl
   "ingredients": [
     {
       "name": "string",
-      "amount": 60,
+      "amount": 50,
       "unit": "ml|oz|dash|tsp|tbsp|splash|top",
       "prep_note": "string or null (e.g. freshly squeezed, muddled, chilled)"
     }
   ]
 }
 
-Rules:
-- Use ml for all liquid measurements (not oz)
+DRINK STYLE RULES — follow the appropriate style based on the requested cocktail:
+
+SHORT / SOUR STYLE (spirit + citrus + sweet):
+- 2:1:1 ratio — spirit:citrus:sweetener
+- Spirit: 50ml, citrus: 25ml, sweetener: 12.5–15ml
+- Total: ~90ml pre-dilution
+
+CITRUS-HEAVY SOUR STYLE (spirit + liqueur + citrus):
+- 5:3:2 ratio — spirit:modifier:citrus
+- Spirit: 50ml, modifier: 30ml, citrus: 20ml
+- Total: ~100ml pre-dilution
+
+EQUAL THREE-PART BUILD (spirit + aperitivo/vermouth + modifier):
+- All three components equal: 25ml each
+- Total: 75ml
+
+SPIRIT + VERMOUTH:
+- 70–80% spirit, 20–30% vermouth
+- Total: 70–75ml
+- Bitters in dashes only, never ml
+
+SPIRIT + MODIFIER ONLY (no citrus):
+- Spirit: 50–60ml, sweetener/modifier: 5–10ml
+- Bitters in dashes only
+- Total: 60–70ml
+
+HIGHBALL / LONG DRINK:
+- Spirit: 50ml
+- Mixer: use "top" unit only — never specify ml
+- Optional citrus: squeeze only, 15ml max
+
+TIKI / TROPICAL / MULTI-JUICE:
+- Primary spirit: 45–60ml
+- Secondary spirit (if used): 20–30ml
+- Total juice: 45–60ml across all juice ingredients
+- Sweetener: 15–20ml
+- Total: 120–150ml pre-dilution acceptable
+
+SHOTS:
+- Total volume: 45–60ml, 50ml standard
+- One or two ingredients max
+- No garnish
+
+SPARKLING BUILDS:
+- Base spirit or liqueur: 25–50ml
+- Sparkling element: "top" unit only — never ml
+- Citrus if used: 15–20ml max
+
+GARNISH RULES:
+- Spirit-forward stirred drinks: citrus twist only
+- Sour style: citrus wheel or wedge matching the juice used
+- Highball: wedge or slice of the mixer citrus
+- Tiki: expressive garnish acceptable (fruit, mint, etc.)
+- Spirit + modifier only style: citrus twist only, no fruit
+- Shots: no garnish
+- All garnishes must be realistic bar prep — cut, peel, or sprig only
+
+UNIVERSAL RULES:
+- Use ml for all liquid measurements
+- Bitters: always use "dash" unit, 1–3 dashes max
+- Syrups/sweeteners: 10–20ml (tiki excepted)
+- No single ingredient exceeds 60ml
+- Liqueurs count toward spirit volume
+- Highball and sparkling mixers always use "top" unit — never ml
+- UK double = 50ml — use as the baseline for all spirit pours
 - Include at least 3 ingredients
 - difficulty: 1 = very easy, 5 = advanced technique required
 - Keep the cocktail name creative but professional

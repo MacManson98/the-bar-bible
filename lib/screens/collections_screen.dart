@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
+import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
+import '../services/auth_service.dart';
+import '../services/user_sync_service.dart';
 import '../widgets/vault/vault_widgets.dart';
 import 'add_cocktails_dialog.dart';
 import 'cocktail_detail_screen.dart';
@@ -26,6 +29,12 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
   void initState() {
     super.initState();
     _loadCollections();
+  }
+
+  void _pushCollectionsToCloud() {
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return;
+    UserSyncService(widget.database).pushCollections(uid);
   }
 
   Future<void> _loadCollections() async {
@@ -174,6 +183,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
         ),
       );
       _loadCollections();
+      _pushCollectionsToCloud();
     }
   }
 
@@ -208,6 +218,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
       await (widget.database.delete(widget.database.collections)
         ..where((tbl) => tbl.id.equals(collection.id))).go();
       _loadCollections();
+      _pushCollectionsToCloud();
     }
   }
 

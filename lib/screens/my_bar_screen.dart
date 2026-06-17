@@ -10,6 +10,9 @@ import '../core/utils/image_utils.dart';
 import '../core/utils/bar_analytics.dart';
 import '../data/database.dart';
 import '../data/ingredient_data.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import '../services/user_sync_service.dart';
 import '../widgets/bar_selector_dropdown.dart';
 import 'cocktail_detail_screen.dart';
 
@@ -134,6 +137,12 @@ class MyBarScreenState extends State<MyBarScreen>
   }
 
   Future<void> loadData() => _loadData();
+
+  void _pushBarsToCloud() {
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return;
+    UserSyncService(widget.database).pushBars(uid);
+  }
 
   Future<void> _loadData() async {
     final ingredients = await widget.database.select(widget.database.ingredients).get();
@@ -351,6 +360,7 @@ class MyBarScreenState extends State<MyBarScreen>
 
       widget.onBarChanged?.call();
       await _refreshAnalytics();
+      _pushBarsToCloud();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -709,6 +719,7 @@ class MyBarScreenState extends State<MyBarScreen>
             action: SnackBarAction(label: 'Rename', onPressed: () => _showRenameBarDialog(optimisticBar.id, optimisticBar.name)),
           ),
         );
+        _pushBarsToCloud();
       }
     } catch (_) {
       flow.step('error');
@@ -786,6 +797,7 @@ class MyBarScreenState extends State<MyBarScreen>
     setState(() => _barIngredientIds.clear());
     widget.onBarChanged?.call();
     await _refreshAnalytics();
+    _pushBarsToCloud();
   }
 
   Future<void> _deleteBarWithConfirm(SavedBar bar) async {

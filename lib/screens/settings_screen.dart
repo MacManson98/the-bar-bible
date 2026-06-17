@@ -7,6 +7,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_sync_service.dart';
 import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
 import 'admin_staging_screen.dart';
@@ -27,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool strictMatching = false;
   String defaultSort = 'match';
   bool isLoading = true;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -60,6 +62,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('default_sort', value);
     setState(() => defaultSort = value);
+  }
+
+  Future<void> _forceSync() async {
+    setState(() => _isSyncing = true);
+    try {
+      final syncService = FirestoreSyncService(widget.database);
+      await syncService.sync();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sync complete'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sync failed: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   Future<void> _launchUrl(String url) async {
@@ -401,6 +427,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         context,
                         MaterialPageRoute(builder: (_) => const AdminUserManagementScreen()),
                       ),
+                    ),
+                    _SettingTile(
+                      icon: Icons.sync,
+                      iconColor: AppTheme.accentGold,
+                      title: 'Force Sync',
+                      subtitle: 'Pull latest cocktail data from Firestore now',
+                      trailing: _isSyncing
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentGold))
+                          : const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                      onTap: _isSyncing ? null : _forceSync,
                     ),
                     const _SectionDivider(),
                   ],
