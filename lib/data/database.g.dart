@@ -3651,6 +3651,17 @@ class $UserCocktailsTable extends UserCocktails
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+    'image_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3691,6 +3702,7 @@ class $UserCocktailsTable extends UserCocktails
     category,
     isAiGenerated,
     firestoreId,
+    imageUrl,
     createdAt,
     updatedAt,
   ];
@@ -3804,6 +3816,12 @@ class $UserCocktailsTable extends UserCocktails
         ),
       );
     }
+    if (data.containsKey('image_url')) {
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3881,6 +3899,10 @@ class $UserCocktailsTable extends UserCocktails
         DriftSqlType.string,
         data['${effectivePrefix}firestore_id'],
       ),
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_url'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3913,6 +3935,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
   final String category;
   final bool isAiGenerated;
   final String? firestoreId;
+  final String? imageUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
   const UserCocktail({
@@ -3930,6 +3953,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
     required this.category,
     required this.isAiGenerated,
     this.firestoreId,
+    this.imageUrl,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -3962,6 +3986,9 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
     if (!nullToAbsent || firestoreId != null) {
       map['firestore_id'] = Variable<String>(firestoreId);
     }
+    if (!nullToAbsent || imageUrl != null) {
+      map['image_url'] = Variable<String>(imageUrl);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -3991,6 +4018,9 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
       firestoreId: firestoreId == null && nullToAbsent
           ? const Value.absent()
           : Value(firestoreId),
+      imageUrl: imageUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageUrl),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -4018,6 +4048,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
       category: serializer.fromJson<String>(json['category']),
       isAiGenerated: serializer.fromJson<bool>(json['isAiGenerated']),
       firestoreId: serializer.fromJson<String?>(json['firestoreId']),
+      imageUrl: serializer.fromJson<String?>(json['imageUrl']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -4040,6 +4071,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
       'category': serializer.toJson<String>(category),
       'isAiGenerated': serializer.toJson<bool>(isAiGenerated),
       'firestoreId': serializer.toJson<String?>(firestoreId),
+      'imageUrl': serializer.toJson<String?>(imageUrl),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -4060,6 +4092,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
     String? category,
     bool? isAiGenerated,
     Value<String?> firestoreId = const Value.absent(),
+    Value<String?> imageUrl = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => UserCocktail(
@@ -4079,6 +4112,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
     category: category ?? this.category,
     isAiGenerated: isAiGenerated ?? this.isAiGenerated,
     firestoreId: firestoreId.present ? firestoreId.value : this.firestoreId,
+    imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -4108,6 +4142,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
       firestoreId: data.firestoreId.present
           ? data.firestoreId.value
           : this.firestoreId,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -4130,6 +4165,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
           ..write('category: $category, ')
           ..write('isAiGenerated: $isAiGenerated, ')
           ..write('firestoreId: $firestoreId, ')
+          ..write('imageUrl: $imageUrl, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -4152,6 +4188,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
     category,
     isAiGenerated,
     firestoreId,
+    imageUrl,
     createdAt,
     updatedAt,
   );
@@ -4173,6 +4210,7 @@ class UserCocktail extends DataClass implements Insertable<UserCocktail> {
           other.category == this.category &&
           other.isAiGenerated == this.isAiGenerated &&
           other.firestoreId == this.firestoreId &&
+          other.imageUrl == this.imageUrl &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -4192,6 +4230,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
   final Value<String> category;
   final Value<bool> isAiGenerated;
   final Value<String?> firestoreId;
+  final Value<String?> imageUrl;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const UserCocktailsCompanion({
@@ -4209,6 +4248,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
     this.category = const Value.absent(),
     this.isAiGenerated = const Value.absent(),
     this.firestoreId = const Value.absent(),
+    this.imageUrl = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -4227,6 +4267,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
     this.category = const Value.absent(),
     this.isAiGenerated = const Value.absent(),
     this.firestoreId = const Value.absent(),
+    this.imageUrl = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : name = Value(name),
@@ -4248,6 +4289,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
     Expression<String>? category,
     Expression<bool>? isAiGenerated,
     Expression<String>? firestoreId,
+    Expression<String>? imageUrl,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -4266,6 +4308,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
       if (category != null) 'category': category,
       if (isAiGenerated != null) 'is_ai_generated': isAiGenerated,
       if (firestoreId != null) 'firestore_id': firestoreId,
+      if (imageUrl != null) 'image_url': imageUrl,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -4286,6 +4329,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
     Value<String>? category,
     Value<bool>? isAiGenerated,
     Value<String?>? firestoreId,
+    Value<String?>? imageUrl,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -4304,6 +4348,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
       category: category ?? this.category,
       isAiGenerated: isAiGenerated ?? this.isAiGenerated,
       firestoreId: firestoreId ?? this.firestoreId,
+      imageUrl: imageUrl ?? this.imageUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -4354,6 +4399,9 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
     if (firestoreId.present) {
       map['firestore_id'] = Variable<String>(firestoreId.value);
     }
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4380,6 +4428,7 @@ class UserCocktailsCompanion extends UpdateCompanion<UserCocktail> {
           ..write('category: $category, ')
           ..write('isAiGenerated: $isAiGenerated, ')
           ..write('firestoreId: $firestoreId, ')
+          ..write('imageUrl: $imageUrl, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -8157,6 +8206,7 @@ typedef $$UserCocktailsTableCreateCompanionBuilder =
       Value<String> category,
       Value<bool> isAiGenerated,
       Value<String?> firestoreId,
+      Value<String?> imageUrl,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -8176,6 +8226,7 @@ typedef $$UserCocktailsTableUpdateCompanionBuilder =
       Value<String> category,
       Value<bool> isAiGenerated,
       Value<String?> firestoreId,
+      Value<String?> imageUrl,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -8296,6 +8347,11 @@ class $$UserCocktailsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -8412,6 +8468,11 @@ class $$UserCocktailsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -8483,6 +8544,9 @@ class $$UserCocktailsTableAnnotationComposer
     column: $table.firestoreId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get imageUrl =>
+      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -8560,6 +8624,7 @@ class $$UserCocktailsTableTableManager
                 Value<String> category = const Value.absent(),
                 Value<bool> isAiGenerated = const Value.absent(),
                 Value<String?> firestoreId = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => UserCocktailsCompanion(
@@ -8577,6 +8642,7 @@ class $$UserCocktailsTableTableManager
                 category: category,
                 isAiGenerated: isAiGenerated,
                 firestoreId: firestoreId,
+                imageUrl: imageUrl,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -8596,6 +8662,7 @@ class $$UserCocktailsTableTableManager
                 Value<String> category = const Value.absent(),
                 Value<bool> isAiGenerated = const Value.absent(),
                 Value<String?> firestoreId = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => UserCocktailsCompanion.insert(
@@ -8613,6 +8680,7 @@ class $$UserCocktailsTableTableManager
                 category: category,
                 isAiGenerated: isAiGenerated,
                 firestoreId: firestoreId,
+                imageUrl: imageUrl,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),

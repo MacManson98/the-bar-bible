@@ -1,13 +1,18 @@
 // ignore_for_file: prefer_const_constructors
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
 import '../services/purchase_service.dart';
 import '../services/ai_service.dart';
+import 'user_cocktail_detail_screen.dart';
 
 class CocktailCreatorScreen extends StatefulWidget {
   final AppDatabase database;
@@ -28,6 +33,10 @@ class CocktailCreatorScreen extends StatefulWidget {
 class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  XFile? _pickedImage;
+  bool _isUploadingImage = false;
+  double _uploadProgress = 0;
+  String? _imageUrl;
 
   // ── Controllers ────────────────────────────────────────────────────────────
   final _nameController = TextEditingController();
@@ -72,7 +81,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
     final e = widget.existing;
     if (e != null) {
       _nameController.text = e.name;
-      // Glass
+      _imageUrl = e.imageUrl;
       final storedGlass = e.glass;
       if (_glassOptions.contains(storedGlass)) {
         _glass = storedGlass;
@@ -80,7 +89,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         _glass = 'Other';
         _glassCustomController.text = storedGlass;
       }
-      // Ice
       final storedIce = e.ice ?? '';
       if (_iceOptions.contains(storedIce) || storedIce.isEmpty) {
         _ice = storedIce.isEmpty ? 'Cubed' : storedIce;
@@ -103,7 +111,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
     final ai = widget.aiPrefill;
     if (ai != null) {
       _nameController.text = ai.name;
-      // Glass
       final aiGlass = ai.glass;
       if (_glassOptions.contains(aiGlass)) {
         _glass = aiGlass;
@@ -111,7 +118,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         _glass = 'Other';
         _glassCustomController.text = aiGlass;
       }
-      // Ice
       final aiIce = ai.ice ?? '';
       if (_iceOptions.contains(aiIce) || aiIce.isEmpty) {
         _ice = aiIce.isEmpty ? 'Cubed' : aiIce;
@@ -174,6 +180,63 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
     super.dispose();
   }
 
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1200,
+    );
+    if (picked == null || !mounted) return;
+
+    final ext = picked.name.split('.').last.toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only JPG, PNG or WebP images are allowed.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _pickedImage = picked;
+      _isUploadingImage = true;
+      _uploadProgress = 0;
+    });
+
+    try {
+      final safeName = _nameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+      final path = 'user_cocktail_images/${safeName}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final ref = FirebaseStorage.instance.ref(path);
+      final task = ref.putFile(File(picked.path), SettableMetadata(contentType: 'image/jpeg'));
+      task.snapshotEvents.listen((s) {
+        if (mounted) setState(() => _uploadProgress = s.bytesTransferred / s.totalBytes);
+      });
+      await task;
+      final url = await ref.getDownloadURL();
+      if (mounted) {
+        setState(() {
+          _imageUrl = '$url?alt=media';
+          _isUploadingImage = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _removeImage() => setState(() {
+        _pickedImage = null;
+        _imageUrl = null;
+      });
+
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
 
@@ -222,6 +285,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         notes: Value(_notesController.text.trim().isEmpty ? null : _notesController.text.trim()),
         category: Value(_category),
         isAiGenerated: Value(widget.aiPrefill != null),
+        imageUrl: Value(_imageUrl),
         updatedAt: Value(DateTime.now()),
       );
 
@@ -234,7 +298,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         await auth.incrementCreatesUsed();
       }
 
-      // Save ingredients
       final ingredientCompanions = _ingredients
           .asMap()
           .entries
@@ -255,7 +318,19 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
       if (mounted) {
         HapticFeedback.mediumImpact();
-        Navigator.pop(context, true);
+        if (!isEditing) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserCocktailDetailScreen(
+                database: widget.database,
+                cocktail: saved,
+              ),
+            ),
+          );
+        } else {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -267,10 +342,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.surfaceDark,
-      ),
+      SnackBar(content: Text(message), backgroundColor: AppTheme.surfaceDark),
     );
   }
 
@@ -284,6 +356,102 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
       _ingredients[index].dispose();
       _ingredients.removeAt(index);
     });
+  }
+
+  Widget _buildImagePicker() {
+    final hasUrl = _imageUrl != null && _imageUrl!.isNotEmpty;
+    final hasPicked = _pickedImage != null;
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _isUploadingImage ? null : _pickAndUploadImage,
+          child: Container(
+            height: 160,
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceDark,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: _isUploadingImage
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: CircularProgressIndicator(
+                            value: _uploadProgress,
+                            strokeWidth: 3,
+                            color: AppTheme.accentGold,
+                            backgroundColor: AppTheme.surfaceLight,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '${(_uploadProgress * 100).toInt()}%',
+                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  )
+                : hasPicked
+                    ? Image.file(File(_pickedImage!.path), fit: BoxFit.cover, width: double.infinity)
+                    : hasUrl
+                        ? CachedNetworkImage(
+                            imageUrl: _imageUrl!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                          )
+                        : const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.add_photo_alternate_outlined,
+                                    size: 36, color: AppTheme.textSecondary),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Tap to add image',
+                                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isUploadingImage ? null : _pickAndUploadImage,
+                icon: const Icon(Icons.photo_library_outlined, size: 16),
+                label: Text(hasUrl || hasPicked ? 'Change Image' : 'Pick Image'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.accentGold,
+                  side: BorderSide(color: AppTheme.accentGold.withValues(alpha: 0.6)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            if (hasUrl || hasPicked) ...[
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: _removeImage,
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Remove'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
   }
 
   @override
@@ -319,11 +487,9 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 120),
           children: [
-            // ── The Basics ─────────────────────────────────────────────────
             _SectionLabel(label: 'THE BASICS'),
             const SizedBox(height: 12),
 
-            // Name
             _FormField(
               label: 'Cocktail name',
               child: TextFormField(
@@ -336,7 +502,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Category
             _FormField(
               label: 'Category',
               child: _SegmentedPicker(
@@ -347,7 +512,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Base spirit
             _FormField(
               label: 'Base spirit',
               child: _DropdownField(
@@ -358,7 +522,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Difficulty
             _FormField(
               label: 'Difficulty',
               child: _StarPicker(
@@ -369,7 +532,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
             const SizedBox(height: 28),
 
-            // ── Ingredients ────────────────────────────────────────────────
             _SectionLabel(label: 'INGREDIENTS'),
             const SizedBox(height: 12),
 
@@ -397,7 +559,11 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
                     const SizedBox(width: 6),
                     Text(
                       'Add ingredient',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.accentGold.withValues(alpha: 0.7)),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.accentGold.withValues(alpha: 0.7),
+                      ),
                     ),
                   ],
                 ),
@@ -406,7 +572,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
             const SizedBox(height: 28),
 
-            // ── Method ─────────────────────────────────────────────────────
             _SectionLabel(label: 'METHOD & SERVE'),
             const SizedBox(height: 12),
 
@@ -428,7 +593,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
                 onChanged: (v) => setState(() => _glass = v!),
               ),
             ),
-            if (_glass == 'Other') ...[  
+            if (_glass == 'Other') ...[
               const SizedBox(height: 8),
               TextFormField(
                 controller: _glassCustomController,
@@ -451,7 +616,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
                     ),
                   ),
                 ),
-                if (_ice == 'Other') ...[  
+                if (_ice == 'Other') ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
@@ -479,7 +644,12 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
             const SizedBox(height: 28),
 
-            // ── Finishing Touches ──────────────────────────────────────────
+            _SectionLabel(label: 'IMAGE'),
+            const SizedBox(height: 12),
+            _buildImagePicker(),
+
+            const SizedBox(height: 28),
+
             _SectionLabel(label: 'FINISHING TOUCHES'),
             const SizedBox(height: 12),
 
@@ -507,7 +677,10 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
             const SizedBox(height: 4),
             Text(
               'Separate tags with commas',
-              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.textSecondary.withValues(alpha: 0.4),
+              ),
             ),
           ],
         ),
@@ -519,7 +692,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
           border: Border(top: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.3))),
         ),
         child: ElevatedButton(
-          onPressed: _isSaving ? null : _save,
+          onPressed: (_isSaving || _isUploadingImage) ? null : _save,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.accentGold,
             foregroundColor: AppTheme.primaryDark,
@@ -530,7 +703,8 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
           ),
           child: _isSaving
               ? const SizedBox(
-                  height: 20, width: 20,
+                  height: 20,
+                  width: 20,
                   child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryDark),
                 )
               : Text(
@@ -545,29 +719,29 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
   TextStyle get _inputStyle => const TextStyle(color: AppTheme.textPrimary, fontSize: 14);
 
   InputDecoration _inputDeco(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.45), fontSize: 13),
-    filled: true,
-    fillColor: AppTheme.surfaceDark,
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppTheme.accentGold.withValues(alpha: 0.7), width: 1.5),
-    ),
-    errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Colors.redAccent),
-    ),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    isDense: true,
-  );
+        hintText: hint,
+        hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.45), fontSize: 13),
+        filled: true,
+        fillColor: AppTheme.surfaceDark,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.surfaceLight.withValues(alpha: 0.6)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.accentGold.withValues(alpha: 0.7), width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.redAccent),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        isDense: true,
+      );
 }
 
 // ─── Ingredient row model ──────────────────────────────────────────────────
@@ -621,7 +795,6 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
         children: [
           Row(
             children: [
-              // Amount
               SizedBox(
                 width: 64,
                 child: TextFormField(
@@ -630,7 +803,8 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     hintText: '60',
-                    hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.4), fontSize: 13),
+                    hintStyle: TextStyle(
+                        color: AppTheme.textSecondary.withValues(alpha: 0.4), fontSize: 13),
                     filled: true,
                     fillColor: AppTheme.primaryDark.withValues(alpha: 0.4),
                     border: OutlineInputBorder(
@@ -651,7 +825,6 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Unit dropdown
               Container(
                 height: 40,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -665,14 +838,16 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
                     value: widget.row.unit,
                     dropdownColor: AppTheme.surfaceDark,
                     style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                    icon: Icon(Icons.expand_more, size: 16, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
-                    items: widget.units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                    icon: Icon(Icons.expand_more,
+                        size: 16, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+                    items: widget.units
+                        .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                        .toList(),
                     onChanged: (v) => setState(() => widget.row.unit = v!),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              // Name
               Expanded(
                 child: TextFormField(
                   controller: widget.row.nameController,
@@ -680,7 +855,8 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
                   textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(
                     hintText: 'Ingredient',
-                    hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.4), fontSize: 13),
+                    hintStyle: TextStyle(
+                        color: AppTheme.textSecondary.withValues(alpha: 0.4), fontSize: 13),
                     filled: true,
                     fillColor: AppTheme.primaryDark.withValues(alpha: 0.4),
                     border: OutlineInputBorder(
@@ -704,12 +880,12 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
                 const SizedBox(width: 6),
                 GestureDetector(
                   onTap: widget.onRemove,
-                  child: Icon(Icons.remove_circle_outline, size: 20, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+                  child: Icon(Icons.remove_circle_outline,
+                      size: 20, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
                 ),
               ],
             ],
           ),
-          // Prep note (optional, shown below)
           const SizedBox(height: 8),
           TextFormField(
             controller: widget.row.prepNoteController,
@@ -717,7 +893,8 @@ class _IngredientRowWidgetState extends State<_IngredientRowWidget> {
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(
               hintText: 'Prep note (optional) — e.g. freshly squeezed, muddled',
-              hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.3), fontSize: 12),
+              hintStyle: TextStyle(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.3), fontSize: 12),
               filled: true,
               fillColor: AppTheme.primaryDark.withValues(alpha: 0.2),
               border: OutlineInputBorder(
@@ -752,9 +929,24 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(width: 3, height: 14, decoration: BoxDecoration(color: AppTheme.accentGold, borderRadius: BorderRadius.circular(2))),
+        Container(
+          width: 3,
+          height: 14,
+          decoration: BoxDecoration(
+            color: AppTheme.accentGold,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: AppTheme.accentGold.withValues(alpha: 0.8))),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.4,
+            color: AppTheme.accentGold.withValues(alpha: 0.8),
+          ),
+        ),
       ],
     );
   }
@@ -770,7 +962,14 @@ class _FormField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.7))),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary.withValues(alpha: 0.7),
+          ),
+        ),
         const SizedBox(height: 6),
         child,
       ],
@@ -783,7 +982,8 @@ class _SegmentedPicker extends StatelessWidget {
   final int selected;
   final void Function(int) onSelect;
 
-  const _SegmentedPicker({required this.options, required this.selected, required this.onSelect});
+  const _SegmentedPicker(
+      {required this.options, required this.selected, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -801,7 +1001,9 @@ class _SegmentedPicker extends StatelessWidget {
                 color: isSelected ? AppTheme.accentGold : AppTheme.surfaceDark,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isSelected ? AppTheme.accentGold : AppTheme.surfaceLight.withValues(alpha: 0.6),
+                  color: isSelected
+                      ? AppTheme.accentGold
+                      : AppTheme.surfaceLight.withValues(alpha: 0.6),
                 ),
               ),
               child: Text(
@@ -826,7 +1028,8 @@ class _DropdownField extends StatelessWidget {
   final List<String> items;
   final void Function(String?) onChanged;
 
-  const _DropdownField({required this.value, required this.items, required this.onChanged});
+  const _DropdownField(
+      {required this.value, required this.items, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -869,7 +1072,9 @@ class _StarPicker extends StatelessWidget {
             padding: const EdgeInsets.only(right: 8),
             child: Icon(
               filled ? Icons.star_rounded : Icons.star_outline_rounded,
-              color: filled ? AppTheme.accentGold : AppTheme.textSecondary.withValues(alpha: 0.3),
+              color: filled
+                  ? AppTheme.accentGold
+                  : AppTheme.textSecondary.withValues(alpha: 0.3),
               size: 32,
             ),
           ),

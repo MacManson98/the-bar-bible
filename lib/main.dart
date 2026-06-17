@@ -390,10 +390,14 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
         case 'alphabetical':
           filteredCocktails.sort((a, b) => a.name.compareTo(b.name));
           break;
+        case 'alphabetical_desc':
+          filteredCocktails.sort((a, b) => b.name.compareTo(a.name));
+          break;
         case 'difficulty':
-          filteredCocktails.sort(
-            (a, b) => a.difficulty.compareTo(b.difficulty),
-          );
+          filteredCocktails.sort((a, b) => a.difficulty.compareTo(b.difficulty));
+          break;
+        case 'difficulty_desc':
+          filteredCocktails.sort((a, b) => b.difficulty.compareTo(a.difficulty));
           break;
       }
     });
@@ -708,8 +712,16 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
                                         child: Text('A\u2013Z'),
                                       ),
                                       DropdownMenuItem(
+                                        value: 'alphabetical_desc',
+                                        child: Text('Z\u2013A'),
+                                      ),
+                                      DropdownMenuItem(
                                         value: 'difficulty',
-                                        child: Text('Difficulty'),
+                                        child: Text('Difficulty \u2191'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'difficulty_desc',
+                                        child: Text('Difficulty \u2193'),
                                       ),
                                     ],
                                     onChanged: (value) {

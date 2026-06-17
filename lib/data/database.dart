@@ -114,6 +114,7 @@ class UserCocktails extends Table {
   TextColumn get category => text().withDefault(const Constant('cocktail'))();
   BoolColumn get isAiGenerated => boolean().withDefault(const Constant(false))();
   TextColumn get firestoreId => text().nullable()();
+  TextColumn get imageUrl => text().nullable()(); // Firebase Storage URL
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -158,7 +159,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -247,6 +248,11 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
       }
       if (from <= 15) {
         await customStatement('ALTER TABLE cocktails ADD COLUMN image_url TEXT');
+      }
+      if (from <= 17) {
+        try {
+          await customStatement('ALTER TABLE user_cocktails ADD COLUMN image_url TEXT');
+        } catch (_) {}
       }
       if (from <= 16) {
         await customStatement('''
@@ -426,10 +432,15 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
         .write(entry);
   }
 
+  /// Synthetic key used for favorites/collections for user-created cocktails.
+  static String userCocktailKey(int id) => 'user_$id';
+
   Future<void> deleteUserCocktail(int id) async {
-    await (delete(userCocktailIngredients)
-          ..where((u) => u.userCocktailId.equals(id)))
-        .go();
+    final key = userCocktailKey(id);
+    // Clean up favourites and collection entries
+    await (delete(favorites)..where((f) => f.firestoreId.equals(key))).go();
+    await (delete(collectionCocktails)..where((c) => c.firestoreId.equals(key))).go();
+    await (delete(userCocktailIngredients)..where((u) => u.userCocktailId.equals(id))).go();
     await (delete(userCocktails)..where((u) => u.id.equals(id))).go();
   }
 

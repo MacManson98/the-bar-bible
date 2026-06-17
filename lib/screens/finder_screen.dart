@@ -399,10 +399,12 @@ class FinderScreenState extends State<FinderScreen>
     switch (_sortBy) {
       case 'name':
         list.sort((a, b) => a.cocktail.name.compareTo(b.cocktail.name));
+      case 'name_desc':
+        list.sort((a, b) => b.cocktail.name.compareTo(a.cocktail.name));
       case 'difficulty':
-        list.sort(
-          (a, b) => a.cocktail.difficulty.compareTo(b.cocktail.difficulty),
-        );
+        list.sort((a, b) => a.cocktail.difficulty.compareTo(b.cocktail.difficulty));
+      case 'difficulty_desc':
+        list.sort((a, b) => b.cocktail.difficulty.compareTo(a.cocktail.difficulty));
       default:
         list.sort((a, b) {
           final cmp = b.matchPercentage.compareTo(a.matchPercentage);
@@ -850,8 +852,10 @@ class FinderScreenState extends State<FinderScreen>
             },
             itemBuilder: (_) => [
               _sortItem('match', 'Best Match'),
-              _sortItem('name', 'A - Z'),
-              _sortItem('difficulty', 'Difficulty'),
+              _sortItem('name', 'A \u2013 Z'),
+              _sortItem('name_desc', 'Z \u2013 A'),
+              _sortItem('difficulty', 'Difficulty \u2191'),
+              _sortItem('difficulty_desc', 'Difficulty \u2193'),
             ],
           ),
         ],

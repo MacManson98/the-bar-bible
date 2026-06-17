@@ -133,13 +133,17 @@ class AuthService extends ChangeNotifier {
   Future<UserCredential> createAccountWithEmail(
     String email,
     String password,
+    String username,
   ) async {
     final result = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
-    await _ensureUserDoc(result.user!);
+    await result.user!.updateDisplayName(username);
+    await _ensureUserDoc(result.user!, username: username);
     await _purchaseService?.loginUser(result.user!.uid);
+    // Send verification email silently — no blocking
+    result.user!.sendEmailVerification().catchError((_) {});
     notifyListeners();
     return result;
   }
@@ -158,20 +162,32 @@ class AuthService extends ChangeNotifier {
 
   // ── User doc ───────────────────────────────────────────────────────────────
 
-  Future<void> _ensureUserDoc(User user) async {
+  Future<void> _ensureUserDoc(User user, {String? username}) async {
     final ref = _firestore.collection('users').doc(user.uid);
     final doc = await ref.get();
     if (!doc.exists) {
       await ref.set({
         'uid': user.uid,
         'email': user.email,
-        'display_name': user.displayName,
+        'username': username ?? user.displayName ?? '',
+        'display_name': user.displayName ?? username ?? '',
         'created_at': FieldValue.serverTimestamp(),
         'creates_used': 0,
         'ai_credits_used': 0,
         'ai_credits_reset_date': DateTime.now().toIso8601String().substring(0, 10),
         'is_premium': false,
       });
+    } else {
+      // Merge-safe: add username field if missing on existing docs
+      final data = doc.data()!;
+      final updates = <String, dynamic>{};
+      if (!data.containsKey('username') || (data['username'] as String? ?? '').isEmpty) {
+        updates['username'] = username ?? user.displayName ?? '';
+      }
+      if (!data.containsKey('email') || (data['email'] as String? ?? '').isEmpty) {
+        updates['email'] = user.email ?? '';
+      }
+      if (updates.isNotEmpty) await ref.update(updates);
     }
   }
 

@@ -38,20 +38,31 @@ class _AdminUserManagementScreenState
     });
 
     try {
-      // Prefix match on email field — requires a Firestore index on 'email'
-      final snap = await _firestore
+      // Search by username prefix first, then email prefix
+      final usernameSnap = await _firestore
+          .collection('users')
+          .where('username', isGreaterThanOrEqualTo: query)
+          .where('username', isLessThan: '${query}z')
+          .limit(20)
+          .get();
+
+      final emailSnap = await _firestore
           .collection('users')
           .where('email', isGreaterThanOrEqualTo: query)
           .where('email', isLessThan: '${query}z')
           .limit(20)
           .get();
 
+      // Merge and deduplicate by doc ID
+      final merged = <String, Map<String, dynamic>>{};
+      for (final doc in [...usernameSnap.docs, ...emailSnap.docs]) {
+        final data = doc.data();
+        data['_uid'] = doc.id;
+        merged[doc.id] = data;
+      }
+
       setState(() {
-        _results = snap.docs.map((doc) {
-          final data = doc.data();
-          data['_uid'] = doc.id;
-          return data;
-        }).toList();
+        _results = merged.values.toList();
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -250,7 +261,7 @@ class _AdminUserManagementScreenState
                     style: const TextStyle(
                         color: AppTheme.textPrimary, fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: 'Search by email...',
+                      hintText: 'Search by username or email...',
                       hintStyle: TextStyle(
                           color: AppTheme.textSecondary.withValues(alpha: 0.5),
                           fontSize: 13),
@@ -323,7 +334,7 @@ class _AdminUserManagementScreenState
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: Text(
-              'Prefix search — e.g. "john" matches "john@..."',
+              'Prefix search — e.g. "john" matches username or email',
               style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textSecondary.withValues(alpha: 0.5),
@@ -399,17 +410,31 @@ class _AdminUserManagementScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Email + copy UID
+              // Username + email + copy UID
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      email,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((user['username'] as String? ?? '').isNotEmpty)
+                          Text(
+                            '@${user['username']}',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.accentGold,
+                            ),
+                          ),
+                        Text(
+                          email,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   GestureDetector(

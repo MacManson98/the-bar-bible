@@ -31,12 +31,16 @@ class _AuthSheetState extends State<AuthSheet> {
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
@@ -71,6 +75,7 @@ class _AuthSheetState extends State<AuthSheet> {
         await auth.createAccountWithEmail(
           _emailController.text.trim(),
           _passwordController.text,
+          _usernameController.text.trim().toLowerCase(),
         );
       } else {
         await auth.signInWithEmail(
@@ -227,6 +232,25 @@ class _AuthSheetState extends State<AuthSheet> {
       key: _formKey,
       child: Column(
         children: [
+          if (_isCreatingAccount) ...[
+            TextFormField(
+              controller: _usernameController,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+              decoration: _inputDecoration('Username'),
+              autocorrect: false,
+              textCapitalization: TextCapitalization.none,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Choose a username';
+                if (v.trim().length < 3) return 'At least 3 characters';
+                final validChars = RegExp(r'^[a-zA-Z0-9_]+$');
+                if (!validChars.hasMatch(v.trim())) {
+                  return 'Letters, numbers and underscores only';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
@@ -242,6 +266,20 @@ class _AuthSheetState extends State<AuthSheet> {
             decoration: _inputDecoration('Password'),
             validator: (v) => (v == null || v.length < 6) ? 'At least 6 characters' : null,
           ),
+          if (_isCreatingAccount) ...[
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: true,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+              decoration: _inputDecoration('Confirm Password'),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Please confirm your password';
+                if (v != _passwordController.text) return 'Passwords do not match';
+                return null;
+              },
+            ),
+          ],
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -269,7 +307,12 @@ class _AuthSheetState extends State<AuthSheet> {
                 style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
               ),
               GestureDetector(
-                onTap: () => setState(() => _isCreatingAccount = !_isCreatingAccount),
+                onTap: () => setState(() {
+                  _isCreatingAccount = !_isCreatingAccount;
+                  _error = null;
+                  _usernameController.clear();
+                  _confirmPasswordController.clear();
+                }),
                 child: Text(
                   _isCreatingAccount ? 'Sign in' : 'Create one',
                   style: const TextStyle(fontSize: 13, color: AppTheme.accentGold, fontWeight: FontWeight.w600),

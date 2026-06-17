@@ -60,7 +60,9 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
 
       if (!mounted) return;
 
-      final created = await Navigator.push<bool>(
+      // pushReplacement in creator navigates to detail screen on save,
+      // so we just reset state when control returns here (user went back).
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => CocktailCreatorScreen(
@@ -70,11 +72,7 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
         ),
       );
 
-      if (created == true && mounted) {
-        Navigator.pop(context, true);
-      } else if (mounted) {
-        setState(() => _isGenerating = false);
-      }
+      if (mounted) setState(() => _isGenerating = false);
     } catch (e) {
       if (mounted) {
         setState(() {
