@@ -1,9 +1,14 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:drift/drift.dart' show Value;
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/ai_service.dart';
-import 'cocktail_creator_screen.dart';
+import '../services/auth_service.dart';
+import '../services/user_sync_service.dart';
+import 'user_cocktail_detail_screen.dart';
 
 class AiGeneratorScreen extends StatefulWidget {
   final AppDatabase database;
@@ -44,6 +49,19 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
     super.dispose();
   }
 
+  String _generateUuid() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+    return '${bytes.sublist(0, 4).map(hex).join()}-'
+        '${bytes.sublist(4, 6).map(hex).join()}-'
+        '${bytes.sublist(6, 8).map(hex).join()}-'
+        '${bytes.sublist(8, 10).map(hex).join()}-'
+        '${bytes.sublist(10).map(hex).join()}';
+  }
+
   Future<void> _generate() async {
     final prompt = _controller.text.trim();
     if (prompt.isEmpty) return;
@@ -56,23 +74,76 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
     HapticFeedback.lightImpact();
 
     try {
+      final auth = context.read<AuthService>();
+
       final spec = await AiService().generateCocktail(prompt);
 
       if (!mounted) return;
 
-      // pushReplacement in creator navigates to detail screen on save,
-      // so we just reset state when control returns here (user went back).
-      await Navigator.push(
+      // Build UUID for stable cross-device identity
+      final fsId = _generateUuid();
+
+      // Save cocktail to SQLite
+      final companion = UserCocktailsCompanion(
+        name: Value(spec.name),
+        method: Value(spec.method),
+        glass: Value(spec.glass),
+        baseSpirit: Value(spec.baseSpirit),
+        category: Value(spec.category),
+        difficulty: Value(spec.difficulty),
+        ice: Value(spec.ice),
+        garnish: Value(spec.garnish),
+        notes: Value(spec.notes),
+        tags: Value(spec.tags),
+        isAiGenerated: const Value(true),
+        firestoreId: Value(fsId),
+        imageUrl: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      );
+
+      // Insert the cocktail and its ingredients atomically — a failure
+      // partway through must not leave an orphaned, ingredient-less
+      // cocktail behind.
+      final saved = await widget.database.transaction(() async {
+        final inserted = await widget.database.insertUserCocktail(companion);
+        final ingredientCompanions = spec.ingredients
+            .asMap()
+            .entries
+            .map((e) => UserCocktailIngredientsCompanion(
+                  userCocktailId: Value(inserted.id),
+                  ingredientName: Value(e.value.name),
+                  amount: Value(e.value.amount),
+                  unit: Value(e.value.unit),
+                  prepNote: Value(e.value.prepNote),
+                  sortOrder: Value(e.key),
+                ))
+            .toList();
+        await widget.database.replaceUserCocktailIngredients(
+            inserted.id, ingredientCompanions);
+        return inserted;
+      });
+
+      // Credit is spent only once the cocktail is durably saved.
+      await auth.incrementAiCreditsUsed(auth.isEffectivelyPremium);
+
+      // Push to Firestore
+      final uid = auth.currentUser?.uid;
+      if (uid != null) {
+        UserSyncService(widget.database).pushSingleUserCocktail(uid, saved.id);
+      }
+
+      if (!mounted) return;
+
+      HapticFeedback.mediumImpact();
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => CocktailCreatorScreen(
+          builder: (_) => UserCocktailDetailScreen(
             database: widget.database,
-            aiPrefill: spec,
+            cocktail: saved,
           ),
         ),
       );
-
-      if (mounted) setState(() => _isGenerating = false);
     } catch (e) {
       if (mounted) {
         setState(() {

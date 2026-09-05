@@ -16,7 +16,7 @@ import '../data/database.dart';
 import '../data/flavor_data.dart';
 import '../data/ingredient_data.dart';
 import '../widgets/bar_selector_dropdown.dart';
-import '../services/purchase_service.dart';
+import '../services/auth_service.dart';
 import 'cocktail_detail_screen.dart';
 import 'paywall_screen.dart';
 
@@ -2065,7 +2065,7 @@ class FinderScreenState extends State<FinderScreen>
                           ? m.missingIngredients.first
                           : 'Unknown';
                       final isLocked = m.cocktail.isPremium &&
-                          !context.read<PurchaseService>().isPremium;
+                          !context.read<AuthService>().isEffectivelyPremium;
                       return Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -2999,7 +2999,7 @@ class FinderScreenState extends State<FinderScreen>
 
   Widget _cocktailCard(CocktailMatch match, Color accentColor, bool isExact) {
     final isPremium = match.cocktail.isPremium;
-    final isLocked = isPremium && !context.read<PurchaseService>().isPremium;
+    final isLocked = isPremium && !context.read<AuthService>().isEffectivelyPremium;
     final showReadyStatus = isExact && _mode != _FinderMode.canMake;
     final isCanMakeMode = _mode == _FinderMode.canMake;
     return Padding(
@@ -3399,8 +3399,8 @@ class _FinderRailTileState extends State<_FinderRailTile> {
       onTap: () async {
         if (_openingDetail || !mounted) return;
         // Check if locked
-        final purchaseService = context.read<PurchaseService>();
-        if (widget.match.cocktail.isPremium && !purchaseService.isPremium) {
+        final auth = context.read<AuthService>();
+        if (widget.match.cocktail.isPremium && !auth.isEffectivelyPremium) {
           Navigator.push(context,
               MaterialPageRoute(builder: (_) => const PaywallScreen()));
           return;

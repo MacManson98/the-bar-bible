@@ -76,15 +76,13 @@ class _FavoriteButtonState extends State<FavoriteButton>
     HapticFeedback.lightImpact();
     setState(() { isFavorited = !isFavorited; });
     _animationController.forward().then((_) { _animationController.reverse(); });
+    final uid = context.read<AuthService>().currentUser?.uid;
     try {
       await widget.database.toggleFavorite(widget.firestoreId);
 
       // Push to Firestore if signed in
-      if (context.mounted) {
-        final uid = context.read<AuthService>().currentUser?.uid;
-        if (uid != null) {
-          UserSyncService(widget.database).pushFavourites(uid);
-        }
+      if (uid != null) {
+        UserSyncService(widget.database).pushFavourites(uid);
       }
       
       // Show snackbar if enabled

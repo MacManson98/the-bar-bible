@@ -45,7 +45,13 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
     });
   }
 
-  String get _syntheticKey => AppDatabase.userCocktailKey(_cocktail.id);
+  /// Stable key used to reference this cocktail from favourites/collections.
+  /// Null only if the cocktail predates firestoreId being required — both
+  /// create flows always set it, but we guard rather than force-unwrap.
+  String? get _favoritesKey {
+    final fsId = _cocktail.firestoreId;
+    return (fsId != null && fsId.isNotEmpty) ? fsId : null;
+  }
 
   Future<void> _openEdit() async {
     final result = await Navigator.push<bool>(
@@ -95,14 +101,58 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
       ),
     );
 
-    if (confirmed == true && mounted) {
-      await widget.database.deleteUserCocktail(_cocktail.id);
-      HapticFeedback.mediumImpact();
-      if (mounted) Navigator.pop(context, 'deleted');
+    if (confirmed != true || !mounted) return;
+
+    final fsId = _cocktail.firestoreId;
+    final uid = context.read<AuthService>().currentUser?.uid;
+
+    await widget.database.deleteUserCocktail(_cocktail.id);
+
+    var syncedDelete = true;
+    if (uid != null && fsId != null && fsId.isNotEmpty) {
+      syncedDelete =
+          await UserSyncService(widget.database).deleteUserCocktailFromFirestore(uid, fsId);
     }
+
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+
+    if (!syncedDelete) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.surfaceDark,
+          title: const Text(
+            'Deleted, but not synced',
+            style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'Removed from this device. We couldn\'t reach the server to remove it '
+            'everywhere else — it\'ll finish syncing automatically next time you\'re online.',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK', style: TextStyle(color: AppTheme.accentGold)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (mounted) Navigator.pop(context, 'deleted');
   }
 
   Future<void> _showAddToCollectionDialog() async {
+    final key = _favoritesKey;
+    if (key == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This cocktail can\'t be added to a collection right now.')),
+      );
+      return;
+    }
+
     final collections =
         await widget.database.select(widget.database.collections).get();
     if (!mounted) return;
@@ -127,7 +177,6 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
       return;
     }
 
-    final key = _syntheticKey;
     final existingEntries = await (widget.database
             .select(widget.database.collectionCocktails)
           ..where((tbl) => tbl.firestoreId.equals(key)))
@@ -336,12 +385,18 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                FavoriteButton(
-                                  database: widget.database,
-                                  firestoreId: _syntheticKey,
-                                  showSnackbar: true,
-                                  size: 20,
-                                ),
+                                _favoritesKey != null
+                                    ? FavoriteButton(
+                                        database: widget.database,
+                                        firestoreId: _favoritesKey!,
+                                        showSnackbar: true,
+                                        size: 20,
+                                      )
+                                    : Icon(
+                                        Icons.favorite_border,
+                                        size: 20,
+                                        color: AppTheme.textSecondary.withValues(alpha: 0.3),
+                                      ),
                                 const SizedBox(width: 6),
                                 const Text(
                                   'Favourite',

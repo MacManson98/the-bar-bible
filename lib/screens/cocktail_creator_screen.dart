@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_const_constructors
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,8 +11,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
-import '../services/purchase_service.dart';
 import '../services/ai_service.dart';
+import '../services/user_sync_service.dart';
 import 'user_cocktail_detail_screen.dart';
 
 class CocktailCreatorScreen extends StatefulWidget {
@@ -240,6 +241,19 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
 
+  String _generateUuid() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+    return '${bytes.sublist(0, 4).map(hex).join()}-'
+        '${bytes.sublist(4, 6).map(hex).join()}-'
+        '${bytes.sublist(6, 8).map(hex).join()}-'
+        '${bytes.sublist(8, 10).map(hex).join()}-'
+        '${bytes.sublist(10).map(hex).join()}';
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_ingredients.every((r) => r.nameController.text.trim().isEmpty)) {
@@ -251,7 +265,6 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
 
     try {
       final auth = context.read<AuthService>();
-      final purchase = context.read<PurchaseService>();
       final isEditing = widget.existing != null;
 
       if (!auth.isSignedIn) {
@@ -261,7 +274,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
       }
 
       if (!isEditing) {
-        final canCreate = await auth.canCreateCocktail(purchase.isPremium);
+        final canCreate = await auth.canCreateCocktail(auth.isEffectivelyPremium);
         if (!canCreate && mounted) {
           setState(() => _isSaving = false);
           _showError('Create limit reached. Upgrade to Premium for unlimited creations.');
@@ -286,35 +299,55 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         category: Value(_category),
         isAiGenerated: Value(widget.aiPrefill != null),
         imageUrl: Value(_imageUrl),
+        firestoreId: isEditing
+            ? Value(widget.existing!.firestoreId ?? _generateUuid())
+            : Value(_generateUuid()),
         updatedAt: Value(DateTime.now()),
       );
 
-      UserCocktail saved;
-      if (isEditing) {
-        await widget.database.updateUserCocktail(companion);
-        saved = widget.existing!;
-      } else {
-        saved = await widget.database.insertUserCocktail(companion);
+      // Save the cocktail and its ingredients atomically — a failure
+      // partway through must not leave an orphaned, ingredient-less
+      // cocktail (or a burned create-quota slot) behind.
+      final saved = await widget.database.transaction(() async {
+        UserCocktail result;
+        if (isEditing) {
+          await widget.database.updateUserCocktail(companion);
+          result = widget.existing!;
+        } else {
+          result = await widget.database.insertUserCocktail(companion);
+        }
+
+        final ingredientCompanions = _ingredients
+            .asMap()
+            .entries
+            .where((e) => e.value.nameController.text.trim().isNotEmpty)
+            .map((e) => UserCocktailIngredientsCompanion(
+                  userCocktailId: Value(result.id),
+                  ingredientName: Value(e.value.nameController.text.trim()),
+                  amount: Value(double.tryParse(e.value.amountController.text) ?? 0),
+                  unit: Value(e.value.unit),
+                  prepNote: Value(e.value.prepNoteController.text.trim().isEmpty
+                      ? null
+                      : e.value.prepNoteController.text.trim()),
+                  sortOrder: Value(e.key),
+                ))
+            .toList();
+
+        await widget.database.replaceUserCocktailIngredients(result.id, ingredientCompanions);
+        return result;
+      });
+
+      // Quota is consumed only once the cocktail and its ingredients are
+      // durably saved.
+      if (!isEditing) {
         await auth.incrementCreatesUsed();
       }
 
-      final ingredientCompanions = _ingredients
-          .asMap()
-          .entries
-          .where((e) => e.value.nameController.text.trim().isNotEmpty)
-          .map((e) => UserCocktailIngredientsCompanion(
-                userCocktailId: Value(saved.id),
-                ingredientName: Value(e.value.nameController.text.trim()),
-                amount: Value(double.tryParse(e.value.amountController.text) ?? 0),
-                unit: Value(e.value.unit),
-                prepNote: Value(e.value.prepNoteController.text.trim().isEmpty
-                    ? null
-                    : e.value.prepNoteController.text.trim()),
-                sortOrder: Value(e.key),
-              ))
-          .toList();
-
-      await widget.database.replaceUserCocktailIngredients(saved.id, ingredientCompanions);
+      // Push to Firestore for cross-device sync
+      final uid = auth.currentUser?.uid;
+      if (uid != null) {
+        UserSyncService(widget.database).pushSingleUserCocktail(uid, saved.id);
+      }
 
       if (mounted) {
         HapticFeedback.mediumImpact();

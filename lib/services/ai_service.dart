@@ -111,100 +111,62 @@ class AiService {
   }
 
   static const String _systemPrompt = '''
-You are an expert bartender and cocktail recipe creator. Generate a cocktail recipe based on the user description.
+You are a professional bartender generating cocktail recipes.
 
-Respond ONLY with a JSON object - no markdown fences, no explanation, no preamble. The JSON must follow this exact schema:
+Respond ONLY with valid JSON. No markdown fences, no explanation, no preamble.
 
+JSON schema:
 {
   "name": "string",
   "method": "shake|stir|build|blend",
   "glass": "string (e.g. Coupe, Rocks, Highball, Martini, Nick and Nora)",
   "base_spirit": "string (e.g. Gin, Vodka, Rum, Bourbon, Whiskey, Tequila, Mezcal, Brandy, Cognac, Other)",
   "category": "cocktail|mocktail|shot",
-  "difficulty": 2,
-  "ice": "string or null (e.g. Cubed, Crushed, Block, None)",
+  "difficulty": 1,
+  "ice": "string or null",
   "garnish": "string or null",
-  "notes": "string or null (method instructions, tips, technique details)",
-  "tags": "string or null (comma-separated, e.g. citrus, refreshing, summer)",
+  "notes": "string or null",
+  "tags": "string or null (comma-separated)",
   "ingredients": [
-    {
-      "name": "string",
-      "amount": 50,
-      "unit": "ml|oz|dash|tsp|tbsp|splash|top",
-      "prep_note": "string or null (e.g. freshly squeezed, muddled, chilled)"
-    }
+    { "name": "string", "amount": 50, "unit": "ml|oz|dash|tsp|tbsp|splash|top", "prep_note": "string or null" }
   ]
 }
 
-DRINK STYLE RULES — follow the appropriate style based on the requested cocktail:
+—— HARD LIMITS — NEVER BREAK THESE ——
 
-SHORT / SOUR STYLE (spirit + citrus + sweet):
-- 2:1:1 ratio — spirit:citrus:sweetener
-- Spirit: 50ml, citrus: 25ml, sweetener: 12.5–15ml
-- Total: ~90ml pre-dilution
+1. SPIRIT VOLUME: One spirit maximum 50ml. Total spirits in recipe maximum 75ml.
+2. TOTAL RECIPE VOLUME: Maximum 150ml pre-dilution (excluding "top" mixers).
+3. NO INGREDIENT OVER 60ml ever.
+4. BITTERS: Always "dash" unit, 1-3 dashes only, never ml.
+5. SYRUPS / SWEETENERS: 10-20ml maximum. Never exceed 20ml.
+6. DIFFICULTY: Default to 1 or 2. Only use 3+ if the technique genuinely requires advanced skill (e.g. fat-washing, clarification, multi-day prep). Most cocktails are 1-2.
+7. HIGHBALL / SPARKLING MIXER: Always "top" unit. Never specify ml for soda, tonic, ginger beer, champagne, prosecco.
 
-CITRUS-HEAVY SOUR STYLE (spirit + liqueur + citrus):
-- 5:3:2 ratio — spirit:modifier:citrus
-- Spirit: 50ml, modifier: 30ml, citrus: 20ml
-- Total: ~100ml pre-dilution
+—— STANDARD RATIOS BY STYLE ——
 
-EQUAL THREE-PART BUILD (spirit + aperitivo/vermouth + modifier):
-- All three components equal: 25ml each
-- Total: 75ml
+SHORT SOUR (spirit + citrus + sweet): spirit 50ml, citrus 25ml, sweetener 12-15ml
+CITRUS SOUR (spirit + liqueur + citrus): spirit 45ml, liqueur 22ml, citrus 20ml
+EQUAL PARTS: 25ml each, max 3 parts
+SPIRIT + VERMOUTH: spirit 50ml, vermouth 15-20ml
+SPIRIT FORWARD (no citrus): spirit 50-60ml, modifier 5-10ml, bitters in dashes
+HIGHBALL: spirit 50ml, mixer "top"
+TIKI (multi-ingredient): primary spirit 45ml, secondary spirit max 25ml, total juice 45-60ml, sweetener 15ml
+SHOT: total 45-50ml, 1-2 ingredients
 
-SPIRIT + VERMOUTH:
-- 70–80% spirit, 20–30% vermouth
-- Total: 70–75ml
-- Bitters in dashes only, never ml
-
-SPIRIT + MODIFIER ONLY (no citrus):
-- Spirit: 50–60ml, sweetener/modifier: 5–10ml
-- Bitters in dashes only
-- Total: 60–70ml
-
-HIGHBALL / LONG DRINK:
-- Spirit: 50ml
-- Mixer: use "top" unit only — never specify ml
-- Optional citrus: squeeze only, 15ml max
-
-TIKI / TROPICAL / MULTI-JUICE:
-- Primary spirit: 45–60ml
-- Secondary spirit (if used): 20–30ml
-- Total juice: 45–60ml across all juice ingredients
-- Sweetener: 15–20ml
-- Total: 120–150ml pre-dilution acceptable
-
-SHOTS:
-- Total volume: 45–60ml, 50ml standard
-- One or two ingredients max
-- No garnish
-
-SPARKLING BUILDS:
-- Base spirit or liqueur: 25–50ml
-- Sparkling element: "top" unit only — never ml
-- Citrus if used: 15–20ml max
-
-GARNISH RULES:
-- Spirit-forward stirred drinks: citrus twist only
-- Sour style: citrus wheel or wedge matching the juice used
-- Highball: wedge or slice of the mixer citrus
-- Tiki: expressive garnish acceptable (fruit, mint, etc.)
-- Spirit + modifier only style: citrus twist only, no fruit
+—— GARNISH RULES ——
+- Spirit-forward stirred: citrus twist only
+- Sours: citrus wheel or wedge matching the juice
+- Highball: citrus wedge or slice
 - Shots: no garnish
-- All garnishes must be realistic bar prep — cut, peel, or sprig only
+- All garnishes must be realistic bar prep
 
-UNIVERSAL RULES:
-- Use ml for all liquid measurements
-- Bitters: always use "dash" unit, 1–3 dashes max
-- Syrups/sweeteners: 10–20ml (tiki excepted)
-- No single ingredient exceeds 60ml
-- Liqueurs count toward spirit volume
-- Highball and sparkling mixers always use "top" unit — never ml
-- UK double = 50ml — use as the baseline for all spirit pours
-- Include at least 3 ingredients
-- difficulty: 1 = very easy, 5 = advanced technique required
-- Keep the cocktail name creative but professional
-- notes should contain any important technique instructions
+—— DIFFICULTY GUIDE ——
+1 = pour and stir, simple build
+2 = standard shake/stir, one fresh ingredient
+3 = multiple fresh elements, layering, specific technique
+4 = advanced technique (infusions, clarification, batching)
+5 = professional-only (fat-washing, centrifuge, multi-day)
+Default to 1 unless genuinely complex.
 ''';
 
   Future<AiCocktailSpec> generateCocktail(String prompt) async {

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
+import '../services/firestore_sync_service.dart';
 
 class AdminCocktailEditorScreen extends StatefulWidget {
   final AppDatabase database;
@@ -199,6 +200,15 @@ class _AdminCocktailEditorScreenState
   }
 
   Future<void> _pickAndUploadImage() async {
+    if (widget.stagingDocId == null && _nameCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a cocktail name before adding an image.'),
+        ),
+      );
+      return;
+    }
+
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
@@ -354,6 +364,18 @@ class _AdminCocktailEditorScreenState
       );
       return;
     }
+    if (_ice == 'Other' && _iceCustomCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter an ice type.')),
+      );
+      return;
+    }
+    if (_ingredients.every((i) => i.nameCtrl.text.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one ingredient.')),
+      );
+      return;
+    }
     if (_isUploadingImage) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please wait for image upload to finish.')),
@@ -384,6 +406,16 @@ class _AdminCocktailEditorScreenState
         await batch.commit();
       } else {
         await FirebaseFirestore.instance.collection(collection).add(payload);
+      }
+
+      if (toLive) {
+        try {
+          // Refresh the local cache so the new/updated cocktail shows up
+          // immediately instead of waiting for the next 24h auto-sync.
+          await FirestoreSyncService(widget.database).sync();
+        } catch (_) {
+          // Best-effort — the live write already succeeded either way.
+        }
       }
 
       if (mounted) {

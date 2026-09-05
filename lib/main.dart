@@ -933,8 +933,8 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
                                 return _CocktailCard(
                                   cocktail: cocktail,
                                   onTap: () {
-                                    final purchaseService = context.read<PurchaseService>();
-                                    if (cocktail.isPremium && !purchaseService.isPremium) {
+                                    final auth = context.read<AuthService>();
+                                    if (cocktail.isPremium && !auth.isEffectivelyPremium) {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
@@ -1107,7 +1107,8 @@ class _CocktailCardState extends State<_CocktailCard> {
           borderRadius: BorderRadius.circular(12),
           child: Consumer<PurchaseService>(
             builder: (context, purchaseService, _) {
-              final isLocked = widget.cocktail.isPremium && !purchaseService.isPremium;
+              final auth = context.watch<AuthService>();
+              final isLocked = widget.cocktail.isPremium && !auth.isEffectivelyPremium;
               return Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1272,7 +1273,8 @@ class _CocktailCardState extends State<_CocktailCard> {
                     const SizedBox(height: 8),
                     Consumer<PurchaseService>(
                       builder: (context, purchaseService, _) {
-                        if (widget.cocktail.isPremium && !purchaseService.isPremium) {
+                        final auth = context.watch<AuthService>();
+                        if (widget.cocktail.isPremium && !auth.isEffectivelyPremium) {
                           return const Icon(
                             Icons.lock,
                             size: 14,

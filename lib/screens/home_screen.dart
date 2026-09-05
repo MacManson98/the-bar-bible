@@ -8,7 +8,7 @@ import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
 import '../data/ingredient_data.dart';
-import '../services/purchase_service.dart';
+import '../services/auth_service.dart';
 import 'cocktail_detail_screen.dart';
 import 'paywall_screen.dart';
 import 'favorites_screen.dart';
@@ -270,8 +270,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _shufflePick() {
     if (_allCocktails.length <= 1) return;
-    final purchaseService = context.read<PurchaseService>();
-    final pool = !purchaseService.isPremium
+    final auth = context.read<AuthService>();
+    final pool = !auth.isEffectivelyPremium
         ? _allCocktails.where((c) => !c.isPremium).toList()
         : _allCocktails;
     final candidates = (pool.isEmpty ? _allCocktails : pool)
@@ -353,8 +353,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _viewCocktailDetail(Cocktail cocktail) {
     HapticFeedback.lightImpact();
-    final purchaseService = context.read<PurchaseService>();
-    if (cocktail.isPremium && !purchaseService.isPremium) {
+    final auth = context.read<AuthService>();
+    if (cocktail.isPremium && !auth.isEffectivelyPremium) {
       Navigator.push(context,
           MaterialPageRoute(builder: (context) => const PaywallScreen()));
       return;

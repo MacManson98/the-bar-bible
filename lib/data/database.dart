@@ -159,7 +159,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -432,16 +432,20 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
         .write(entry);
   }
 
-  /// Synthetic key used for favorites/collections for user-created cocktails.
-  static String userCocktailKey(int id) => 'user_$id';
-
   Future<void> deleteUserCocktail(int id) async {
-    final key = userCocktailKey(id);
-    // Clean up favourites and collection entries
-    await (delete(favorites)..where((f) => f.firestoreId.equals(key))).go();
-    await (delete(collectionCocktails)..where((c) => c.firestoreId.equals(key))).go();
-    await (delete(userCocktailIngredients)..where((u) => u.userCocktailId.equals(id))).go();
-    await (delete(userCocktails)..where((u) => u.id.equals(id))).go();
+    await transaction(() async {
+      final cocktail =
+          await (select(userCocktails)..where((u) => u.id.equals(id))).getSingleOrNull();
+      final fsId = cocktail?.firestoreId;
+      // Clean up favourites and collection entries, keyed on the same
+      // stable firestoreId used to sync this cocktail.
+      if (fsId != null && fsId.isNotEmpty) {
+        await (delete(favorites)..where((f) => f.firestoreId.equals(fsId))).go();
+        await (delete(collectionCocktails)..where((c) => c.firestoreId.equals(fsId))).go();
+      }
+      await (delete(userCocktailIngredients)..where((u) => u.userCocktailId.equals(id))).go();
+      await (delete(userCocktails)..where((u) => u.id.equals(id))).go();
+    });
   }
 
   Future<List<UserCocktailIngredient>> getUserCocktailIngredients(
@@ -463,5 +467,36 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
     for (final ingredient in ingredients) {
       await into(userCocktailIngredients).insert(ingredient);
     }
+  }
+
+  Future<UserCocktail?> getUserCocktailByFirestoreId(String fsId) async {
+    return await (select(userCocktails)
+          ..where((u) => u.firestoreId.equals(fsId)))
+        .getSingleOrNull();
+  }
+
+  Future<void> upsertUserCocktailFromSync(
+    UserCocktailsCompanion entry,
+    List<UserCocktailIngredientsCompanion> ingredientRows,
+  ) async {
+    await transaction(() async {
+      final existing = await getUserCocktailByFirestoreId(entry.firestoreId.value!);
+      int localId;
+      if (existing != null) {
+        await (update(userCocktails)..where((u) => u.id.equals(existing.id)))
+            .write(entry);
+        localId = existing.id;
+      } else {
+        localId = await into(userCocktails).insert(entry);
+      }
+      await (delete(userCocktailIngredients)
+            ..where((u) => u.userCocktailId.equals(localId)))
+          .go();
+      for (final ing in ingredientRows) {
+        await into(userCocktailIngredients).insert(
+          ing.copyWith(userCocktailId: Value(localId)),
+        );
+      }
+    });
   }
 }

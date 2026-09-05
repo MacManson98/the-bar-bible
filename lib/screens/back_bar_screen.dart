@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
-import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
 import 'cocktail_creator_screen.dart';
 import 'ai_generator_screen.dart';
@@ -109,7 +108,6 @@ class _CreateTabState extends State<_CreateTab> {
   Future<void> _loadData() async {
     try {
       final auth = context.read<AuthService>();
-      final purchase = context.read<PurchaseService>();
       final creations = auth.isSignedIn
           ? await widget.database.getUserCocktails()
           : <UserCocktail>[];
@@ -126,8 +124,8 @@ class _CreateTabState extends State<_CreateTab> {
         return;
       }
 
-      final creates = await auth.createsRemaining(purchase.isPremium);
-      final ai = await auth.aiCreditsRemaining(purchase.isPremium);
+      final creates = await auth.createsRemaining(auth.isEffectivelyPremium);
+      final ai = await auth.aiCreditsRemaining(auth.isEffectivelyPremium);
 
       if (mounted) {
         setState(() {
@@ -152,7 +150,6 @@ class _CreateTabState extends State<_CreateTab> {
 
   Future<void> _handleCreateTap() async {
     final auth = context.read<AuthService>();
-    final purchase = context.read<PurchaseService>();
 
     if (!auth.isSignedIn) {
       final signedIn = await showAuthSheet(context, reason: 'Create a free account to start building your own cocktails.');
@@ -161,7 +158,7 @@ class _CreateTabState extends State<_CreateTab> {
       return;
     }
 
-    final canCreate = await auth.canCreateCocktail(purchase.isPremium);
+    final canCreate = await auth.canCreateCocktail(auth.isEffectivelyPremium);
     if (!canCreate && mounted) {
       _showLimitSheet(title: 'Create limit reached', message: 'Free accounts can create up to 5 cocktails. Upgrade to Premium for unlimited creations.');
       return;
@@ -178,7 +175,6 @@ class _CreateTabState extends State<_CreateTab> {
 
   Future<void> _handleAiTap() async {
     final auth = context.read<AuthService>();
-    final purchase = context.read<PurchaseService>();
 
     if (!auth.isSignedIn) {
       final signedIn = await showAuthSheet(context, reason: 'Create a free account to try AI cocktail generation.');
@@ -187,11 +183,11 @@ class _CreateTabState extends State<_CreateTab> {
       return;
     }
 
-    final canUse = await auth.canUseAi(purchase.isPremium);
+    final canUse = await auth.canUseAi(auth.isEffectivelyPremium);
     if (!canUse && mounted) {
       _showLimitSheet(
         title: 'No AI credits remaining',
-        message: purchase.isPremium
+        message: auth.isEffectivelyPremium
             ? 'You\'ve used your 20 daily AI generations. Resets at midnight.'
             : 'Free accounts get 1 AI generation. Upgrade to Premium for 20 per day.',
       );
@@ -207,7 +203,7 @@ class _CreateTabState extends State<_CreateTab> {
         ),
       );
       if (created == true && mounted) {
-        await auth.incrementAiCreditsUsed(purchase.isPremium);
+        await auth.incrementAiCreditsUsed(auth.isEffectivelyPremium);
         await _loadData();
       }
     }
@@ -276,8 +272,7 @@ class _CreateTabState extends State<_CreateTab> {
     }
 
     final auth = context.watch<AuthService>();
-    final purchase = context.watch<PurchaseService>();
-    final isPremium = purchase.isPremium;
+    final isPremium = auth.isEffectivelyPremium;
 
     if (!auth.isSignedIn) {
       return _SignedOutLanding(onSignIn: () async {
