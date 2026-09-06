@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,6 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String defaultSort = 'match';
   bool isLoading = true;
   bool _isSyncing = false;
+  bool _isSigningOut = false;
+  bool _isDeletingAccount = false;
 
   @override
   void initState() {
@@ -86,6 +89,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
+  }
+
+  Future<void> _handleSignOut(AuthService auth) async {
+    setState(() => _isSigningOut = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await auth.signOut();
+    } catch (e) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Sign out failed. Please try again.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSigningOut = false);
+    }
+  }
+
+  String _friendlyAccountError(Object e) {
+    if (e is FirebaseAuthException) {
+      switch (e.code) {
+        case 'network-request-failed':
+          return 'Network error. Please check your connection and try again.';
+        default:
+          return 'Something went wrong. Please try again.';
+      }
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await _showConfirmDialog(
+      title: 'Delete Account',
+      message:
+          'This will permanently delete your account and all your data — favourites, '
+          'collections, bar inventory and created cocktails. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    final auth = context.read<AuthService>();
+    setState(() => _isDeletingAccount = true);
+
+    try {
+      await auth.deleteAccount();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        if (!mounted) return;
+        final reauthed = await showAuthSheet(
+          context,
+          reason: 'For your security, please sign in again to delete your account.',
+        );
+        if (reauthed) {
+          try {
+            await auth.deleteAccount();
+          } catch (e2) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not delete account: ${_friendlyAccountError(e2)}')),
+              );
+            }
+            if (mounted) setState(() => _isDeletingAccount = false);
+            return;
+          }
+        } else {
+          if (mounted) setState(() => _isDeletingAccount = false);
+          return;
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not delete account: ${_friendlyAccountError(e)}')),
+          );
+          setState(() => _isDeletingAccount = false);
+        }
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete account. Please try again.')),
+        );
+        setState(() => _isDeletingAccount = false);
+      }
+      return;
+    }
+
+    // Account deleted — sign out clears any remaining local session state;
+    // the account UI reacts to AuthService and switches to "Sign in" itself.
+    await auth.signOut();
+    if (mounted) setState(() => _isDeletingAccount = false);
   }
 
   Future<void> _launchUrl(String url) async {
@@ -374,11 +470,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: auth.currentUser!.email!,
                       subtitle: 'Signed in',
                       trailing: TextButton(
-                        onPressed: () async {
-                          await auth.signOut();
-                        },
-                        child: Text('Sign out', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.8), fontSize: 13)),
+                        onPressed: _isSigningOut ? null : () => _handleSignOut(auth),
+                        child: _isSigningOut
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent),
+                              )
+                            : Text('Sign out', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.8), fontSize: 13)),
                       ),
+                    ),
+                    _SettingTile(
+                      icon: Icons.delete_forever_outlined,
+                      iconColor: Colors.redAccent.withValues(alpha: 0.8),
+                      title: 'Delete Account',
+                      subtitle: 'Permanently delete your account and all data',
+                      trailing: _isDeletingAccount
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent),
+                            )
+                          : const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+                      onTap: _isDeletingAccount ? null : _deleteAccount,
                     ),
                   ],
                 );
@@ -426,6 +540,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const AdminUserManagementScreen()),
+                      ),
+                    ),
+                    _SettingTile(
+                      icon: Icons.person_off_outlined,
+                      iconColor: AppTheme.accentGold,
+                      title: 'Simulate Non-Premium',
+                      subtitle: 'Test the app as a free user',
+                      trailing: Switch(
+                        value: auth.adminSimulateNonPremium,
+                        onChanged: (v) {
+                          HapticFeedback.selectionClick();
+                          auth.setAdminSimulateNonPremium(v);
+                        },
                       ),
                     ),
                     _SettingTile(

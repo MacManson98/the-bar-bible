@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'purchase_service.dart';
 import 'user_sync_service.dart';
@@ -16,6 +17,9 @@ class AuthService extends ChangeNotifier {
   UserSyncService? _userSyncService;
 
   bool _isAdmin = false;
+  bool _adminSimulateNonPremium = false;
+
+  static const _adminSimulateNonPremiumKey = 'admin_simulate_non_premium';
 
   void setPurchaseService(PurchaseService ps) => _purchaseService = ps;
   void setUserSyncService(UserSyncService uss) => _userSyncService = uss;
@@ -31,15 +35,44 @@ class AuthService extends ChangeNotifier {
   /// Never writable from the app — set manually in Firebase console only.
   bool get isAdmin => _isAdmin;
 
-  /// Admins are always treated as premium regardless of RevenueCat.
-  bool get isEffectivelyPremium =>
-      _isAdmin || (_purchaseService?.isPremium ?? false);
+  /// Admins are treated as premium regardless of RevenueCat, unless they've
+  /// toggled on "simulate non-premium" (admin settings) to test the free
+  /// experience.
+  bool get isEffectivelyPremium => _isAdmin
+      ? !_adminSimulateNonPremium
+      : (_purchaseService?.isPremium ?? false);
+
+  /// Whether an admin has toggled on simulating a non-premium account.
+  /// Has no effect for non-admins.
+  bool get adminSimulateNonPremium => _adminSimulateNonPremium;
+
+  Future<void> setAdminSimulateNonPremium(bool value) async {
+    _adminSimulateNonPremium = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_adminSimulateNonPremiumKey, value);
+    } catch (_) {
+      // Best-effort persistence — in-memory value still applies this session.
+    }
+  }
+
+  Future<void> _loadAdminSimulateNonPremium() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _adminSimulateNonPremium = prefs.getBool(_adminSimulateNonPremiumKey) ?? false;
+      notifyListeners();
+    } catch (_) {
+      // Ignore — defaults to false.
+    }
+  }
 
   static const int _freeCreateLimit = 5;
   static const int _freeAiLimit = 1;
   static const int _premiumDailyAiLimit = 20;
 
   AuthService() {
+    _loadAdminSimulateNonPremium();
     _auth.authStateChanges().listen((user) {
       if (user != null && !user.isAnonymous) {
         _loadAdminStatus(user.uid);
@@ -158,6 +191,30 @@ class AuthService extends ChangeNotifier {
 
   Future<void> sendPasswordReset(String email) async {
     await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  /// Permanently deletes the signed-in user's Firestore data and Auth
+  /// account. Deleting the Firestore doc first (then the subcollection)
+  /// is safe to retry — both deletes are idempotent — so if
+  /// [FirebaseAuth.currentUser]'s delete() throws (e.g. 'requires-recent-login'),
+  /// the caller can re-authenticate and call this again without re-doing
+  /// already-completed cleanup.
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+
+    final userCocktails = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('user_cocktails')
+        .get();
+    for (final doc in userCocktails.docs) {
+      await doc.reference.delete();
+    }
+    await _firestore.collection('users').doc(uid).delete();
+
+    await user.delete();
   }
 
   // ── User doc ───────────────────────────────────────────────────────────────

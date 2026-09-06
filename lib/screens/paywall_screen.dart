@@ -162,10 +162,15 @@ class _PaywallScreenState extends State<PaywallScreen> {
                     ? null
                     : () async {
                         final success = await purchaseService.purchasePremium(planIndex: _selectedPlan);
-                        if (success && context.mounted) {
+                        if (!context.mounted) return;
+                        if (success) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('🎉 Premium unlocked!'), backgroundColor: AppTheme.accentGold),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Purchase failed. Please try again.')),
                           );
                         }
                       },

@@ -89,6 +89,60 @@ class _AuthSheetState extends State<AuthSheet> {
     }
   }
 
+  Future<void> _handleForgotPassword() async {
+    final controller = TextEditingController(text: _emailController.text.trim());
+    final email = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: const Text('Reset password', style: TextStyle(color: AppTheme.textPrimary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.emailAddress,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: _inputDecoration('Email'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Send link', style: TextStyle(color: AppTheme.accentGold)),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null) return;
+    if (email.isEmpty || !email.contains('@')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid email address.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    try {
+      final auth = context.read<AuthService>();
+      await auth.sendPasswordReset(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Password reset email sent to $email')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final message = _friendlyError(e);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message.isNotEmpty ? message : 'Could not send reset email. Please try again.')),
+      );
+    }
+  }
+
   String _friendlyError(Object e) {
     final msg = e.toString();
     if (msg.contains('wrong-password') || msg.contains('invalid-credential') || msg.contains('INVALID_LOGIN_CREDENTIALS')) {
@@ -266,6 +320,23 @@ class _AuthSheetState extends State<AuthSheet> {
             decoration: _inputDecoration('Password'),
             validator: (v) => (v == null || v.length < 6) ? 'At least 6 characters' : null,
           ),
+          if (!_isCreatingAccount) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _handleForgotPassword,
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Forgot password?',
+                  style: TextStyle(fontSize: 13, color: AppTheme.accentGold.withValues(alpha: 0.9)),
+                ),
+              ),
+            ),
+          ],
           if (_isCreatingAccount) ...[
             const SizedBox(height: 12),
             TextFormField(
