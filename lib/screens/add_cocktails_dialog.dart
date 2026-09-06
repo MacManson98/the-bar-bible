@@ -35,6 +35,10 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
   final Set<String> _pendingAdded = {};
   final Set<String> _pendingRemoved = {};
 
+  // Guards against a fast double-tap firing two concurrent toggles for the
+  // same cocktail, which would otherwise create duplicate membership rows.
+  final Set<String> _busyToggleIds = {};
+
   final List<String> spirits = [
     'Gin',
     'Vodka',
@@ -409,31 +413,37 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                   cocktail: cocktail,
                   isInCollection: isInCollection,
                   onTap: () async {
-                    if (isInCollection) {
-                      await (widget.database.delete(
-                            widget.database.collectionCocktails,
-                          )..where((tbl) {
-                            return tbl.collectionId.equals(
-                                  widget.collection.id,
-                                ) &
-                                tbl.firestoreId.equals(cocktailFsId);
-                          }))
-                          .go();
-                      widget.existingFirestoreIds.remove(cocktailFsId);
-                      _pendingAdded.remove(cocktailFsId);
-                      _pendingRemoved.add(cocktailFsId);
-                    } else {
-                      await widget.database
-                          .into(widget.database.collectionCocktails)
-                          .insert(
-                            CollectionCocktailsCompanion.insert(
-                              collectionId: widget.collection.id,
-                              firestoreId: cocktailFsId,
-                            ),
-                          );
-                      widget.existingFirestoreIds.add(cocktailFsId);
-                      _pendingAdded.add(cocktailFsId);
-                      _pendingRemoved.remove(cocktailFsId);
+                    if (_busyToggleIds.contains(cocktailFsId)) return;
+                    _busyToggleIds.add(cocktailFsId);
+                    try {
+                      if (isInCollection) {
+                        await (widget.database.delete(
+                              widget.database.collectionCocktails,
+                            )..where((tbl) {
+                              return tbl.collectionId.equals(
+                                    widget.collection.id,
+                                  ) &
+                                  tbl.firestoreId.equals(cocktailFsId);
+                            }))
+                            .go();
+                        widget.existingFirestoreIds.remove(cocktailFsId);
+                        _pendingAdded.remove(cocktailFsId);
+                        _pendingRemoved.add(cocktailFsId);
+                      } else {
+                        await widget.database
+                            .into(widget.database.collectionCocktails)
+                            .insert(
+                              CollectionCocktailsCompanion.insert(
+                                collectionId: widget.collection.id,
+                                firestoreId: cocktailFsId,
+                              ),
+                            );
+                        widget.existingFirestoreIds.add(cocktailFsId);
+                        _pendingAdded.add(cocktailFsId);
+                        _pendingRemoved.remove(cocktailFsId);
+                      }
+                    } finally {
+                      _busyToggleIds.remove(cocktailFsId);
                     }
                     if (!mounted) return;
                     setState(() {});

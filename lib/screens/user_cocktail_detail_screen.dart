@@ -28,6 +28,7 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
   List<UserCocktailIngredient> _ingredients = [];
   bool _isLoading = true;
   late UserCocktail _cocktail;
+  final Set<int> _busyCollectionToggleIds = <int>{};
 
   @override
   void initState() {
@@ -211,21 +212,27 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
                 title: Text(col.name,
                     style: const TextStyle(color: AppTheme.textPrimary)),
                 onTap: () async {
-                  if (isIn) {
-                    final q = widget.database
-                        .delete(widget.database.collectionCocktails);
-                    q.where((tbl) => Expression.and([
-                      tbl.collectionId.equals(col.id),
-                      tbl.firestoreId.equals(key),
-                    ]));
-                    await q.go();
-                  } else {
-                    await widget.database
-                        .into(widget.database.collectionCocktails)
-                        .insert(CollectionCocktailsCompanion.insert(
-                          collectionId: col.id,
-                          firestoreId: key,
-                        ));
+                  if (_busyCollectionToggleIds.contains(col.id)) return;
+                  _busyCollectionToggleIds.add(col.id);
+                  try {
+                    if (isIn) {
+                      final q = widget.database
+                          .delete(widget.database.collectionCocktails);
+                      q.where((tbl) => Expression.and([
+                        tbl.collectionId.equals(col.id),
+                        tbl.firestoreId.equals(key),
+                      ]));
+                      await q.go();
+                    } else {
+                      await widget.database
+                          .into(widget.database.collectionCocktails)
+                          .insert(CollectionCocktailsCompanion.insert(
+                            collectionId: col.id,
+                            firestoreId: key,
+                          ));
+                    }
+                  } finally {
+                    _busyCollectionToggleIds.remove(col.id);
                   }
                   if (context.mounted) {
                     final uid =

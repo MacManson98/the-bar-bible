@@ -37,6 +37,7 @@ class _FavoriteButtonState extends State<FavoriteButton>
     with SingleTickerProviderStateMixin {
   bool isFavorited = false;
   bool isLoading = true;
+  bool _isToggling = false;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
@@ -82,6 +83,11 @@ class _FavoriteButtonState extends State<FavoriteButton>
   }
 
   Future<void> _toggleFavorite() async {
+    // Ignore taps while a toggle is already in flight — a fast double-tap
+    // would otherwise fire two concurrent DB writes that collide on the
+    // firestoreId primary key and surface as a false "Failed to update".
+    if (_isToggling) return;
+    _isToggling = true;
     HapticFeedback.lightImpact();
     setState(() { isFavorited = !isFavorited; });
     _animationController.forward().then((_) { _animationController.reverse(); });
@@ -127,6 +133,8 @@ class _FavoriteButtonState extends State<FavoriteButton>
           ),
         );
       }
+    } finally {
+      _isToggling = false;
     }
   }
 

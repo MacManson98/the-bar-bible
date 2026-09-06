@@ -35,6 +35,7 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   bool _useOz = false;
   Set<int> _barIngredientIds = {};
   final Set<int> _busyAddIngredientIds = <int>{};
+  final Set<int> _busyCollectionToggleIds = <int>{};
   int? _activeBarId;
   String _activeBarName = '';
   bool _isMissingSectionExpanded = false;
@@ -225,6 +226,9 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                 title: Text(collection.name),
                 subtitle: collection.description != null ? Text(collection.description!) : null,
                 onTap: () async {
+                    if (_busyCollectionToggleIds.contains(collection.id)) return;
+                    _busyCollectionToggleIds.add(collection.id);
+                    try {
                     if (isInCollection) {
                       await (widget.database.delete(widget.database.collectionCocktails)
                         ..where((tbl) =>
@@ -237,6 +241,9 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
                           firestoreId: cocktailFsId,
                         ),
                       );
+                    }
+                    } finally {
+                      _busyCollectionToggleIds.remove(collection.id);
                     }
                     // Push updated collections to Firestore
                     if (context.mounted) {

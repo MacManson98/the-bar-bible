@@ -64,6 +64,11 @@ class CollectionCocktails extends Table {
   IntColumn get collectionId => integer().references(Collections, #id)();
   TextColumn get firestoreId => text()(); // Firestore document ID (stable across syncs)
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {collectionId, firestoreId},
+  ];
 }
 
 // Saved bars (user's ingredient inventories)
@@ -159,7 +164,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -176,6 +181,10 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('''
 CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_bar_ingredients_unique
 ON saved_bar_ingredients(saved_bar_id, ingredient_id)
+''');
+      await customStatement('''
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_cocktails_unique
+ON collection_cocktails(collection_id, firestore_id)
 ''');
     },
     onUpgrade: (migrator, from, to) async {
@@ -295,6 +304,21 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
         await customStatement('CREATE TABLE IF NOT EXISTS saved_bars (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, is_default INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (unixepoch()), last_used INTEGER NOT NULL DEFAULT (unixepoch()))');
         await customStatement('CREATE TABLE IF NOT EXISTS saved_bar_ingredients (id INTEGER PRIMARY KEY AUTOINCREMENT, saved_bar_id INTEGER NOT NULL REFERENCES saved_bars(id), ingredient_id INTEGER NOT NULL REFERENCES ingredients(id), added_at INTEGER NOT NULL DEFAULT (unixepoch()), UNIQUE(saved_bar_id, ingredient_id))');
         await customStatement('CREATE TABLE IF NOT EXISTS shopping_list (id INTEGER PRIMARY KEY AUTOINCREMENT, ingredient_id INTEGER NOT NULL REFERENCES ingredients(id), unlocks_count INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL DEFAULT (unixepoch()))');
+      }
+      if (from <= 19) {
+        // Deduplicate first so unique index can be created safely.
+        await customStatement('''
+DELETE FROM collection_cocktails
+WHERE id NOT IN (
+  SELECT MIN(id)
+  FROM collection_cocktails
+  GROUP BY collection_id, firestore_id
+)
+''');
+        await customStatement('''
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_cocktails_unique
+ON collection_cocktails(collection_id, firestore_id)
+''');
       }
     },
   );

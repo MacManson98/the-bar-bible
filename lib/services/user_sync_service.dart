@@ -126,11 +126,15 @@ class UserSyncService {
       );
 
       for (final fsId in cocktailIds) {
+        // insertOrIgnore: the new (collectionId, firestoreId) unique
+        // constraint would otherwise throw on any duplicate already present
+        // in the synced Firestore data.
         await _db.into(_db.collectionCocktails).insert(
           CollectionCocktailsCompanion.insert(
             collectionId: colId,
             firestoreId: fsId,
           ),
+          mode: InsertMode.insertOrIgnore,
         );
       }
     }
