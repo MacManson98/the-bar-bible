@@ -117,6 +117,8 @@ class _AdminUserManagementScreenState
         'is_admin': !currentlyAdmin,
       });
 
+      if (!mounted) return;
+
       // Update local results list
       setState(() {
         final index = _results.indexWhere((u) => u['_uid'] == uid);
@@ -198,6 +200,8 @@ class _AdminUserManagementScreenState
       await _firestore.collection('users').doc(uid).update({
         'is_premium': !currentlyPremium,
       });
+
+      if (!mounted) return;
 
       setState(() {
         final index = _results.indexWhere((u) => u['_uid'] == uid);

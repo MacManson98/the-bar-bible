@@ -199,14 +199,13 @@ class _PaywallScreenState extends State<PaywallScreen> {
                     : () async {
                         setState(() => _isRestoring = true);
                         final restored = await purchaseService.restorePurchases();
+                        if (!context.mounted) return;
                         setState(() => _isRestoring = false);
-                        if (context.mounted) {
-                          if (restored) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✓ Purchase restored'), backgroundColor: AppTheme.accentGold));
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No previous purchase found')));
-                          }
+                        if (restored) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✓ Purchase restored'), backgroundColor: AppTheme.accentGold));
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No previous purchase found')));
                         }
                       },
                 child: Text(

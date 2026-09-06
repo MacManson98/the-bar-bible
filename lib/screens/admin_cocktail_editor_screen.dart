@@ -96,8 +96,11 @@ class _AdminCocktailEditorScreenState
     _methodInstructionsCtrl =
         TextEditingController(text: d['method_instructions'] as String? ?? '');
     _garnishCtrl = TextEditingController(text: d['garnish'] as String? ?? '');
+    final rawTags = d['tags'];
     _tagsCtrl = TextEditingController(
-        text: (d['tags'] as List?)?.join(', ') ?? d['tags'] as String? ?? '');
+        text: rawTags is List
+            ? rawTags.join(', ')
+            : (rawTags is String ? rawTags : ''));
     _historyCtrl = TextEditingController(text: d['history'] as String? ?? '');
     _tastingNotesCtrl =
         TextEditingController(text: d['tasting_notes'] as String? ?? '');

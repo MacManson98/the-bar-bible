@@ -435,6 +435,7 @@ class _AddCocktailsDialogState extends State<AddCocktailsDialog> {
                       _pendingAdded.add(cocktailFsId);
                       _pendingRemoved.remove(cocktailFsId);
                     }
+                    if (!mounted) return;
                     setState(() {});
                   },
                 );

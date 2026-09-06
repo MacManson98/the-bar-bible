@@ -602,7 +602,15 @@ class MyBarScreenState extends State<MyBarScreen>
     await _delayForImeSettleIfNeeded();
     await _barService.setDefaultBar(barId);
 
-    final active = await (widget.database.select(widget.database.savedBars)..where((b) => b.id.equals(barId))).getSingle();
+    final active = await (widget.database.select(widget.database.savedBars)..where((b) => b.id.equals(barId))).getSingleOrNull();
+    if (active == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That bar no longer exists.')),
+      );
+      await _loadData();
+      return;
+    }
     final ingredients = await widget.database.getSavedBarIngredients(barId);
     final bars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
 
