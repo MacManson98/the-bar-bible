@@ -27,6 +27,7 @@ class UserCocktailDetailScreen extends StatefulWidget {
 class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
   List<UserCocktailIngredient> _ingredients = [];
   bool _isLoading = true;
+  bool _loadFailed = false;
   late UserCocktail _cocktail;
   final Set<int> _busyCollectionToggleIds = <int>{};
 
@@ -38,12 +39,24 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
   }
 
   Future<void> _loadIngredients() async {
-    final rows = await widget.database.getUserCocktailIngredients(_cocktail.id);
-    if (!mounted) return;
     setState(() {
-      _ingredients = rows;
-      _isLoading = false;
+      _isLoading = true;
+      _loadFailed = false;
     });
+    try {
+      final rows = await widget.database.getUserCocktailIngredients(_cocktail.id);
+      if (!mounted) return;
+      setState(() {
+        _ingredients = rows;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadFailed = true;
+      });
+    }
   }
 
   /// Stable key used to reference this cocktail from favourites/collections.
@@ -484,6 +497,23 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
                         const Center(
                           child: CircularProgressIndicator(
                               color: AppTheme.accentGold),
+                        )
+                      else if (_loadFailed)
+                        Center(
+                          child: Column(
+                            children: [
+                              const Text(
+                                'Couldn\'t load ingredients.',
+                                style: TextStyle(color: AppTheme.textSecondary),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _loadIngredients,
+                                child: const Text('Retry',
+                                    style: TextStyle(color: AppTheme.accentGold)),
+                              ),
+                            ],
+                          ),
                         )
                       else
                         ..._ingredients.map((ing) => Padding(

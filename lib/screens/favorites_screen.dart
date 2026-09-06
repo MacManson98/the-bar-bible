@@ -21,6 +21,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   List<Cocktail> _favorites = [];
   Map<int, String?> _resolvedImagePathByCocktailId = {};
   bool _isLoading = true;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -29,30 +30,42 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Future<void> _loadFavorites() async {
-    final favorites = await widget.database.getFavoriteCocktails();
-
-    final uniqueBasePaths = <String>{};
-    for (final cocktail in favorites) {
-      uniqueBasePaths.add(_cocktailImageBasePath(cocktail.imagePath, cocktail.name));
-    }
-
-    final resolvedByBasePath = <String, String?>{};
-    await Future.wait(uniqueBasePaths.map((basePath) async {
-      resolvedByBasePath[basePath] = await ImageUtils.findCocktailImage(basePath);
-    }));
-
-    final resolvedByCocktailId = <int, String?>{};
-    for (final cocktail in favorites) {
-      final basePath = _cocktailImageBasePath(cocktail.imagePath, cocktail.name);
-      resolvedByCocktailId[cocktail.id] = resolvedByBasePath[basePath];
-    }
-
-    if (!mounted) return;
     setState(() {
-      _favorites = favorites;
-      _resolvedImagePathByCocktailId = resolvedByCocktailId;
-      _isLoading = false;
+      _isLoading = true;
+      _loadFailed = false;
     });
+    try {
+      final favorites = await widget.database.getFavoriteCocktails();
+
+      final uniqueBasePaths = <String>{};
+      for (final cocktail in favorites) {
+        uniqueBasePaths.add(_cocktailImageBasePath(cocktail.imagePath, cocktail.name));
+      }
+
+      final resolvedByBasePath = <String, String?>{};
+      await Future.wait(uniqueBasePaths.map((basePath) async {
+        resolvedByBasePath[basePath] = await ImageUtils.findCocktailImage(basePath);
+      }));
+
+      final resolvedByCocktailId = <int, String?>{};
+      for (final cocktail in favorites) {
+        final basePath = _cocktailImageBasePath(cocktail.imagePath, cocktail.name);
+        resolvedByCocktailId[cocktail.id] = resolvedByBasePath[basePath];
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _favorites = favorites;
+        _resolvedImagePathByCocktailId = resolvedByCocktailId;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadFailed = true;
+      });
+    }
   }
 
   void _viewCocktailDetail(Cocktail cocktail) {
@@ -87,7 +100,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.accentGold))
-                  : _favorites.isEmpty
+                  : _loadFailed
+                      ? _buildErrorState()
+                      : _favorites.isEmpty
                       ? _buildEmptyState()
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
@@ -120,6 +135,16 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           _StatCard(value: '${_favorites.length - freeCount}', label: 'PREMIUM'),
         ],
       ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return VaultEmptyState(
+      icon: Icons.error_outline,
+      title: 'Couldn\'t Load Favourites',
+      body: 'Something went wrong loading your favourites. Please try again.',
+      ctaLabel: 'Retry',
+      onCta: _loadFavorites,
     );
   }
 

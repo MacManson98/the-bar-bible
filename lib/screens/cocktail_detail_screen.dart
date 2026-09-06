@@ -29,6 +29,7 @@ class CocktailDetailScreen extends StatefulWidget {
 class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   List<_CocktailIngredientWithName> ingredients = [];
   bool isLoading = true;
+  bool _loadFailed = false;
   bool isHistoryExpanded = false;
   String? _resolvedImagePath;
   int _batchSize = 1;
@@ -273,31 +274,43 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
   }
 
   Future<void> _loadIngredients() async {
-    final query = widget.database.select(widget.database.cocktailIngredients).join([
-      innerJoin(
-        widget.database.ingredients,
-        widget.database.ingredients.id
-            .equalsExp(widget.database.cocktailIngredients.ingredientId),
-      ),
-    ])..where(widget.database.cocktailIngredients.cocktailId.equals(widget.cocktail.id));
-
-    final results = await query.get();
-    final Map<int, _CocktailIngredientWithName> uniqueIngredients = {};
-
-    for (final row in results) {
-      final cocktailIngredient = row.readTable(widget.database.cocktailIngredients);
-      final ingredient = row.readTable(widget.database.ingredients);
-      uniqueIngredients[ingredient.id] = _CocktailIngredientWithName(
-        cocktailIngredient: cocktailIngredient,
-        ingredientName: ingredient.name,
-      );
-    }
-
-    if (!mounted) return;
     setState(() {
-      ingredients = uniqueIngredients.values.toList();
-      isLoading = false;
+      isLoading = true;
+      _loadFailed = false;
     });
+    try {
+      final query = widget.database.select(widget.database.cocktailIngredients).join([
+        innerJoin(
+          widget.database.ingredients,
+          widget.database.ingredients.id
+              .equalsExp(widget.database.cocktailIngredients.ingredientId),
+        ),
+      ])..where(widget.database.cocktailIngredients.cocktailId.equals(widget.cocktail.id));
+
+      final results = await query.get();
+      final Map<int, _CocktailIngredientWithName> uniqueIngredients = {};
+
+      for (final row in results) {
+        final cocktailIngredient = row.readTable(widget.database.cocktailIngredients);
+        final ingredient = row.readTable(widget.database.ingredients);
+        uniqueIngredients[ingredient.id] = _CocktailIngredientWithName(
+          cocktailIngredient: cocktailIngredient,
+          ingredientName: ingredient.name,
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        ingredients = uniqueIngredients.values.toList();
+        isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        _loadFailed = true;
+      });
+    }
   }
 
   String _getScaledAmount(_CocktailIngredientWithName ing) {
@@ -381,6 +394,28 @@ class _CocktailDetailScreenState extends State<CocktailDetailScreen> {
       return Scaffold(
         appBar: AppBar(),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_loadFailed) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Couldn\'t load this cocktail. Please try again.',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _loadIngredients,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
