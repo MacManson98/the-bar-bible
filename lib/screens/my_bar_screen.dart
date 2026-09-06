@@ -782,6 +782,7 @@ class MyBarScreenState extends State<MyBarScreen>
       if (_activeBar?.id == barId) _activeBar = _activeBar!.copyWith(name: name);
     });
     widget.onBarChanged?.call();
+    _pushBarsToCloud();
   }
 
   Future<void> _clearCurrentBarWithConfirm() async {
