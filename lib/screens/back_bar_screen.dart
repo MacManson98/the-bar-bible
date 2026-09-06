@@ -158,7 +158,18 @@ class _CreateTabState extends State<_CreateTab> {
       return;
     }
 
-    final canCreate = await auth.canCreateCocktail(auth.isEffectivelyPremium);
+    bool canCreate;
+    try {
+      canCreate = await auth.canCreateCocktail(auth.isEffectivelyPremium);
+    } catch (e) {
+      debugPrint('[BackBarScreen] canCreateCocktail failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not check your create limit. Please try again.')),
+        );
+      }
+      return;
+    }
     if (!canCreate && mounted) {
       _showLimitSheet(title: 'Create limit reached', message: 'Free accounts can create up to 5 cocktails. Upgrade to Premium for unlimited creations.');
       return;
@@ -183,7 +194,18 @@ class _CreateTabState extends State<_CreateTab> {
       return;
     }
 
-    final canUse = await auth.canUseAi(auth.isEffectivelyPremium);
+    bool canUse;
+    try {
+      canUse = await auth.canUseAi(auth.isEffectivelyPremium);
+    } catch (e) {
+      debugPrint('[BackBarScreen] canUseAi failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not check your AI credits. Please try again.')),
+        );
+      }
+      return;
+    }
     if (!canUse && mounted) {
       _showLimitSheet(
         title: 'No AI credits remaining',

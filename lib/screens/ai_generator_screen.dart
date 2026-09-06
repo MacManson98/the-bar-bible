@@ -174,7 +174,7 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
         backgroundColor: AppTheme.primaryDark,
         leading: IconButton(
           icon: const Icon(Icons.close, color: AppTheme.textPrimary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isGenerating ? null : () => Navigator.pop(context),
         ),
         title: const Text(
           'Generate with AI',

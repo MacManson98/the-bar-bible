@@ -1150,9 +1150,16 @@ class FinderScreenState extends State<FinderScreen>
   }
 
   Future<void> _showRenameBarDialog(SavedBar bar) async {
+    final otherNamesLower = _savedBars
+        .where((b) => b.id != bar.id)
+        .map((b) => b.name.trim().toLowerCase())
+        .toSet();
     final renamed = await showDialog<String>(
       context: context,
-      builder: (ctx) => _RenameBarDialog(initialName: bar.name),
+      builder: (ctx) => _RenameBarDialog(
+        initialName: bar.name,
+        existingNamesLower: otherNamesLower,
+      ),
     );
     if (!mounted || renamed == null || renamed.trim().isEmpty) return;
 
@@ -3205,8 +3212,9 @@ class FinderScreenState extends State<FinderScreen>
 /// animation it triggers) rebuilds the TextField on a later frame.
 class _RenameBarDialog extends StatefulWidget {
   final String initialName;
+  final Set<String> existingNamesLower;
 
-  const _RenameBarDialog({required this.initialName});
+  const _RenameBarDialog({required this.initialName, required this.existingNamesLower});
 
   @override
   State<_RenameBarDialog> createState() => _RenameBarDialogState();
@@ -3215,6 +3223,7 @@ class _RenameBarDialog extends StatefulWidget {
 class _RenameBarDialogState extends State<_RenameBarDialog> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.initialName);
+  String? _error;
 
   @override
   void dispose() {
@@ -3230,14 +3239,27 @@ class _RenameBarDialogState extends State<_RenameBarDialog> {
         'Rename Bar',
         style: TextStyle(color: AppTheme.textPrimary),
       ),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        style: const TextStyle(color: AppTheme.textPrimary),
-        decoration: const InputDecoration(
-          hintText: 'Bar name',
-          hintStyle: TextStyle(color: AppTheme.textSecondary),
-        ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: const InputDecoration(
+              hintText: 'Bar name',
+              hintStyle: TextStyle(color: AppTheme.textSecondary),
+            ),
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          ],
+        ],
       ),
       actions: [
         TextButton(
@@ -3248,6 +3270,10 @@ class _RenameBarDialogState extends State<_RenameBarDialog> {
           onPressed: () {
             final name = _controller.text.trim();
             if (name.isEmpty) return;
+            if (widget.existingNamesLower.contains(name.toLowerCase())) {
+              setState(() => _error = 'A bar with this name already exists.');
+              return;
+            }
             Navigator.pop(context, name);
           },
           child: const Text('Save'),

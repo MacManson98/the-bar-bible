@@ -510,7 +510,7 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         backgroundColor: AppTheme.primaryDark,
         leading: IconButton(
           icon: const Icon(Icons.close, color: AppTheme.textPrimary),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
         ),
         title: Text(
           isEditing ? 'Edit Cocktail' : 'Create Cocktail',

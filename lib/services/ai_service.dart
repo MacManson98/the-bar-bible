@@ -40,7 +40,7 @@ class AiCocktailSpec {
       glass: json['glass'] as String? ?? 'Coupe',
       baseSpirit: json['base_spirit'] as String? ?? 'Other',
       category: _normaliseCategory(json['category'] as String? ?? 'cocktail'),
-      difficulty: (json['difficulty'] as int? ?? 2).clamp(1, 5),
+      difficulty: ((json['difficulty'] as num? ?? 2).round()).clamp(1, 5),
       ice: json['ice'] as String?,
       garnish: json['garnish'] as String?,
       notes: json['notes'] as String?,
