@@ -781,6 +781,7 @@ class MyBarScreenState extends State<MyBarScreen>
       _savedBars = bars;
       if (_activeBar?.id == barId) _activeBar = _activeBar!.copyWith(name: name);
     });
+    widget.onBarChanged?.call();
   }
 
   Future<void> _clearCurrentBarWithConfirm() async {

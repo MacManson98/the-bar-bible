@@ -17,6 +17,7 @@ import '../data/flavor_data.dart';
 import '../data/ingredient_data.dart';
 import '../widgets/bar_selector_dropdown.dart';
 import '../services/auth_service.dart';
+import '../services/user_sync_service.dart';
 import 'cocktail_detail_screen.dart';
 import 'paywall_screen.dart';
 
@@ -155,6 +156,12 @@ class FinderScreenState extends State<FinderScreen>
       index++;
     }
     return 'New Bar $index';
+  }
+
+  void _pushBarsToCloud() {
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (uid == null) return;
+    UserSyncService(widget.database).pushBars(uid);
   }
 
   void _markCreateSetState(String reason) {
@@ -1118,6 +1125,7 @@ class FinderScreenState extends State<FinderScreen>
             ),
           ),
         );
+        _pushBarsToCloud();
       }
     } catch (_) {
       flow.step('error');
@@ -1187,6 +1195,8 @@ class FinderScreenState extends State<FinderScreen>
         _activeBar = _activeBar!.copyWith(name: name);
       }
     });
+    widget.onBarSwitched?.call(bar.id);
+    _pushBarsToCloud();
   }
 
   Future<void> _clearCurrentBarWithConfirm() async {

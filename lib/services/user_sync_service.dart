@@ -376,53 +376,67 @@ class UserSyncService {
           .collection('user_cocktails')
           .get();
 
-      if (snapshot.docs.isEmpty) return;
+      final remoteIds = snapshot.docs.map((d) => d.id).toSet();
 
-      for (final doc in snapshot.docs) {
-        final d = doc.data();
-        final fsId = doc.id;
+      await _db.transaction(() async {
+        // Remove local user-cocktails that no longer exist remotely (e.g.
+        // deleted from another device) before upserting what's left —
+        // otherwise a delete that happened elsewhere would never take
+        // effect here, and the cocktail would stay resurrected locally.
+        final localCocktails = await _db.getUserCocktails();
+        for (final cocktail in localCocktails) {
+          final fsId = cocktail.firestoreId;
+          if (fsId != null && fsId.isNotEmpty && !remoteIds.contains(fsId)) {
+            await _db.deleteUserCocktail(cocktail.id);
+          }
+        }
 
-        final companion = UserCocktailsCompanion(
-          name: Value(d['name'] as String? ?? ''),
-          method: Value(d['method'] as String? ?? 'shake'),
-          glass: Value(d['glass'] as String? ?? 'Coupe'),
-          baseSpirit: Value(d['base_spirit'] as String? ?? 'Other'),
-          category: Value(d['category'] as String? ?? 'cocktail'),
-          difficulty: Value((d['difficulty'] as int?) ?? 2),
-          ice: Value(d['ice'] as String?),
-          garnish: Value(d['garnish'] as String?),
-          notes: Value(d['notes'] as String?),
-          tags: Value(d['tags'] as String?),
-          imageUrl: Value(d['image_url'] as String?),
-          isAiGenerated: Value(d['is_ai_generated'] as bool? ?? false),
-          firestoreId: Value(fsId),
-          updatedAt: Value(
-            DateTime.tryParse(d['updated_at'] as String? ?? '') ?? DateTime.now(),
-          ),
-          createdAt: Value(
-            DateTime.tryParse(d['created_at'] as String? ?? '') ?? DateTime.now(),
-          ),
-        );
+        for (final doc in snapshot.docs) {
+          final d = doc.data();
+          final fsId = doc.id;
 
-        final rawIngredients = (d['ingredients'] as List<dynamic>? ?? []);
-        final ingredientRows = rawIngredients
-            .asMap()
-            .entries
-            .map((e) {
-              final i = e.value as Map<String, dynamic>;
-              return UserCocktailIngredientsCompanion(
-                userCocktailId: const Value.absent(), // filled in upsert
-                ingredientName: Value(i['name'] as String? ?? ''),
-                amount: Value((i['amount'] as num?)?.toDouble() ?? 0),
-                unit: Value(i['unit'] as String? ?? 'ml'),
-                prepNote: Value(i['prep_note'] as String?),
-                sortOrder: Value(i['sort_order'] as int? ?? e.key),
-              );
-            })
-            .toList();
+          final companion = UserCocktailsCompanion(
+            name: Value(d['name'] as String? ?? ''),
+            method: Value(d['method'] as String? ?? 'shake'),
+            glass: Value(d['glass'] as String? ?? 'Coupe'),
+            baseSpirit: Value(d['base_spirit'] as String? ?? 'Other'),
+            category: Value(d['category'] as String? ?? 'cocktail'),
+            difficulty: Value((d['difficulty'] as int?) ?? 2),
+            ice: Value(d['ice'] as String?),
+            garnish: Value(d['garnish'] as String?),
+            notes: Value(d['notes'] as String?),
+            tags: Value(d['tags'] as String?),
+            imageUrl: Value(d['image_url'] as String?),
+            isAiGenerated: Value(d['is_ai_generated'] as bool? ?? false),
+            firestoreId: Value(fsId),
+            updatedAt: Value(
+              DateTime.tryParse(d['updated_at'] as String? ?? '') ?? DateTime.now(),
+            ),
+            createdAt: Value(
+              DateTime.tryParse(d['created_at'] as String? ?? '') ?? DateTime.now(),
+            ),
+          );
 
-        await _db.upsertUserCocktailFromSync(companion, ingredientRows);
-      }
+          final rawIngredients = (d['ingredients'] as List<dynamic>? ?? []);
+          final ingredientRows = rawIngredients
+              .asMap()
+              .entries
+              .map((e) {
+                final i = e.value as Map<String, dynamic>;
+                return UserCocktailIngredientsCompanion(
+                  userCocktailId: const Value.absent(), // filled in upsert
+                  ingredientName: Value(i['name'] as String? ?? ''),
+                  amount: Value((i['amount'] as num?)?.toDouble() ?? 0),
+                  unit: Value(i['unit'] as String? ?? 'ml'),
+                  prepNote: Value(i['prep_note'] as String?),
+                  sortOrder: Value(i['sort_order'] as int? ?? e.key),
+                );
+              })
+              .toList();
+
+          await _db.upsertUserCocktailFromSync(companion, ingredientRows);
+        }
+      });
 
       _log('pullUserCocktails complete for $uid (${snapshot.docs.length} cocktails)');
     } catch (e, st) {
