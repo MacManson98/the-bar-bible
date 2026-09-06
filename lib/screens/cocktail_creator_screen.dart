@@ -254,6 +254,17 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         '${bytes.sublist(10).map(hex).join()}';
   }
 
+  Future<void> _pushCocktailSync(String uid, int cocktailId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final synced =
+        await UserSyncService(widget.database).pushSingleUserCocktail(uid, cocktailId);
+    if (!synced) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Couldn\'t sync to cloud — will retry later')),
+      );
+    }
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_ingredients.every((r) => r.nameController.text.trim().isEmpty)) {
@@ -343,10 +354,12 @@ class _CocktailCreatorScreenState extends State<CocktailCreatorScreen> {
         await auth.incrementCreatesUsed();
       }
 
-      // Push to Firestore for cross-device sync
+      // Push to Firestore for cross-device sync — fired without blocking
+      // navigation below; the local save already succeeded, this only
+      // surfaces a sync failure.
       final uid = auth.currentUser?.uid;
       if (uid != null) {
-        UserSyncService(widget.database).pushSingleUserCocktail(uid, saved.id);
+        _pushCocktailSync(uid, saved.id);
       }
 
       if (mounted) {

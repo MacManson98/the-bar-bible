@@ -138,10 +138,15 @@ class MyBarScreenState extends State<MyBarScreen>
 
   Future<void> loadData() => _loadData();
 
-  void _pushBarsToCloud() {
+  Future<void> _pushBarsToCloud() async {
     final uid = context.read<AuthService>().currentUser?.uid;
     if (uid == null) return;
-    UserSyncService(widget.database).pushBars(uid);
+    final synced = await UserSyncService(widget.database).pushBars(uid);
+    if (!synced && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t sync to cloud — will retry later')),
+      );
+    }
   }
 
   Future<void> _loadData() async {

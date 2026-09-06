@@ -158,10 +158,15 @@ class FinderScreenState extends State<FinderScreen>
     return 'New Bar $index';
   }
 
-  void _pushBarsToCloud() {
+  Future<void> _pushBarsToCloud() async {
     final uid = context.read<AuthService>().currentUser?.uid;
     if (uid == null) return;
-    UserSyncService(widget.database).pushBars(uid);
+    final synced = await UserSyncService(widget.database).pushBars(uid);
+    if (!synced && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t sync to cloud — will retry later')),
+      );
+    }
   }
 
   void _markCreateSetState(String reason) {

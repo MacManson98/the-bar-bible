@@ -72,6 +72,15 @@ class _FavoriteButtonState extends State<FavoriteButton>
     }
   }
 
+  Future<void> _pushFavouritesToCloud(String uid) async {
+    final synced = await UserSyncService(widget.database).pushFavourites(uid);
+    if (!synced && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t sync to cloud — will retry later')),
+      );
+    }
+  }
+
   Future<void> _toggleFavorite() async {
     HapticFeedback.lightImpact();
     setState(() { isFavorited = !isFavorited; });
@@ -80,11 +89,12 @@ class _FavoriteButtonState extends State<FavoriteButton>
     try {
       await widget.database.toggleFavorite(widget.firestoreId);
 
-      // Push to Firestore if signed in
+      // Push to Firestore if signed in — don't block success feedback below
+      // on the sync result, only surface it if the push fails.
       if (uid != null) {
-        UserSyncService(widget.database).pushFavourites(uid);
+        _pushFavouritesToCloud(uid);
       }
-      
+
       // Show snackbar if enabled
       if (widget.showSnackbar && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

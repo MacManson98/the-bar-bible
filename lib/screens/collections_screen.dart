@@ -31,10 +31,15 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
     _loadCollections();
   }
 
-  void _pushCollectionsToCloud() {
+  Future<void> _pushCollectionsToCloud() async {
     final uid = context.read<AuthService>().currentUser?.uid;
     if (uid == null) return;
-    UserSyncService(widget.database).pushCollections(uid);
+    final synced = await UserSyncService(widget.database).pushCollections(uid);
+    if (!synced && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t sync to cloud — will retry later')),
+      );
+    }
   }
 
   Future<void> _loadCollections() async {

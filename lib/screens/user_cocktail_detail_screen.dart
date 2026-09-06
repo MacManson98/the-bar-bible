@@ -231,8 +231,17 @@ class _UserCocktailDetailScreenState extends State<UserCocktailDetailScreen> {
                     final uid =
                         context.read<AuthService>().currentUser?.uid;
                     if (uid != null) {
-                      UserSyncService(widget.database).pushCollections(uid);
+                      final synced = await UserSyncService(widget.database)
+                          .pushCollections(uid);
+                      if (!synced && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'Couldn\'t sync to cloud — will retry later')),
+                        );
+                      }
                     }
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                     _showAddToCollectionDialog();
                   }

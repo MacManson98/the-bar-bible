@@ -138,21 +138,25 @@ class UserSyncService {
 
   // ── Push favourites ──────────────────────────────────────────────────────
 
-  Future<void> pushFavourites(String uid) async {
+  /// Returns true on success, false if the push failed (already logged).
+  Future<bool> pushFavourites(String uid) async {
     try {
       final favs = await _db.select(_db.favorites).get();
       final ids = favs.map((f) => f.firestoreId).toList();
       await _firestore.collection('users').doc(uid).update({
         'favourites': ids,
       });
+      return true;
     } catch (e) {
       _log('pushFavourites failed: $e');
+      return false;
     }
   }
 
   // ── Push bar inventory ───────────────────────────────────────────────────
 
-  Future<void> pushBars(String uid) async {
+  /// Returns true on success, false if the push failed (already logged).
+  Future<bool> pushBars(String uid) async {
     try {
       final bars = await _db.select(_db.savedBars).get();
       final allIngredients = await _db.select(_db.ingredients).get();
@@ -175,14 +179,17 @@ class UserSyncService {
       await _firestore.collection('users').doc(uid).update({
         'bars': barData,
       });
+      return true;
     } catch (e) {
       _log('pushBars failed: $e');
+      return false;
     }
   }
 
   // ── Push collections ─────────────────────────────────────────────────────
 
-  Future<void> pushCollections(String uid) async {
+  /// Returns true on success, false if the push failed (already logged).
+  Future<bool> pushCollections(String uid) async {
     try {
       final collections = await _db.select(_db.collections).get();
       final colData = <Map<String, dynamic>>[];
@@ -202,14 +209,17 @@ class UserSyncService {
       await _firestore.collection('users').doc(uid).update({
         'collections': colData,
       });
+      return true;
     } catch (e) {
       _log('pushCollections failed: $e');
+      return false;
     }
   }
 
   // ── Push user cocktails ──────────────────────────────────────────────────
 
-  Future<void> pushUserCocktails(String uid) async {
+  /// Returns true on success, false if the push failed (already logged).
+  Future<bool> pushUserCocktails(String uid) async {
     try {
       final cocktails = await _db.getUserCocktails();
       final colRef = _firestore
@@ -252,19 +262,24 @@ class UserSyncService {
       }
 
       _log('pushUserCocktails complete for $uid (${cocktails.length} cocktails)');
+      return true;
     } catch (e, st) {
       _log('pushUserCocktails failed: $e\n$st');
+      return false;
     }
   }
 
-  Future<void> pushSingleUserCocktail(String uid, int localId) async {
+  /// Returns true on success, false if the push failed (already logged).
+  /// Also returns true when there is nothing to push (cocktail missing or
+  /// not yet assigned a Firestore id) — those aren't sync failures.
+  Future<bool> pushSingleUserCocktail(String uid, int localId) async {
     try {
       final cocktail = await (_db.select(_db.userCocktails)
             ..where((u) => u.id.equals(localId)))
           .getSingleOrNull();
-      if (cocktail == null) return;
+      if (cocktail == null) return true;
       final fsId = cocktail.firestoreId;
-      if (fsId == null || fsId.isEmpty) return;
+      if (fsId == null || fsId.isEmpty) return true;
 
       final ingredients = await _db.getUserCocktailIngredients(localId);
       final ingData = ingredients
@@ -299,8 +314,10 @@ class UserSyncService {
         'updated_at': cocktail.updatedAt.toIso8601String(),
         'ingredients': ingData,
       });
+      return true;
     } catch (e) {
       _log('pushSingleUserCocktail failed: $e');
+      return false;
     }
   }
 

@@ -62,6 +62,17 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
         '${bytes.sublist(10).map(hex).join()}';
   }
 
+  Future<void> _pushCocktailSync(String uid, int cocktailId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final synced =
+        await UserSyncService(widget.database).pushSingleUserCocktail(uid, cocktailId);
+    if (!synced) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Couldn\'t sync to cloud — will retry later')),
+      );
+    }
+  }
+
   Future<void> _generate() async {
     final prompt = _controller.text.trim();
     if (prompt.isEmpty) return;
@@ -126,10 +137,11 @@ class _AiGeneratorScreenState extends State<AiGeneratorScreen> {
       // Credit is spent only once the cocktail is durably saved.
       await auth.incrementAiCreditsUsed(auth.isEffectivelyPremium);
 
-      // Push to Firestore
+      // Push to Firestore — fired without blocking navigation below; the
+      // local save already succeeded, this only surfaces a sync failure.
       final uid = auth.currentUser?.uid;
       if (uid != null) {
-        UserSyncService(widget.database).pushSingleUserCocktail(uid, saved.id);
+        _pushCocktailSync(uid, saved.id);
       }
 
       if (!mounted) return;
