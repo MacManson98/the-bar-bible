@@ -33,9 +33,13 @@ class _SplashScreenState extends State<SplashScreen>
     _init();
   }
 
+  static const _onReadyTimeout = Duration(seconds: 8);
+
   Future<void> _init() async {
     await Future.wait([
-      widget.onReady(),
+      widget.onReady().timeout(_onReadyTimeout).catchError((Object e) {
+        debugPrint('[SplashScreen] onReady failed or timed out: $e');
+      }),
       Future.delayed(const Duration(milliseconds: 2000)),
     ]);
     if (mounted) {

@@ -38,10 +38,22 @@ void main() async {
   authService.setUserSyncService(userSyncService);
 
   // Link any already-signed-in Firebase user to RevenueCat on startup.
+  // Both calls are timed out and caught so a stalled network call can never
+  // block the app from rendering — the user should see the app (possibly
+  // with stale/local-only data) rather than a blank screen.
+  const startupSyncTimeout = Duration(seconds: 8);
   final existingUser = authService.currentUser;
   if (existingUser != null && !existingUser.isAnonymous) {
-    await purchaseService.loginUser(existingUser.uid);
-    await userSyncService.pullFromFirestore(existingUser.uid);
+    try {
+      await purchaseService.loginUser(existingUser.uid).timeout(startupSyncTimeout);
+    } catch (e) {
+      debugPrint('[main] purchaseService.loginUser timed out or failed: $e');
+    }
+    try {
+      await userSyncService.pullFromFirestore(existingUser.uid).timeout(startupSyncTimeout);
+    } catch (e) {
+      debugPrint('[main] userSyncService.pullFromFirestore timed out or failed: $e');
+    }
   }
 
   runApp(
