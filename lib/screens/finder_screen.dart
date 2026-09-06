@@ -1145,41 +1145,10 @@ class FinderScreenState extends State<FinderScreen>
   }
 
   Future<void> _showRenameBarDialog(SavedBar bar) async {
-    final controller = TextEditingController(text: bar.name);
     final renamed = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceDark,
-        title: const Text(
-          'Rename Bar',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: const InputDecoration(
-            hintText: 'Bar name',
-            hintStyle: TextStyle(color: AppTheme.textSecondary),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final name = controller.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(ctx, name);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _RenameBarDialog(initialName: bar.name),
     );
-    controller.dispose();
     if (!mounted || renamed == null || renamed.trim().isEmpty) return;
 
     final name = renamed.trim();
@@ -3219,6 +3188,66 @@ class FinderScreenState extends State<FinderScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Owns its own TextEditingController so disposal happens when this widget's
+/// Element is actually unmounted (i.e. once the dialog's closing transition
+/// has fully finished) rather than right when showDialog's Future resolves —
+/// disposing eagerly at that point can throw "A TextEditingController was
+/// used after being disposed" if the transition (or the keyboard-hide
+/// animation it triggers) rebuilds the TextField on a later frame.
+class _RenameBarDialog extends StatefulWidget {
+  final String initialName;
+
+  const _RenameBarDialog({required this.initialName});
+
+  @override
+  State<_RenameBarDialog> createState() => _RenameBarDialogState();
+}
+
+class _RenameBarDialogState extends State<_RenameBarDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surfaceDark,
+      title: const Text(
+        'Rename Bar',
+        style: TextStyle(color: AppTheme.textPrimary),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        style: const TextStyle(color: AppTheme.textPrimary),
+        decoration: const InputDecoration(
+          hintText: 'Bar name',
+          hintStyle: TextStyle(color: AppTheme.textSecondary),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            final name = _controller.text.trim();
+            if (name.isEmpty) return;
+            Navigator.pop(context, name);
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
