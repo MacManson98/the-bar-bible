@@ -14,11 +14,15 @@ class BarSelectorDropdown extends StatelessWidget {
   final int? currentBarId;
   final List<SavedBar> bars;
   final BarSelectCallback onSelectBar;
-  final BarActionCallback onCreateBar;
-  final BarActionCallback onClearBar;
-  final BarDeleteCallback onDeleteBar;
+  final BarActionCallback? onCreateBar;
+  final BarActionCallback? onClearBar;
+  final BarDeleteCallback? onDeleteBar;
   final double maxWidth;
   final bool isCreateInProgress;
+
+  /// When false, hides Create/Clear/Delete and only allows switching bars.
+  /// Used on screens (e.g. Home) that shouldn't own bar management.
+  final bool showManagementActions;
 
   const BarSelectorDropdown({
     super.key,
@@ -26,11 +30,12 @@ class BarSelectorDropdown extends StatelessWidget {
     required this.currentBarId,
     required this.bars,
     required this.onSelectBar,
-    required this.onCreateBar,
-    required this.onClearBar,
-    required this.onDeleteBar,
+    this.onCreateBar,
+    this.onClearBar,
+    this.onDeleteBar,
     this.maxWidth = 230,
     this.isCreateInProgress = false,
+    this.showManagementActions = true,
   });
 
   @override
@@ -62,77 +67,79 @@ class BarSelectorDropdown extends StatelessWidget {
             ),
           );
         }),
-        const Divider(height: 1),
-        MenuItemButton(
-          onPressed: isCreateInProgress ? null : () => onCreateBar(),
-          leadingIcon: const Icon(
-            Icons.add_rounded,
-            size: 16,
-            color: AppTheme.accentGold,
-          ),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Create New Bar...',
-                  style: TextStyle(color: AppTheme.textPrimary),
-                ),
-              ),
-              if (isCreateInProgress)
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.4,
-                    color: AppTheme.accentGold,
+        if (showManagementActions) ...[
+          const Divider(height: 1),
+          MenuItemButton(
+            onPressed: isCreateInProgress ? null : () => onCreateBar?.call(),
+            leadingIcon: const Icon(
+              Icons.add_rounded,
+              size: 16,
+              color: AppTheme.accentGold,
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Create New Bar...',
+                    style: TextStyle(color: AppTheme.textPrimary),
                   ),
                 ),
-            ],
-          ),
-        ),
-        MenuItemButton(
-          onPressed: () => onClearBar(),
-          leadingIcon: Icon(
-            Icons.delete_outline_rounded,
-            size: 16,
-            color: Colors.red.shade300,
-          ),
-          child: Text(
-            'Clear Current Bar',
-            style: TextStyle(color: Colors.red.shade300),
-          ),
-        ),
-        MenuItemButton(
-          onPressed: sortedBars.length <= 1
-              ? null
-              : () async {
-                  final selectedBar = await showModalBottomSheet<SavedBar>(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    builder: (ctx) => _DeleteBarPickerSheet(
-                      bars: sortedBars,
-                      currentBarId: currentBarId,
+                if (isCreateInProgress)
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.4,
+                      color: AppTheme.accentGold,
                     ),
-                  );
-                  if (selectedBar == null) return;
-                  await onDeleteBar(selectedBar);
-                },
-          leadingIcon: Icon(
-            Icons.delete_forever_rounded,
-            size: 16,
-            color: sortedBars.length <= 1
-                ? AppTheme.textSecondary.withValues(alpha: 0.5)
-                : Colors.red.shade300,
-          ),
-          child: Text(
-            'Delete Bar...',
-            style: TextStyle(
-              color: sortedBars.length <= 1
-                  ? AppTheme.textSecondary.withValues(alpha: 0.6)
-                  : Colors.red.shade300,
+                  ),
+              ],
             ),
           ),
-        ),
+          MenuItemButton(
+            onPressed: () => onClearBar?.call(),
+            leadingIcon: Icon(
+              Icons.delete_outline_rounded,
+              size: 16,
+              color: Colors.red.shade300,
+            ),
+            child: Text(
+              'Clear Current Bar',
+              style: TextStyle(color: Colors.red.shade300),
+            ),
+          ),
+          MenuItemButton(
+            onPressed: sortedBars.length <= 1
+                ? null
+                : () async {
+                    final selectedBar = await showModalBottomSheet<SavedBar>(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      builder: (ctx) => _DeleteBarPickerSheet(
+                        bars: sortedBars,
+                        currentBarId: currentBarId,
+                      ),
+                    );
+                    if (selectedBar == null) return;
+                    await onDeleteBar?.call(selectedBar);
+                  },
+            leadingIcon: Icon(
+              Icons.delete_forever_rounded,
+              size: 16,
+              color: sortedBars.length <= 1
+                  ? AppTheme.textSecondary.withValues(alpha: 0.5)
+                  : Colors.red.shade300,
+            ),
+            child: Text(
+              'Delete Bar...',
+              style: TextStyle(
+                color: sortedBars.length <= 1
+                    ? AppTheme.textSecondary.withValues(alpha: 0.6)
+                    : Colors.red.shade300,
+              ),
+            ),
+          ),
+        ],
       ],
       style: MenuStyle(
         backgroundColor: WidgetStateProperty.all(AppTheme.surfaceDark),

@@ -1,9 +1,10 @@
 # The Bar Bible — Bug Fix Session Changelog
 
 **Date:** 2026-09-06
-**Source:** Full codebase audit (`AUDIT_REPORT.md`) followed by two fix batches,
-executed by Claude Code across three sessions. This document combines the
-completion reports from all three sessions into one record.
+**Source:** Full codebase audit (`AUDIT_REPORT.md`) followed by two Claude
+Code fix batches, plus a third batch of fixes made directly in this session
+from bugs Connor found while testing. This document combines all of it into
+one record.
 **Status:** All commits below are local only — nothing has been pushed to
 `origin` yet. Not yet tested end-to-end on device.
 
@@ -194,6 +195,47 @@ a release note):
 - `firestore.rules` (new)
 - Deleted: 7 "1.0 Blueprint" stub files, `builder_screen.dart`,
   `FavoriteIconCompact` (class only, file kept)
+
+---
+
+## Batch 3 — Home screen bar-sync + UI consistency (done directly in this session, no Claude Code)
+
+Reported by Connor: deleting a bar doesn't sync to Home, and Home's bar
+switcher looked worse than My Bar's.
+
+**Root cause 1 — stale Home state**: `main.dart`'s `_onBarChanged()` (fired
+by My Bar on create/rename/delete) only reloaded `_activeBarName` and
+refreshed the Finder tabs. It never told `HomeScreen` to reload — Home is
+kept alive in the `IndexedStack` and only reloaded on its own internal
+navigation events (`initState`, a couple of `Navigator.push().then()`
+returns). So Home's `_savedBars` list and ingredient/can-make stats went
+stale on any bar create/rename/delete, not just delete.
+
+**Root cause 2 — duplicate UI**: Home had its own bespoke `_showBarSwitcher()`
+bottom sheet (plain text list). My Bar/Finder use the shared
+`BarSelectorDropdown` widget (gold pill + dropdown menu).
+
+**Fix**:
+- `lib/widgets/bar_selector_dropdown.dart` — added a `showManagementActions`
+  flag (default `true`); when `false`, hides Create/Clear/Delete and only
+  allows switching. Made `onCreateBar`/`onClearBar`/`onDeleteBar` nullable
+  to support this. No behavior change for existing callers (My Bar).
+- `lib/screens/home_screen.dart` — made the State class public
+  (`HomeScreenState`) with a public `loadData()` entry point; added
+  `_activeBarId` (threaded through `_HomeLoadResult`); replaced the bespoke
+  `_showBarSwitcher()` bottom sheet with `BarSelectorDropdown`
+  (`showManagementActions: false`) in the Section 1 header, next to the
+  ingredient-count badge.
+- `lib/main.dart` — added `_homeKey = GlobalKey<HomeScreenState>()`, wired
+  it to the `HomeScreen` widget, and call `_homeKey.currentState?.loadData()`
+  from both `_onBarChanged()` (debounced, same as the Finder-tab refresh)
+  and `_switchBarFromPill()` — same pattern already used for
+  `_myBarKey`/`_myBarTabKey`.
+
+Committed directly to the device (not yet pushed to `origin`). Not run
+through `flutter analyze` in this session — recommend running it plus a
+manual pass (create/rename/delete a bar from My Bar, confirm Home's pill
+and ingredient count update without switching tabs) before pushing.
 
 ## Not yet done / explicitly deferred
 

@@ -115,6 +115,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // GlobalKeys to reach tab states for cross-tab refresh
   final _myBarTabKey = GlobalKey<MyBarTabScreenState>();
   final _myBarKey = GlobalKey<MyBarScreenState>();
+  final _homeKey = GlobalKey<HomeScreenState>();
   Timer? _barChangedDebounceTimer;
 
   @override
@@ -127,6 +128,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   List<Widget> _buildScreens() {
     return [
       HomeScreen(
+        key: _homeKey,
         database: widget.database,
         activeBarName: _activeBarName,
         onNavigateToBrowse: () => _onTabTapped(_browseTabIndex),
@@ -163,6 +165,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     await _loadActiveBarName();
     _myBarTabKey.currentState?.refreshAllFinders();
     await _myBarKey.currentState?.loadData();
+    await _homeKey.currentState?.loadData();
   }
 
   void _onTabTapped(int index) {
@@ -182,6 +185,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _loadActiveBarName();
       // Cocktail/Shot/Mocktail finder tabs — keep them all in sync.
       _myBarTabKey.currentState?.refreshAllFinders();
+      // Home's bar list/stats go stale otherwise — it's kept alive in the
+      // IndexedStack and only reloads on its own navigation events.
+      _homeKey.currentState?.loadData();
     });
   }
 

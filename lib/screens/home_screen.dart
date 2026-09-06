@@ -9,6 +9,7 @@ import '../core/utils/image_utils.dart';
 import '../data/database.dart';
 import '../data/ingredient_data.dart';
 import '../services/auth_service.dart';
+import '../widgets/bar_selector_dropdown.dart';
 import 'cocktail_detail_screen.dart';
 import 'paywall_screen.dart';
 import 'favorites_screen.dart';
@@ -31,13 +32,14 @@ class HomeScreen extends StatefulWidget {
   });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<Cocktail> _allCocktails = [];
   List<Cocktail> _recentlyViewed = [];
   List<SavedBar> _savedBars = [];
+  int? _activeBarId;
   Cocktail? _tonightsPick;
   String _pickReasoning = '';
   int _favoritesCount = 0;
@@ -88,6 +90,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Public entry point so parent navigation can force a refresh when bars
+  /// are created/renamed/deleted elsewhere (e.g. from the My Bar tab) while
+  /// this screen is kept alive in the background.
+  Future<void> loadData() => _loadData();
+
   Future<void> _loadData() async {
     if (mounted) setState(() { _isLoading = true; _loadError = null; });
     try {
@@ -107,6 +114,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _ingredientCount = result.ingredientCount;
         _oneAwayCount = result.oneAwayCount;
         _savedBars = result.savedBars;
+        _activeBarId = result.activeBarId;
         _isLoading = false;
         _loadError = null;
       });
@@ -231,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       cocktails: cocktails,
       recentlyViewed: recentlyViewed,
       savedBars: savedBars,
+      activeBarId: bar?.id,
       pick: pick,
       reasoning: reasoning,
       favoritesCount: favorites.length,
@@ -286,69 +295,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     HapticFeedback.mediumImpact();
   }
 
-  Future<void> _showBarSwitcher() async {
-    if (_savedBars.length <= 1) return; // nothing to switch to
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'SWITCH BAR',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
-                color: AppTheme.accentGold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ..._savedBars.map((bar) {
-              final isActive = bar.name == widget.activeBarName;
-              return InkWell(
-                onTap: isActive
-                    ? null
-                    : () async {
-                        Navigator.pop(ctx);
-                        await widget.onSwitchBar?.call(bar.id);
-                        await _loadData();
-                      },
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          bar.name,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                            color: isActive
-                                ? AppTheme.accentGold
-                                : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      if (isActive)
-                        const Icon(Icons.check,
-                            color: AppTheme.accentGold, size: 18),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
+  Future<void> _selectBar(int barId) async {
+    await widget.onSwitchBar?.call(barId);
+    await _loadData();
   }
 
   void _viewCocktailDetail(Cocktail cocktail) {
@@ -434,19 +383,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   index: 0,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                    child: GestureDetector(
-                      onTap: _savedBars.length > 1 ? _showBarSwitcher : null,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 3,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              color: AppTheme.accentGold,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
+                    child: Row(
+                      children: [
+                        if (_savedBars.length > 1)
+                          BarSelectorDropdown(
+                            currentBarName: widget.activeBarName,
+                            currentBarId: _activeBarId,
+                            bars: _savedBars,
+                            maxWidth: 200,
+                            showManagementActions: false,
+                            onSelectBar: _selectBar,
+                          )
+                        else
                           Text(
                             widget.activeBarName,
                             style: const TextStyle(
@@ -456,37 +404,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               color: AppTheme.textPrimary,
                             ),
                           ),
-                          if (_ingredientCount > 0) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppTheme.accentGold.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: AppTheme.accentGold.withValues(alpha: 0.25),
-                                ),
-                              ),
-                              child: Text(
-                                '$_ingredientCount ingredients',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.accentGold,
-                                ),
+                        if (_ingredientCount > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentGold.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppTheme.accentGold.withValues(alpha: 0.25),
                               ),
                             ),
-                          ],
-                          if (_savedBars.length > 1) ...[
-                            const SizedBox(width: 6),
-                            Icon(
-                              Icons.expand_more,
-                              size: 18,
-                              color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                            child: Text(
+                              '$_ingredientCount ingredients',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.accentGold,
+                              ),
                             ),
-                          ],
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -666,6 +605,7 @@ class _HomeLoadResult {
   final List<Cocktail> cocktails;
   final List<Cocktail> recentlyViewed;
   final List<SavedBar> savedBars;
+  final int? activeBarId;
   final Cocktail? pick;
   final String reasoning;
   final int favoritesCount;
@@ -678,6 +618,7 @@ class _HomeLoadResult {
     required this.cocktails,
     required this.recentlyViewed,
     required this.savedBars,
+    required this.activeBarId,
     required this.pick,
     required this.reasoning,
     required this.favoritesCount,
