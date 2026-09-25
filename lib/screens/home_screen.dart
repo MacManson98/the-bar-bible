@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/services/bar_selection_controller.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/image_utils.dart';
 import '../data/database.dart';
@@ -17,18 +17,14 @@ import 'collections_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final AppDatabase database;
-  final String activeBarName;
   final VoidCallback onNavigateToBrowse;
   final VoidCallback onNavigateToFinder;
-  final Future<void> Function(int barId)? onSwitchBar;
 
   const HomeScreen({
     super.key,
     required this.database,
-    required this.activeBarName,
     required this.onNavigateToBrowse,
     required this.onNavigateToFinder,
-    this.onSwitchBar,
   });
 
   @override
@@ -38,8 +34,6 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<Cocktail> _allCocktails = [];
   List<Cocktail> _recentlyViewed = [];
-  List<SavedBar> _savedBars = [];
-  int? _activeBarId;
   Cocktail? _tonightsPick;
   String _pickReasoning = '';
   int _favoritesCount = 0;
@@ -56,10 +50,13 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _entryController;
   late List<Animation<double>> _fadeAnims;
   late List<Animation<Offset>> _slideAnims;
+  late BarSelectionController _barController;
 
   @override
   void initState() {
     super.initState();
+    _barController = context.read<BarSelectionController>();
+    _barController.addListener(_onBarControllerChanged);
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -86,9 +83,15 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _barController.removeListener(_onBarControllerChanged);
     _entryController.dispose();
     super.dispose();
   }
+
+  /// Bars/ingredients can change from Home, My Bar, or any Finder tab —
+  /// BarSelectionController is the single source of truth, so any change
+  /// made anywhere reaches every screen through this listener.
+  void _onBarControllerChanged() => _loadData();
 
   /// Public entry point so parent navigation can force a refresh when bars
   /// are created/renamed/deleted elsewhere (e.g. from the My Bar tab) while
@@ -113,8 +116,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _canMakeCount = result.canMakeCount;
         _ingredientCount = result.ingredientCount;
         _oneAwayCount = result.oneAwayCount;
-        _savedBars = result.savedBars;
-        _activeBarId = result.activeBarId;
         _isLoading = false;
         _loadError = null;
       });
@@ -130,12 +131,15 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final favorites = await widget.database.getFavoriteCocktails();
     final collections = await widget.database.select(widget.database.collections).get();
     final recentlyViewed = await _loadRecentlyViewed(cocktails);
-    final savedBars = await (widget.database.select(widget.database.savedBars)
-          ..orderBy([(b) => OrderingTerm.desc(b.lastUsed)]))
-        .get();
 
-    // Bar stats
-    final bar = await widget.database.getDefaultSavedBar();
+    // Bar stats — active bar comes from the shared controller, not a
+    // separate DB read, so Home never disagrees with My Bar/Finder about
+    // which bar is active. ensureLoaded() (not refresh()) waits for the
+    // controller's initial/in-flight load without ever triggering its own
+    // notify — calling refresh() here would loop back into every screen's
+    // controller listener, including this one, forever.
+    await _barController.ensureLoaded();
+    final bar = _barController.activeBar;
     int ingredientCount = 0;
     int canMakeCount = 0;
     int oneAwayCount = 0;
@@ -238,8 +242,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return _HomeLoadResult(
       cocktails: cocktails,
       recentlyViewed: recentlyViewed,
-      savedBars: savedBars,
-      activeBarId: bar?.id,
       pick: pick,
       reasoning: reasoning,
       favoritesCount: favorites.length,
@@ -295,10 +297,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     HapticFeedback.mediumImpact();
   }
 
-  Future<void> _selectBar(int barId) async {
-    await widget.onSwitchBar?.call(barId);
-    await _loadData();
-  }
+  Future<void> _selectBar(int barId) => _barController.switchTo(barId);
 
   void _viewCocktailDetail(Cocktail cocktail) {
     HapticFeedback.lightImpact();
@@ -322,6 +321,11 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final barController = context.watch<BarSelectionController>();
+    final activeBarName = barController.activeBar?.name ?? 'My Bar';
+    final savedBars = barController.savedBars;
+    final activeBarId = barController.activeBar?.id;
+
     if (_loadError != null) {
       return Scaffold(
         backgroundColor: AppTheme.primaryDark,
@@ -385,18 +389,18 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                     child: Row(
                       children: [
-                        if (_savedBars.length > 1)
+                        if (savedBars.length > 1)
                           BarSelectorDropdown(
-                            currentBarName: widget.activeBarName,
-                            currentBarId: _activeBarId,
-                            bars: _savedBars,
+                            currentBarName: activeBarName,
+                            currentBarId: activeBarId,
+                            bars: savedBars,
                             maxWidth: 200,
                             showManagementActions: false,
                             onSelectBar: _selectBar,
                           )
                         else
                           Text(
-                            widget.activeBarName,
+                            activeBarName,
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
@@ -441,7 +445,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       canMakeCount: _canMakeCount,
                       oneAwayCount: _oneAwayCount,
                       ingredientCount: _ingredientCount,
-                      barName: widget.activeBarName,
+                      barName: activeBarName,
                       onTap: widget.onNavigateToFinder,
                     ),
                   ),
@@ -604,8 +608,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 class _HomeLoadResult {
   final List<Cocktail> cocktails;
   final List<Cocktail> recentlyViewed;
-  final List<SavedBar> savedBars;
-  final int? activeBarId;
   final Cocktail? pick;
   final String reasoning;
   final int favoritesCount;
@@ -617,8 +619,6 @@ class _HomeLoadResult {
   const _HomeLoadResult({
     required this.cocktails,
     required this.recentlyViewed,
-    required this.savedBars,
-    required this.activeBarId,
     required this.pick,
     required this.reasoning,
     required this.favoritesCount,

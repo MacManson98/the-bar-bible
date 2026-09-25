@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
+import '../core/services/catalog_sync_notifier.dart';
 import '../data/database.dart';
 import '../services/firestore_sync_service.dart';
 
@@ -415,7 +417,12 @@ class _AdminCocktailEditorScreenState
         try {
           // Refresh the local cache so the new/updated cocktail shows up
           // immediately instead of waiting for the next 24h auto-sync.
-          await FirestoreSyncService(widget.database).sync();
+          await FirestoreSyncService(
+            widget.database,
+            onSynced: () {
+              if (mounted) context.read<CatalogSyncNotifier>().notifyCatalogSynced();
+            },
+          ).sync();
         } catch (_) {
           // Best-effort — the live write already succeeded either way.
         }

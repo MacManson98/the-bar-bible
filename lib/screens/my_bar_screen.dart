@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:drift/drift.dart' hide Column;
-import '../core/services/bar_service.dart';
+import '../core/services/bar_selection_controller.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/bar_create_diagnostics.dart';
 import '../core/utils/image_utils.dart';
@@ -14,9 +14,8 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/user_sync_service.dart';
 import '../widgets/bar_selector_dropdown.dart';
+import '../widgets/rename_bar_dialog.dart';
 import 'cocktail_detail_screen.dart';
-
-typedef BarChangedCallback = void Function();
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  MAIN SCREEN
@@ -24,17 +23,11 @@ typedef BarChangedCallback = void Function();
 
 class MyBarScreen extends StatefulWidget {
   final AppDatabase database;
-  final String activeBarName;
-  final ValueChanged<int>? onBarSwitched;
-  final BarChangedCallback? onBarChanged;
   final VoidCallback? onNavigateToFinder;
 
   const MyBarScreen({
     super.key,
     required this.database,
-    required this.activeBarName,
-    this.onBarSwitched,
-    this.onBarChanged,
     this.onNavigateToFinder,
   });
 
@@ -76,7 +69,12 @@ class MyBarScreenState extends State<MyBarScreen>
 
   late AnimationController _counterAnimController;
   late BarAnalytics _barAnalytics;
-  late final BarService _barService;
+  late BarSelectionController _barController;
+  // Guards against this screen reloading itself mid-mutation when the
+  // controller notifies — the mutation methods below already apply their
+  // own (carefully-timed) optimistic UI + follow-up state.
+  bool _isMutatingBar = false;
+  Timer? _selfNotifyGuardTimer;
   List<Cocktail> _allCocktailsCache = [];
   Map<int, Set<String>> _requiredCanonicalsByCocktail = {};
   bool _matchDataLoaded = false;
@@ -101,7 +99,8 @@ class MyBarScreenState extends State<MyBarScreen>
   void initState() {
     super.initState();
     _barAnalytics = BarAnalytics(widget.database);
-    _barService = BarService(widget.database);
+    _barController = context.read<BarSelectionController>();
+    _barController.addListener(_onBarControllerChanged);
 
     _headerAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _headerFade = CurvedAnimation(parent: _headerAnimController, curve: Curves.easeOut);
@@ -124,6 +123,7 @@ class MyBarScreenState extends State<MyBarScreen>
 
   @override
   void dispose() {
+    _barController.removeListener(_onBarControllerChanged);
     _finishCreateDiagnostics(result: 'disposed');
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -133,8 +133,28 @@ class MyBarScreenState extends State<MyBarScreen>
     _counterAnimController.dispose();
     _searchDebounceTimer?.cancel();
     _unlockDebounceTimer?.cancel();
+    _selfNotifyGuardTimer?.cancel();
     _unlockOverlay?.remove();
     super.dispose();
+  }
+
+  /// Bars/ingredients can change from Home or any Finder tab — reload
+  /// unless this screen is itself mid-mutation (it handles its own refresh).
+  void _onBarControllerChanged() {
+    if (_isMutatingBar || _isCreatingBar) return;
+    _loadData();
+  }
+
+  /// Holds off this screen's own reload for slightly longer than the
+  /// controller's contents-changed debounce, so a self-triggered ingredient
+  /// toggle doesn't reset scroll position / re-fade the header a moment
+  /// after the tap. Other screens aren't guarded, so they still refresh.
+  void _armSelfNotifyGuard() {
+    _isMutatingBar = true;
+    _selfNotifyGuardTimer?.cancel();
+    _selfNotifyGuardTimer = Timer(const Duration(milliseconds: 320), () {
+      _isMutatingBar = false;
+    });
   }
 
   Future<void> loadData() => _loadData();
@@ -152,18 +172,22 @@ class MyBarScreenState extends State<MyBarScreen>
 
   Future<void> _loadData() async {
     final ingredients = await widget.database.select(widget.database.ingredients).get();
-    final bars = await widget.database.select(widget.database.savedBars).get();
 
-    SavedBar? activeBar = await widget.database.getDefaultSavedBar();
-    if (activeBar == null && bars.isEmpty) {
-      final id = await widget.database.into(widget.database.savedBars).insert(
-        SavedBarsCompanion.insert(name: 'My Bar', isDefault: const Value(true)),
-      );
-      activeBar = await (widget.database.select(widget.database.savedBars)
-            ..where((b) => b.id.equals(id)))
-          .getSingle();
+    // BarSelectionController is the single source of truth for the bar
+    // list/active bar (and bootstraps a default "My Bar" if none exists) —
+    // this used to duplicate that bootstrap locally, which could race with
+    // the controller's own and create two "default" bars.
+    // NB: ensureLoaded(), not refresh() — this is the passive reload path
+    // (also triggered BY the controller's own notifyListeners()), and
+    // refresh() itself notifies, which would loop back into every screen's
+    // listener forever.
+    await _barController.ensureLoaded();
+    final activeBar = _barController.activeBar;
+    final bars = _barController.savedBars;
+    if (activeBar == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
     }
-    activeBar ??= bars.first;
 
     final barIngredients = await widget.database.getSavedBarIngredients(activeBar.id);
     final barIds = barIngredients.map((i) => i.id).toSet();
@@ -173,7 +197,7 @@ class MyBarScreenState extends State<MyBarScreen>
     setState(() {
       _allIngredients = ingredients;
       _activeBar = activeBar;
-      _savedBars = List<SavedBar>.from(bars)..sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
+      _savedBars = bars; // already ordered by BarSelectionController
       _barIngredientIds = barIds;
       _analytics = analytics;
       _isLoading = false;
@@ -257,17 +281,6 @@ class MyBarScreenState extends State<MyBarScreen>
     final wait = settleWindow - elapsed;
     if (kDebugMode) debugPrint('MyBar IME settle delay ${wait.inMilliseconds}ms');
     await Future.delayed(wait);
-  }
-
-  String _nextAutoBarName(List<SavedBar> bars) {
-    final names = bars.map((b) => b.name.trim().toLowerCase()).toSet();
-    const base = 'new bar';
-    if (!names.contains(base)) return 'New Bar';
-    var index = 2;
-    while (names.contains('$base $index')) {
-      index++;
-    }
-    return 'New Bar $index';
   }
 
   void _markCreateSetState(String reason) => _createDiagnostics?.incrementSetState(reason);
@@ -369,7 +382,8 @@ class MyBarScreenState extends State<MyBarScreen>
         if (newlyUnlockedIds.isNotEmpty) _queueUnlockedCocktails(newlyUnlockedIds);
       }
 
-      widget.onBarChanged?.call();
+      _barController.notifyBarContentsChanged();
+      _armSelfNotifyGuard();
       await _refreshAnalytics();
       _pushBarsToCloud();
     } catch (_) {
@@ -474,9 +488,10 @@ class MyBarScreenState extends State<MyBarScreen>
       builder: (ctx) {
         final single = unlocked.length == 1;
         final title = single ? unlocked.first.name : '${unlocked.length} cocktails unlocked';
+        final barName = _activeBar?.name ?? 'My Bar';
         final subtitle = single
-            ? 'You can now make this in ${widget.activeBarName}.'
-            : 'New recipes are now available in ${widget.activeBarName}.';
+            ? 'You can now make this in $barName.'
+            : 'New recipes are now available in $barName.';
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -610,35 +625,38 @@ class MyBarScreenState extends State<MyBarScreen>
 
   Future<void> _switchToBar(int barId) async {
     _createDiagnostics?.incrementCounter('_switchToBar', stackTrace: StackTrace.current);
-    await _delayForImeSettleIfNeeded();
-    await _barService.setDefaultBar(barId);
+    _isMutatingBar = true;
+    try {
+      await _delayForImeSettleIfNeeded();
+      await _barController.switchTo(barId);
 
-    final active = await (widget.database.select(widget.database.savedBars)..where((b) => b.id.equals(barId))).getSingleOrNull();
-    if (active == null) {
+      final active = _barController.activeBar;
+      if (active == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That bar no longer exists.')),
+        );
+        await _loadData();
+        return;
+      }
+      final ingredients = await widget.database.getSavedBarIngredients(active.id);
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That bar no longer exists.')),
-      );
-      await _loadData();
-      return;
+      _markCreateSetState('_switchToBar:setState');
+      setState(() {
+        _activeBar = active;
+        _savedBars = _barController.savedBars;
+        _barIngredientIds = ingredients.map((i) => i.id).toSet();
+        _activeCategoryFilter = null;
+        _unlockDeltaCache = {};
+        _searchQuery = '';
+        _searchController.clear();
+      });
+      _scrollIngredientListToTop();
+      _refreshAnalytics();
+    } finally {
+      _isMutatingBar = false;
     }
-    final ingredients = await widget.database.getSavedBarIngredients(barId);
-    final bars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-
-    if (!mounted) return;
-    _markCreateSetState('_switchToBar:setState');
-    setState(() {
-      _activeBar = active;
-      _savedBars = bars;
-      _barIngredientIds = ingredients.map((i) => i.id).toSet();
-      _activeCategoryFilter = null;
-      _unlockDeltaCache = {};
-      _searchQuery = '';
-      _searchController.clear();
-    });
-    _scrollIngredientListToTop();
-    widget.onBarChanged?.call();
-    _refreshAnalytics();
   }
 
   void _scheduleCreateHydration(int barId, {BarCreateDiagnosticsFlow? diagnostics}) {
@@ -664,12 +682,7 @@ class MyBarScreenState extends State<MyBarScreen>
         flow?.step('phaseB:postFrameStart');
         await _delayForImeSettleIfNeeded();
         flow?.step('phaseB:imeSettleDone');
-        if (widget.onBarSwitched != null) {
-          flow?.incrementCounter('_switchToBar(delegate)', stackTrace: StackTrace.current);
-          widget.onBarSwitched!(hydrationBarId);
-        } else {
-          await _switchToBar(hydrationBarId);
-        }
+        await _switchToBar(hydrationBarId);
         flow?.step('phaseB:switchDone');
       } finally {
         flow?.step('phaseB:finally');
@@ -685,38 +698,40 @@ class MyBarScreenState extends State<MyBarScreen>
 
   Future<void> _createNewBar() async {
     if (_isCreatingBar) return;
+
+    final existingNamesLower = _savedBars.map((b) => b.name.trim().toLowerCase()).toSet();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => RenameBarDialog(
+        initialName: _barController.nextAutoBarName(),
+        existingNamesLower: existingNamesLower,
+        title: 'Name Your Bar',
+        confirmLabel: 'Create',
+        selectAllOnOpen: true,
+      ),
+    );
+    if (!mounted || name == null || name.trim().isEmpty) return;
+
     final flow = BarCreateDiagnosticsFlow.start('MyBar');
     _createDiagnostics = flow;
     flow.step('tapHandler');
-    if (mounted) {
-      _markCreateSetState('create:start');
-      setState(() => _isCreatingBar = true);
-    }
+    _markCreateSetState('create:start');
+    setState(() => _isCreatingBar = true);
 
     final phaseASw = Stopwatch()..start();
     try {
-      final now = DateTime.now();
-      final trimmedName = _nextAutoBarName(_savedBars);
-      flow.step('phaseA:autoName:$trimmedName');
-      final newBarId = await widget.database.into(widget.database.savedBars).insert(
-        SavedBarsCompanion.insert(name: trimmedName, isDefault: const Value(true), lastUsed: Value(now)),
-      );
-      flow.step('phaseA:insertBar');
+      final createdBar = await _barController.createBar(name: name.trim());
+      flow.step('phaseA:createBar');
 
       if (!mounted) {
         _finishCreateDiagnostics(result: 'unmounted');
         return;
       }
 
-      final optimisticBar = SavedBar(id: newBarId, name: trimmedName, isDefault: true, createdAt: now, lastUsed: now);
-      final existing = List<SavedBar>.from(_savedBars)
-        ..removeWhere((b) => b.id == newBarId)
-        ..insert(0, optimisticBar);
-
       _markCreateSetState('phaseA:optimisticUi');
       setState(() {
-        _savedBars = existing;
-        _activeBar = optimisticBar;
+        _savedBars = _barController.savedBars;
+        _activeBar = createdBar;
         _barIngredientIds = {};
         _activeCategoryFilter = null;
         _unlockDeltaCache = {};
@@ -729,15 +744,9 @@ class MyBarScreenState extends State<MyBarScreen>
 
       if (kDebugMode) debugPrint('MyBar create Phase A (immediate UI) ${phaseASw.elapsedMilliseconds}ms');
 
-      _scheduleCreateHydration(newBarId, diagnostics: flow);
+      _scheduleCreateHydration(createdBar.id, diagnostics: flow);
       flow.step('phaseA:scheduleDeferredHydration');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Created "${optimisticBar.name}"'),
-            action: SnackBarAction(label: 'Rename', onPressed: () => _showRenameBarDialog(optimisticBar.id, optimisticBar.name)),
-          ),
-        );
         _pushBarsToCloud();
       }
     } catch (_) {
@@ -760,7 +769,7 @@ class MyBarScreenState extends State<MyBarScreen>
         .toSet();
     final renamed = await showDialog<String>(
       context: context,
-      builder: (ctx) => _RenameBarDialog(
+      builder: (ctx) => RenameBarDialog(
         initialName: initialName,
         existingNamesLower: otherNamesLower,
       ),
@@ -768,17 +777,18 @@ class MyBarScreenState extends State<MyBarScreen>
     if (!mounted || renamed == null || renamed.trim().isEmpty) return;
     final name = renamed.trim();
 
-    await (widget.database.update(widget.database.savedBars)..where((b) => b.id.equals(barId)))
-        .write(SavedBarsCompanion(name: Value(name)));
-
-    final bars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-    if (!mounted) return;
-    setState(() {
-      _savedBars = bars;
-      if (_activeBar?.id == barId) _activeBar = _activeBar!.copyWith(name: name);
-    });
-    widget.onBarChanged?.call();
-    _pushBarsToCloud();
+    _isMutatingBar = true;
+    try {
+      await _barController.renameBar(barId, name);
+      if (!mounted) return;
+      setState(() {
+        _savedBars = _barController.savedBars;
+        if (_activeBar?.id == barId) _activeBar = _activeBar!.copyWith(name: name);
+      });
+      _pushBarsToCloud();
+    } finally {
+      _isMutatingBar = false;
+    }
   }
 
   Future<void> _clearCurrentBarWithConfirm() async {
@@ -797,13 +807,16 @@ class MyBarScreenState extends State<MyBarScreen>
     );
     if (confirmed != true || !mounted || _activeBar == null) return;
 
-    await (widget.database.delete(widget.database.savedBarIngredients)..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
-
-    if (!mounted) return;
-    setState(() => _barIngredientIds.clear());
-    widget.onBarChanged?.call();
-    await _refreshAnalytics();
-    _pushBarsToCloud();
+    _isMutatingBar = true;
+    try {
+      await _barController.clearBar(_activeBar!.id);
+      if (!mounted) return;
+      setState(() => _barIngredientIds.clear());
+      await _refreshAnalytics();
+      _pushBarsToCloud();
+    } finally {
+      _isMutatingBar = false;
+    }
   }
 
   Future<void> _deleteBarWithConfirm(SavedBar bar) async {
@@ -834,43 +847,28 @@ class MyBarScreenState extends State<MyBarScreen>
 
     if (confirmed != true || !mounted) return;
 
-    await (widget.database.delete(widget.database.savedBarIngredients)..where((row) => row.savedBarId.equals(bar.id))).go();
-    await (widget.database.delete(widget.database.savedBars)..where((row) => row.id.equals(bar.id))).go();
-
-    var remainingBars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-    if (remainingBars.isEmpty || !mounted) return;
-
-    final activeBarStillExists = _activeBar != null && remainingBars.any((b) => b.id == _activeBar!.id);
-    final hasDefault = remainingBars.any((b) => b.isDefault);
-
-    if (deletingActive || !activeBarStillExists || !hasDefault) {
-      await _barService.setDefaultBar(remainingBars.first.id);
-      remainingBars = await (widget.database.select(widget.database.savedBars)..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-    }
-
-    if (!mounted || remainingBars.isEmpty) return;
-
-    if (deletingActive || !activeBarStillExists) {
-      await _switchToBar(remainingBars.first.id);
-    } else {
-      final active = remainingBars.firstWhere((b) => b.id == _activeBar!.id, orElse: () => remainingBars.first);
-      final ingredients = await widget.database.getSavedBarIngredients(active.id);
+    _isMutatingBar = true;
+    try {
+      await _barController.deleteBar(bar);
       if (!mounted) return;
-      setState(() {
-        _activeBar = active;
-        _savedBars = remainingBars;
-        _barIngredientIds = ingredients.map((i) => i.id).toSet();
-      });
-      widget.onBarChanged?.call();
-      await _refreshAnalytics();
-    }
 
-    if (!mounted) return;
-    final activeId = _activeBar?.id;
-    if (activeId != null && widget.onBarSwitched != null) {
-      widget.onBarSwitched!(activeId);
-    } else {
-      widget.onBarChanged?.call();
+      final remainingActive = _barController.activeBar;
+      if (remainingActive == null) return;
+
+      if (deletingActive || remainingActive.id != _activeBar?.id) {
+        await _switchToBar(remainingActive.id);
+      } else {
+        final ingredients = await widget.database.getSavedBarIngredients(remainingActive.id);
+        if (!mounted) return;
+        setState(() {
+          _activeBar = remainingActive;
+          _savedBars = _barController.savedBars;
+          _barIngredientIds = ingredients.map((i) => i.id).toSet();
+        });
+        await _refreshAnalytics();
+      }
+    } finally {
+      _isMutatingBar = false;
     }
   }
 
@@ -932,19 +930,16 @@ class MyBarScreenState extends State<MyBarScreen>
         child: Column(
           children: [
             _BarHeader(
-              activeBarName: _activeBar?.name ?? widget.activeBarName,
+              activeBarName: _activeBar?.name ?? 'My Bar',
               activeBarId: _activeBar?.id,
               bars: _savedBars,
               isCreatingBar: _isCreatingBar,
               onSelectBar: (barId) async {
                 if (barId == _activeBar?.id) return;
-                if (widget.onBarSwitched != null) {
-                  widget.onBarSwitched!(barId);
-                  return;
-                }
                 await _switchToBar(barId);
               },
               onCreateBar: _createNewBar,
+              onRenameBar: (bar) => _showRenameBarDialog(bar.id, bar.name),
               onClearBar: _clearCurrentBarWithConfirm,
               onDeleteBar: _deleteBarWithConfirm,
             ),
@@ -1041,80 +1036,6 @@ class MyBarScreenState extends State<MyBarScreen>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  RENAME BAR DIALOG
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Owns its own TextEditingController so disposal happens when this widget's
-/// Element is actually unmounted (i.e. once the dialog's closing transition
-/// has fully finished) rather than right when showDialog's Future resolves —
-/// disposing eagerly at that point can throw "A TextEditingController was
-/// used after being disposed" if the transition (or the keyboard-hide
-/// animation it triggers) rebuilds the TextField on a later frame.
-class _RenameBarDialog extends StatefulWidget {
-  final String initialName;
-  final Set<String> existingNamesLower;
-
-  const _RenameBarDialog({required this.initialName, required this.existingNamesLower});
-
-  @override
-  State<_RenameBarDialog> createState() => _RenameBarDialogState();
-}
-
-class _RenameBarDialogState extends State<_RenameBarDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialName);
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppTheme.surfaceDark,
-      title: const Text('Rename Bar', style: TextStyle(color: AppTheme.textPrimary)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: const InputDecoration(hintText: 'Bar name', hintStyle: TextStyle(color: AppTheme.textSecondary)),
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        TextButton(
-          onPressed: () {
-            final name = _controller.text.trim();
-            if (name.isEmpty) return;
-            if (widget.existingNamesLower.contains(name.toLowerCase())) {
-              setState(() => _error = 'A bar with this name already exists.');
-              return;
-            }
-            Navigator.pop(context, name);
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 //  BAR HEADER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1125,6 +1046,7 @@ class _BarHeader extends StatelessWidget {
   final bool isCreatingBar;
   final Future<void> Function(int) onSelectBar;
   final Future<void> Function() onCreateBar;
+  final Future<void> Function(SavedBar) onRenameBar;
   final Future<void> Function() onClearBar;
   final Future<void> Function(SavedBar) onDeleteBar;
 
@@ -1135,6 +1057,7 @@ class _BarHeader extends StatelessWidget {
     required this.isCreatingBar,
     required this.onSelectBar,
     required this.onCreateBar,
+    required this.onRenameBar,
     required this.onClearBar,
     required this.onDeleteBar,
   });
@@ -1154,6 +1077,7 @@ class _BarHeader extends StatelessWidget {
         isCreateInProgress: isCreatingBar,
         onSelectBar: onSelectBar,
         onCreateBar: onCreateBar,
+        onRenameBar: onRenameBar,
         onClearBar: onClearBar,
         onDeleteBar: onDeleteBar,
       ),

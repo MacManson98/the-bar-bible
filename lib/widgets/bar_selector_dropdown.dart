@@ -8,6 +8,7 @@ import '../data/database.dart';
 typedef BarSelectCallback = FutureOr<void> Function(int barId);
 typedef BarActionCallback = FutureOr<void> Function();
 typedef BarDeleteCallback = FutureOr<void> Function(SavedBar bar);
+typedef BarRenameCallback = FutureOr<void> Function(SavedBar bar);
 
 class BarSelectorDropdown extends StatelessWidget {
   final String currentBarName;
@@ -15,13 +16,14 @@ class BarSelectorDropdown extends StatelessWidget {
   final List<SavedBar> bars;
   final BarSelectCallback onSelectBar;
   final BarActionCallback? onCreateBar;
+  final BarRenameCallback? onRenameBar;
   final BarActionCallback? onClearBar;
   final BarDeleteCallback? onDeleteBar;
   final double maxWidth;
   final bool isCreateInProgress;
 
-  /// When false, hides Create/Clear/Delete and only allows switching bars.
-  /// Used on screens (e.g. Home) that shouldn't own bar management.
+  /// When false, hides Create/Rename/Clear/Delete and only allows switching
+  /// bars. Used on screens (e.g. Home) that shouldn't own bar management.
   final bool showManagementActions;
 
   const BarSelectorDropdown({
@@ -31,6 +33,7 @@ class BarSelectorDropdown extends StatelessWidget {
     required this.bars,
     required this.onSelectBar,
     this.onCreateBar,
+    this.onRenameBar,
     this.onClearBar,
     this.onDeleteBar,
     this.maxWidth = 230,
@@ -69,6 +72,23 @@ class BarSelectorDropdown extends StatelessWidget {
         }),
         if (showManagementActions) ...[
           const Divider(height: 1),
+          MenuItemButton(
+            onPressed: currentBarId == null
+                ? null
+                : () {
+                    final currentBar = sortedBars.firstWhere((b) => b.id == currentBarId);
+                    onRenameBar?.call(currentBar);
+                  },
+            leadingIcon: const Icon(
+              Icons.edit_outlined,
+              size: 16,
+              color: AppTheme.accentGold,
+            ),
+            child: const Text(
+              'Rename Current Bar...',
+              style: TextStyle(color: AppTheme.textPrimary),
+            ),
+          ),
           MenuItemButton(
             onPressed: isCreateInProgress ? null : () => onCreateBar?.call(),
             leadingIcon: const Icon(

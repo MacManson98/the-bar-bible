@@ -8,6 +8,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../core/theme/app_theme.dart';
 import '../data/database.dart';
 import '../services/auth_service.dart';
+import '../core/services/catalog_sync_notifier.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/purchase_service.dart';
 import 'auth_sheet.dart';
@@ -70,7 +71,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _forceSync() async {
     setState(() => _isSyncing = true);
     try {
-      final syncService = FirestoreSyncService(widget.database);
+      final syncService = FirestoreSyncService(
+        widget.database,
+        onSynced: () => context.read<CatalogSyncNotifier>().notifyCatalogSynced(),
+      );
       await syncService.sync();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

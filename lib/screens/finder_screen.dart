@@ -7,8 +7,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:drift/drift.dart' hide Column;
-import '../core/services/bar_service.dart';
+import '../core/services/bar_selection_controller.dart';
+import '../core/services/catalog_sync_notifier.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/bar_create_diagnostics.dart';
 import '../core/utils/image_utils.dart';
@@ -16,6 +16,7 @@ import '../data/database.dart';
 import '../data/flavor_data.dart';
 import '../data/ingredient_data.dart';
 import '../widgets/bar_selector_dropdown.dart';
+import '../widgets/rename_bar_dialog.dart';
 import '../services/auth_service.dart';
 import '../services/user_sync_service.dart';
 import 'cocktail_detail_screen.dart';
@@ -27,7 +28,6 @@ enum _FinderViewMode { tiles, list }
 
 class FinderScreen extends StatefulWidget {
   final AppDatabase database;
-  final ValueChanged<int>? onBarSwitched;
   final VoidCallback? onNavigateToMyBar;
   /// null = show all, 'cocktail' | 'shot' | 'mocktail' to restrict this instance.
   final String? categoryFilter;
@@ -35,7 +35,6 @@ class FinderScreen extends StatefulWidget {
   const FinderScreen({
     super.key,
     required this.database,
-    this.onBarSwitched,
     this.onNavigateToMyBar,
     this.categoryFilter,
   });
@@ -81,7 +80,12 @@ class FinderScreenState extends State<FinderScreen>
   Timer? _searchDebounceTimer;
 
   bool _isLoading = true;
-  late final BarService _barService;
+  late BarSelectionController _barController;
+  late CatalogSyncNotifier _catalogSync;
+  // Guards against this screen reloading itself mid-mutation when the
+  // controller notifies — the mutation methods below already apply their
+  // own (carefully-timed) optimistic UI + follow-up state.
+  bool _isMutatingBar = false;
   final _searchController = TextEditingController();
   final _resultsScrollController = ScrollController();
   final Map<int, _FinderSnapshot> _snapshotCache = {};
@@ -106,7 +110,10 @@ class FinderScreenState extends State<FinderScreen>
   @override
   void initState() {
     super.initState();
-    _barService = BarService(widget.database);
+    _barController = context.read<BarSelectionController>();
+    _barController.addListener(_onBarControllerChanged);
+    _catalogSync = context.read<CatalogSyncNotifier>();
+    _catalogSync.addListener(_onCatalogSynced);
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -126,12 +133,32 @@ class FinderScreenState extends State<FinderScreen>
 
   @override
   void dispose() {
+    _barController.removeListener(_onBarControllerChanged);
+    _catalogSync.removeListener(_onCatalogSynced);
     _finishCreateDiagnostics(result: 'disposed');
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
     _resultsScrollController.dispose();
     _animController.dispose();
     super.dispose();
+  }
+
+  /// Bars/ingredients can change from Home or My Bar — reload unless this
+  /// screen is itself mid-mutation (it handles its own refresh).
+  void _onBarControllerChanged() {
+    if (_isMutatingBar || _isCreatingBar) return;
+    loadBarAndMatch();
+  }
+
+  /// This screen's state is kept alive for the whole app session (each of
+  /// the 3 Finder tabs lives inside MyBarTabScreen's TabBarView), and
+  /// _ensureFinderData() only ever loads its cocktail/ingredient snapshot
+  /// once (_finderDataLoaded guard) — so a cocktail added after this screen
+  /// was built would otherwise never show up here without a full app
+  /// restart. Force the snapshot to reload on the next loadBarAndMatch().
+  void _onCatalogSynced() {
+    _finderDataLoaded = false;
+    loadBarAndMatch();
   }
 
   Future<void> _delayForImeSettleIfNeeded() async {
@@ -145,17 +172,6 @@ class FinderScreenState extends State<FinderScreen>
       debugPrint('Finder IME settle delay ${wait.inMilliseconds}ms');
     }
     await Future.delayed(wait);
-  }
-
-  String _nextAutoBarName(List<SavedBar> bars) {
-    final names = bars.map((b) => b.name.trim().toLowerCase()).toSet();
-    const base = 'new bar';
-    if (!names.contains(base)) return 'New Bar';
-    var index = 2;
-    while (names.contains('$base $index')) {
-      index++;
-    }
-    return 'New Bar $index';
   }
 
   Future<void> _pushBarsToCloud() async {
@@ -208,11 +224,12 @@ class FinderScreenState extends State<FinderScreen>
 
     await _ensureFinderData();
 
-    final bars = await (widget.database.select(
-      widget.database.savedBars,
-    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-    SavedBar? activeBar = await widget.database.getDefaultSavedBar();
-    activeBar = _resolvePreferredBar(activeBar, bars);
+    // ensureLoaded(), not refresh() — this is the passive reload path (also
+    // triggered BY the controller's own notifyListeners()); refresh() itself
+    // notifies, which would loop back into every screen's listener forever.
+    await _barController.ensureLoaded();
+    final bars = _barController.savedBars;
+    final activeBar = _barController.activeBar;
 
     final snapshot = await _snapshotForBar(activeBar);
     _sortList(snapshot.exact);
@@ -246,15 +263,6 @@ class FinderScreenState extends State<FinderScreen>
 
     _animController.forward();
     _prefetchBars(bars, activeBarId: activeBar?.id);
-  }
-
-  SavedBar? _resolvePreferredBar(SavedBar? activeBar, List<SavedBar> bars) {
-    if (bars.isEmpty) return null;
-    if (activeBar != null) return activeBar;
-    for (final bar in bars) {
-      if (bar.name.trim().toLowerCase() == 'my bar') return bar;
-    }
-    return bars.first;
   }
 
   Future<void> _ensureFinderData() async {
@@ -746,6 +754,9 @@ class FinderScreenState extends State<FinderScreen>
             onCreateBar: () async {
               await _createNewBar();
             },
+            onRenameBar: (bar) async {
+              await _showRenameBarDialog(bar);
+            },
             onClearBar: () async {
               await _clearCurrentBarWithConfirm();
             },
@@ -931,16 +942,6 @@ class FinderScreenState extends State<FinderScreen>
     );
   }
 
-  Future<List<SavedBar>> _loadBarsOrdered() {
-    return (widget.database.select(
-      widget.database.savedBars,
-    )..orderBy([(b) => OrderingTerm.desc(b.lastUsed)])).get();
-  }
-
-  Future<void> _setDefaultBar(int barId) async {
-    await _barService.setDefaultBar(barId);
-  }
-
   void _applyActiveBarSnapshot(
     SavedBar bar,
     _FinderSnapshot snapshot, {
@@ -955,8 +956,7 @@ class FinderScreenState extends State<FinderScreen>
     _markCreateSetState('_applyActiveBarSnapshot');
     setState(() {
       _activeBar = bar;
-      _savedBars = List<SavedBar>.from(allBars)
-        ..sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
+      _savedBars = allBars; // already ordered by BarSelectionController
       _barCount = snapshot.barIngredientCount;
       _exactMatches = snapshot.exact;
       _missing1 = snapshot.missing1;
@@ -973,7 +973,6 @@ class FinderScreenState extends State<FinderScreen>
       _refreshDerivedCaches();
     });
 
-    widget.onBarSwitched?.call(bar.id);
     if (prefetch) {
       _prefetchBars(allBars, activeBarId: bar.id);
     }
@@ -1047,56 +1046,37 @@ class FinderScreenState extends State<FinderScreen>
 
   Future<void> _createNewBar() async {
     if (_isCreatingBar) return;
+
+    final existingNamesLower = _savedBars.map((b) => b.name.trim().toLowerCase()).toSet();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => RenameBarDialog(
+        initialName: _barController.nextAutoBarName(),
+        existingNamesLower: existingNamesLower,
+        title: 'Name Your Bar',
+        confirmLabel: 'Create',
+        selectAllOnOpen: true,
+      ),
+    );
+    if (!mounted || name == null || name.trim().isEmpty) return;
+
     final flow = BarCreateDiagnosticsFlow.start('Finder');
     _createDiagnostics = flow;
     flow.step('tapHandler');
-    if (mounted) {
-      _markCreateSetState('create:start');
-      setState(() => _isCreatingBar = true);
-    }
+    _markCreateSetState('create:start');
+    setState(() => _isCreatingBar = true);
     final phaseASw = Stopwatch()..start();
     try {
-      final now = DateTime.now();
-      final trimmedName = _nextAutoBarName(_savedBars);
-      flow.step('phaseA:autoName:$trimmedName');
-      final newBarId = await widget.database
-          .into(widget.database.savedBars)
-          .insert(
-            SavedBarsCompanion.insert(
-              name: trimmedName,
-              isDefault: const Value(true),
-              lastUsed: Value(now),
-            ),
-          );
-      flow.step('phaseA:insertBar');
-      await _setDefaultBar(newBarId);
-      flow.step('phaseA:setDefaultBar');
-      final bars = await _loadBarsOrdered();
-      flow.step('phaseA:loadBarsOrdered');
+      final createdBar = await _barController.createBar(name: name.trim());
+      flow.step('phaseA:createBar');
       if (!mounted) {
         _finishCreateDiagnostics(result: 'unmounted');
         return;
       }
 
-      SavedBar? selectedBar;
-      for (final bar in bars) {
-        if (bar.id == newBarId) {
-          selectedBar = bar;
-          break;
-        }
-      }
-      selectedBar ??= SavedBar(
-        id: newBarId,
-        name: trimmedName,
-        isDefault: true,
-        createdAt: now,
-        lastUsed: now,
-      );
-      final SavedBar createdBar = selectedBar;
-
       _markCreateSetState('phaseA:optimisticUi');
       setState(() {
-        _savedBars = bars;
+        _savedBars = _barController.savedBars;
         _activeBar = createdBar;
         _barCount = 0;
         _exactMatches = [];
@@ -1116,20 +1096,9 @@ class FinderScreenState extends State<FinderScreen>
         );
       }
 
-      _scheduleDeferredBarRefresh(createdBar, allBars: bars, diagnostics: flow);
+      _scheduleDeferredBarRefresh(createdBar, allBars: _barController.savedBars, diagnostics: flow);
       flow.step('phaseA:scheduleDeferredHydration');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Created "${createdBar.name}"'),
-            action: SnackBarAction(
-              label: 'Rename',
-              onPressed: () {
-                _showRenameBarDialog(createdBar);
-              },
-            ),
-          ),
-        );
         _pushBarsToCloud();
       }
     } catch (_) {
@@ -1156,7 +1125,7 @@ class FinderScreenState extends State<FinderScreen>
         .toSet();
     final renamed = await showDialog<String>(
       context: context,
-      builder: (ctx) => _RenameBarDialog(
+      builder: (ctx) => RenameBarDialog(
         initialName: bar.name,
         existingNamesLower: otherNamesLower,
       ),
@@ -1164,20 +1133,21 @@ class FinderScreenState extends State<FinderScreen>
     if (!mounted || renamed == null || renamed.trim().isEmpty) return;
 
     final name = renamed.trim();
-    await (widget.database.update(widget.database.savedBars)
-          ..where((b) => b.id.equals(bar.id)))
-        .write(SavedBarsCompanion(name: Value(name)));
-    final bars = await _loadBarsOrdered();
-    if (!mounted) return;
-    _markCreateSetState('rename:setState');
-    setState(() {
-      _savedBars = bars;
-      if (_activeBar?.id == bar.id) {
-        _activeBar = _activeBar!.copyWith(name: name);
-      }
-    });
-    widget.onBarSwitched?.call(bar.id);
-    _pushBarsToCloud();
+    _isMutatingBar = true;
+    try {
+      await _barController.renameBar(bar.id, name);
+      if (!mounted) return;
+      _markCreateSetState('rename:setState');
+      setState(() {
+        _savedBars = _barController.savedBars;
+        if (_activeBar?.id == bar.id) {
+          _activeBar = _activeBar!.copyWith(name: name);
+        }
+      });
+      _pushBarsToCloud();
+    } finally {
+      _isMutatingBar = false;
+    }
   }
 
   Future<void> _clearCurrentBarWithConfirm() async {
@@ -1208,12 +1178,14 @@ class FinderScreenState extends State<FinderScreen>
     );
     if (confirmed != true || !mounted || _activeBar == null) return;
 
-    await (widget.database.delete(
-      widget.database.savedBarIngredients,
-    )..where((bi) => bi.savedBarId.equals(_activeBar!.id))).go();
-
-    if (!mounted) return;
-    await loadBarAndMatch();
+    _isMutatingBar = true;
+    try {
+      await _barController.clearBar(_activeBar!.id);
+      if (!mounted) return;
+      await loadBarAndMatch();
+    } finally {
+      _isMutatingBar = false;
+    }
   }
 
   Future<void> _deleteBarWithConfirm(SavedBar bar) async {
@@ -1258,47 +1230,34 @@ class FinderScreenState extends State<FinderScreen>
 
     if (confirmed != true || !mounted) return;
 
-    await (widget.database.delete(
-      widget.database.savedBarIngredients,
-    )..where((row) => row.savedBarId.equals(bar.id))).go();
+    _isMutatingBar = true;
+    try {
+      await _barController.deleteBar(bar);
+      if (!mounted) return;
 
-    await (widget.database.delete(
-      widget.database.savedBars,
-    )..where((row) => row.id.equals(bar.id))).go();
+      final remainingActive = _barController.activeBar;
+      if (remainingActive == null) return;
 
-    var remainingBars = await _loadBarsOrdered();
-    if (remainingBars.isEmpty || !mounted) return;
+      if (deletingActive || remainingActive.id != _activeBar?.id) {
+        final snapshot = await _snapshotForBar(remainingActive);
+        _sortList(snapshot.exact);
+        _sortList(snapshot.missing1);
+        _sortList(snapshot.missing2Plus);
+        _applyActiveBarSnapshot(
+          remainingActive,
+          snapshot,
+          allBars: _barController.savedBars,
+        );
+        return;
+      }
 
-    final activeBarStillExists =
-        _activeBar != null && remainingBars.any((b) => b.id == _activeBar!.id);
-    final hasDefault = remainingBars.any((b) => b.isDefault);
-
-    if (deletingActive || !activeBarStillExists || !hasDefault) {
-      await _setDefaultBar(remainingBars.first.id);
-      remainingBars = await _loadBarsOrdered();
-    }
-
-    if (!mounted || remainingBars.isEmpty) return;
-
-    if (deletingActive || !activeBarStillExists) {
-      final nextActive = remainingBars.first;
-      final snapshot = await _snapshotForBar(nextActive);
-      _sortList(snapshot.exact);
-      _sortList(snapshot.missing1);
-      _sortList(snapshot.missing2Plus);
-      _applyActiveBarSnapshot(nextActive, snapshot, allBars: remainingBars);
-      return;
-    }
-
-    _markCreateSetState('delete:refreshBarsOnly');
-    setState(() {
-      _savedBars = remainingBars;
-      _refreshDerivedCaches();
-    });
-
-    final activeId = _activeBar?.id;
-    if (activeId != null) {
-      widget.onBarSwitched?.call(activeId);
+      _markCreateSetState('delete:refreshBarsOnly');
+      setState(() {
+        _savedBars = _barController.savedBars;
+        _refreshDerivedCaches();
+      });
+    } finally {
+      _isMutatingBar = false;
     }
   }
 
@@ -1312,16 +1271,22 @@ class FinderScreenState extends State<FinderScreen>
     );
     if (_activeBar?.id == bar.id) return;
 
-    await _setDefaultBar(bar.id);
-    final latestBars = await _loadBarsOrdered();
-    final barsForUi = latestBars.isEmpty ? allBars : latestBars;
+    _isMutatingBar = true;
+    try {
+      await _barController.switchTo(bar.id);
+      final active = _barController.activeBar ?? bar;
+      final barsForUi =
+          _barController.savedBars.isEmpty ? allBars : _barController.savedBars;
 
-    final snapshot = await _snapshotForBar(bar);
-    _sortList(snapshot.exact);
-    _sortList(snapshot.missing1);
-    _sortList(snapshot.missing2Plus);
-    _applyActiveBarSnapshot(bar, snapshot, allBars: barsForUi);
-    // mounted guard is inside _applyActiveBarSnapshot
+      final snapshot = await _snapshotForBar(active);
+      _sortList(snapshot.exact);
+      _sortList(snapshot.missing1);
+      _sortList(snapshot.missing2Plus);
+      _applyActiveBarSnapshot(active, snapshot, allBars: barsForUi);
+      // mounted guard is inside _applyActiveBarSnapshot
+    } finally {
+      _isMutatingBar = false;
+    }
   }
 
   void _showFilterSheet() {
@@ -3200,85 +3165,6 @@ class FinderScreenState extends State<FinderScreen>
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Owns its own TextEditingController so disposal happens when this widget's
-/// Element is actually unmounted (i.e. once the dialog's closing transition
-/// has fully finished) rather than right when showDialog's Future resolves —
-/// disposing eagerly at that point can throw "A TextEditingController was
-/// used after being disposed" if the transition (or the keyboard-hide
-/// animation it triggers) rebuilds the TextField on a later frame.
-class _RenameBarDialog extends StatefulWidget {
-  final String initialName;
-  final Set<String> existingNamesLower;
-
-  const _RenameBarDialog({required this.initialName, required this.existingNamesLower});
-
-  @override
-  State<_RenameBarDialog> createState() => _RenameBarDialogState();
-}
-
-class _RenameBarDialogState extends State<_RenameBarDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialName);
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppTheme.surfaceDark,
-      title: const Text(
-        'Rename Bar',
-        style: TextStyle(color: AppTheme.textPrimary),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: const InputDecoration(
-              hintText: 'Bar name',
-              hintStyle: TextStyle(color: AppTheme.textSecondary),
-            ),
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            final name = _controller.text.trim();
-            if (name.isEmpty) return;
-            if (widget.existingNamesLower.contains(name.toLowerCase())) {
-              setState(() => _error = 'A bar with this name already exists.');
-              return;
-            }
-            Navigator.pop(context, name);
-          },
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }

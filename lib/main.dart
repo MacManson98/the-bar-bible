@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -6,7 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
-import 'core/services/bar_service.dart';
+import 'core/services/bar_selection_controller.dart';
+import 'core/services/catalog_sync_notifier.dart';
 import 'core/utils/image_utils.dart';
 import 'data/database.dart';
 import 'data/flavor_data.dart';
@@ -18,7 +18,6 @@ import 'screens/home_screen.dart';
 import 'screens/cocktail_detail_screen.dart';
 import 'screens/paywall_screen.dart';
 import 'screens/splash_screen.dart';
-import 'screens/my_bar_screen.dart';
 import 'screens/my_bar_tab_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/back_bar_screen.dart';
@@ -61,6 +60,16 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: purchaseService),
         ChangeNotifierProvider.value(value: authService),
+        // Don't call refresh() here — every screen's own load path awaits
+        // ensureLoaded() instead, which is what actually kicks off (and
+        // dedupes) the one initial load. Triggering it twice from two
+        // different places is how the reload loop happened.
+        ChangeNotifierProvider(
+          create: (_) => BarSelectionController(database),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => CatalogSyncNotifier(),
+        ),
       ],
       child: CocktailSpecsApp(database: database),
     ),
@@ -85,7 +94,10 @@ class CocktailSpecsApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       debugShowCheckedModeBanner: false,
       home: SplashScreen(
-        onReady: () => FirestoreSyncService(database).syncIfNeeded(),
+        onReady: () => FirestoreSyncService(
+          database,
+          onSynced: () => context.read<CatalogSyncNotifier>().notifyCatalogSynced(),
+        ).syncIfNeeded(),
         child: MainNavigationScreen(database: database),
       ),
     );
@@ -109,92 +121,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   static const int _settingsTabIndex = 4; // ignore: unused_field
 
   int _selectedIndex = _homeTabIndex;
-  String _activeBarName = 'My Bar';
-  late final BarService _barService;
 
-  // GlobalKeys to reach tab states for cross-tab refresh
+  // Kept only for tab navigation (switchToCocktails), not bar-refresh poking
+  // — bar sync now flows through BarSelectionController.
   final _myBarTabKey = GlobalKey<MyBarTabScreenState>();
-  final _myBarKey = GlobalKey<MyBarScreenState>();
-  final _homeKey = GlobalKey<HomeScreenState>();
-  Timer? _barChangedDebounceTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _barService = BarService(widget.database);
-    _loadActiveBarName();
-  }
 
   List<Widget> _buildScreens() {
     return [
       HomeScreen(
-        key: _homeKey,
         database: widget.database,
-        activeBarName: _activeBarName,
         onNavigateToBrowse: () => _onTabTapped(_browseTabIndex),
         onNavigateToFinder: () {
           _onTabTapped(_myBarTabIndex);
           _myBarTabKey.currentState?.switchToCocktails();
         },
-        onSwitchBar: _switchBarFromPill,
       ),
       CocktailsListScreen(database: widget.database),
       BackBarScreen(database: widget.database),
       MyBarTabScreen(
         key: _myBarTabKey,
         database: widget.database,
-        activeBarName: _activeBarName,
-        myBarKey: _myBarKey,
-        onBarSwitched: _switchBarFromPill,
-        onBarChanged: _onBarChanged,
       ),
       SettingsScreen(database: widget.database),
     ];
   }
 
-  Future<void> _loadActiveBarName() async {
-    final bar = await widget.database.getDefaultSavedBar();
-    if (mounted && bar != null) {
-      setState(() => _activeBarName = bar.name);
-    }
-  }
-
-  /// Called when the Bar Context Pill selects a different bar.
-  Future<void> _switchBarFromPill(int barId) async {
-    await _barService.setDefaultBar(barId);
-    await _loadActiveBarName();
-    _myBarTabKey.currentState?.refreshAllFinders();
-    await _myBarKey.currentState?.loadData();
-    await _homeKey.currentState?.loadData();
-  }
-
   void _onTabTapped(int index) {
-    // Refresh My Bar tabs when navigating to them from elsewhere.
-    if (index == _myBarTabIndex && _selectedIndex != _myBarTabIndex) {
-      _myBarKey.currentState?.loadData();
-      _myBarTabKey.currentState?.refreshAllFinders();
-    }
     setState(() => _selectedIndex = index);
-  }
-
-  /// Called by My Bar whenever an ingredient is toggled or bar is switched.
-  void _onBarChanged() {
-    _barChangedDebounceTimer?.cancel();
-    _barChangedDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      _loadActiveBarName();
-      // Cocktail/Shot/Mocktail finder tabs — keep them all in sync.
-      _myBarTabKey.currentState?.refreshAllFinders();
-      // Home's bar list/stats go stale otherwise — it's kept alive in the
-      // IndexedStack and only reloads on its own navigation events.
-      _homeKey.currentState?.loadData();
-    });
-  }
-
-  @override
-  void dispose() {
-    _barChangedDebounceTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -344,6 +297,8 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
     'Gin', 'Vodka', 'Rum', 'Bourbon', 'Whiskey', 'Brandy', 'Cognac', 'Other',
   ];
 
+  late final CatalogSyncNotifier _catalogSync;
+
   @override
   void initState() {
     super.initState();
@@ -351,14 +306,23 @@ class _CocktailsListScreenState extends State<CocktailsListScreen>
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) _applyFilters();
     });
+    _catalogSync = context.read<CatalogSyncNotifier>();
+    _catalogSync.addListener(_onCatalogSynced);
     _loadCocktails();
   }
 
   @override
   void dispose() {
+    _catalogSync.removeListener(_onCatalogSynced);
     _tabController.dispose();
     super.dispose();
   }
+
+  // This screen's state is kept alive for the whole app session (Browse is
+  // one of main.dart's IndexedStack tabs), so a sync completing after
+  // initState — e.g. a colleague's new cocktail, or Force Sync — would
+  // otherwise never show up here without a full app restart.
+  void _onCatalogSynced() => _loadCocktails();
 
   Future<void> _loadCocktails() async {
     final cocktails = await widget.database

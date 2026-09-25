@@ -6,18 +6,10 @@ import 'finder_screen.dart';
 
 class MyBarTabScreen extends StatefulWidget {
   final AppDatabase database;
-  final String activeBarName;
-  final GlobalKey<MyBarScreenState> myBarKey;
-  final ValueChanged<int>? onBarSwitched;
-  final VoidCallback? onBarChanged;
 
   const MyBarTabScreen({
     super.key,
     required this.database,
-    required this.activeBarName,
-    required this.myBarKey,
-    this.onBarSwitched,
-    this.onBarChanged,
   });
 
   @override
@@ -27,11 +19,6 @@ class MyBarTabScreen extends StatefulWidget {
 class MyBarTabScreenState extends State<MyBarTabScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  // Internal keys — one FinderScreen instance per category.
-  final _cocktailFinderKey = GlobalKey<FinderScreenState>();
-  final _shotFinderKey = GlobalKey<FinderScreenState>();
-  final _mocktailFinderKey = GlobalKey<FinderScreenState>();
 
   @override
   void initState() {
@@ -47,13 +34,6 @@ class MyBarTabScreenState extends State<MyBarTabScreen>
 
   void switchToIngredients() => _tabController.animateTo(0);
   void switchToCocktails() => _tabController.animateTo(1);
-
-  /// Refreshes whichever finder screens have been visited (have live state).
-  void refreshAllFinders() {
-    _cocktailFinderKey.currentState?.loadBarAndMatch();
-    _shotFinderKey.currentState?.loadBarAndMatch();
-    _mocktailFinderKey.currentState?.loadBarAndMatch();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,11 +53,7 @@ class MyBarTabScreenState extends State<MyBarTabScreen>
                   context: context,
                   removeTop: true,
                   child: MyBarScreen(
-                    key: widget.myBarKey,
                     database: widget.database,
-                    activeBarName: widget.activeBarName,
-                    onBarSwitched: widget.onBarSwitched,
-                    onBarChanged: widget.onBarChanged,
                     onNavigateToFinder: switchToCocktails,
                   ),
                 ),
@@ -85,10 +61,8 @@ class MyBarTabScreenState extends State<MyBarTabScreen>
                   context: context,
                   removeTop: true,
                   child: FinderScreen(
-                    key: _cocktailFinderKey,
                     database: widget.database,
                     categoryFilter: 'cocktail',
-                    onBarSwitched: widget.onBarSwitched,
                     onNavigateToMyBar: switchToIngredients,
                   ),
                 ),
@@ -96,10 +70,8 @@ class MyBarTabScreenState extends State<MyBarTabScreen>
                   context: context,
                   removeTop: true,
                   child: FinderScreen(
-                    key: _mocktailFinderKey,
                     database: widget.database,
                     categoryFilter: 'mocktail',
-                    onBarSwitched: widget.onBarSwitched,
                     onNavigateToMyBar: switchToIngredients,
                   ),
                 ),
@@ -107,10 +79,8 @@ class MyBarTabScreenState extends State<MyBarTabScreen>
                   context: context,
                   removeTop: true,
                   child: FinderScreen(
-                    key: _shotFinderKey,
                     database: widget.database,
                     categoryFilter: 'shot',
-                    onBarSwitched: widget.onBarSwitched,
                     onNavigateToMyBar: switchToIngredients,
                   ),
                 ),

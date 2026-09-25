@@ -1,15 +1,17 @@
 import 'dart:developer';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/database.dart';
 
 /// Syncs cocktail/ingredient data from Firestore into local Drift cache.
 /// User data (favourites, bar inventory, collections) stays local only.
 class FirestoreSyncService {
-  FirestoreSyncService(this._db);
+  FirestoreSyncService(this._db, {VoidCallback? onSynced}) : _onSynced = onSynced;
 
   final AppDatabase _db;
+  final VoidCallback? _onSynced;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   static const String _lastSyncKey = 'firestore_sync.last_sync_ms';
@@ -46,19 +48,31 @@ class FirestoreSyncService {
 
     await _db.transaction(() async {
       // ── Ingredients master list ─────────────────────────────────────────
+      // Matched by name, not blind insertOrReplace: ingredients.name now has
+      // a unique index (see database.dart migration 20→21), and
+      // insertOrReplace on a unique-but-not-primary-key column deletes and
+      // re-inserts the conflicting row with a NEW id — which would silently
+      // orphan every saved-bar/cocktail row that referenced the old id on
+      // every single sync. Select-then-insert-or-update preserves the id.
       for (final doc in ingredientSnap.docs) {
         final data = doc.data();
         final name = data['name'] as String? ?? '';
         final category = data['category'] as String? ?? 'Other';
         if (name.isEmpty) continue;
 
-        await _db.into(_db.ingredients).insert(
-          IngredientsCompanion(
-            name: Value(name),
-            category: Value(category),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
+        final existing = await (_db.select(_db.ingredients)
+              ..where((i) => i.name.equals(name)))
+            .getSingleOrNull();
+        if (existing != null) {
+          if (existing.category != category) {
+            await (_db.update(_db.ingredients)..where((i) => i.id.equals(existing.id)))
+                .write(IngredientsCompanion(category: Value(category)));
+          }
+        } else {
+          await _db.into(_db.ingredients).insert(
+            IngredientsCompanion.insert(name: name, category: Value(category)),
+          );
+        }
       }
 
       // Build ingredient name → local id map
@@ -166,6 +180,11 @@ class FirestoreSyncService {
     });
 
     _log('Sync complete: ${cocktailSnap.docs.length} cocktails cached locally');
+    // Catalog-reading screens (Browse, Finder) cache their cocktail/ingredient
+    // snapshot in memory and never re-query on their own — see
+    // CatalogSyncNotifier for why. Only fires after a real sync, never on
+    // syncIfNeeded()'s throttled skip (that path never calls sync() at all).
+    _onSynced?.call();
   }
 
   void _log(String message) {

@@ -38,6 +38,11 @@ class Ingredients extends Table {
   TextColumn get category => text().withDefault(
     const Constant('Other'),
   )(); // spirits, liqueurs, mixers, etc
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {name},
+  ];
 }
 
 // Join table for cocktail ingredients
@@ -164,7 +169,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -185,6 +190,10 @@ ON saved_bar_ingredients(saved_bar_id, ingredient_id)
       await customStatement('''
 CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_cocktails_unique
 ON collection_cocktails(collection_id, firestore_id)
+''');
+      await customStatement('''
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ingredients_name_unique
+ON ingredients(name)
 ''');
     },
     onUpgrade: (migrator, from, to) async {
@@ -320,6 +329,67 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_cocktails_unique
 ON collection_cocktails(collection_id, firestore_id)
 ''');
       }
+      if (from <= 20) {
+        // `ingredients` had no unique constraint on name, and
+        // firestore_sync_service.dart's insertOrReplace() on that column
+        // never conflicted — so every periodic sync appended a full fresh
+        // copy of the entire ingredient catalog. Clean up before adding
+        // the unique index that prevents it recurring.
+        //
+        // ingredients.id is a foreign key from three other tables, so the
+        // duplicate rows can't just be deleted — every reference to a
+        // "losing" duplicate must be repointed at the row we keep first.
+        await customStatement('''
+CREATE TEMP TABLE ingredient_id_map AS
+SELECT i.id AS old_id, m.min_id AS new_id
+FROM ingredients i
+JOIN (
+  SELECT name, MIN(id) AS min_id
+  FROM ingredients
+  GROUP BY name
+) m ON m.name = i.name
+WHERE i.id != m.min_id
+''');
+        await customStatement('''
+UPDATE cocktail_ingredients
+SET ingredient_id = (SELECT new_id FROM ingredient_id_map WHERE old_id = cocktail_ingredients.ingredient_id)
+WHERE ingredient_id IN (SELECT old_id FROM ingredient_id_map)
+''');
+        await customStatement('''
+UPDATE saved_bar_ingredients
+SET ingredient_id = (SELECT new_id FROM ingredient_id_map WHERE old_id = saved_bar_ingredients.ingredient_id)
+WHERE ingredient_id IN (SELECT old_id FROM ingredient_id_map)
+''');
+        await customStatement('''
+UPDATE shopping_list
+SET ingredient_id = (SELECT new_id FROM ingredient_id_map WHERE old_id = shopping_list.ingredient_id)
+WHERE ingredient_id IN (SELECT old_id FROM ingredient_id_map)
+''');
+        // Repointing can collide with each junction table's own unique
+        // constraint (e.g. a bar had both a duplicate ingredient and its
+        // twin stocked, and both now point at the same surviving id) —
+        // dedupe those before the duplicate ingredient rows are removed.
+        await customStatement('''
+DELETE FROM saved_bar_ingredients
+WHERE id NOT IN (
+  SELECT MIN(id) FROM saved_bar_ingredients GROUP BY saved_bar_id, ingredient_id
+)
+''');
+        await customStatement('''
+DELETE FROM cocktail_ingredients
+WHERE id NOT IN (
+  SELECT MIN(id) FROM cocktail_ingredients GROUP BY cocktail_id, ingredient_id
+)
+''');
+        await customStatement('''
+DELETE FROM ingredients WHERE id IN (SELECT old_id FROM ingredient_id_map)
+''');
+        await customStatement('DROP TABLE ingredient_id_map');
+        await customStatement('''
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ingredients_name_unique
+ON ingredients(name)
+''');
+      }
     },
   );
 
@@ -397,7 +467,7 @@ ON collection_cocktails(collection_id, firestore_id)
   Future<SavedBar?> getDefaultSavedBar() async {
     final result = await (select(
       savedBars,
-    )..where((sb) => sb.isDefault.equals(true))).getSingleOrNull();
+    )..where((sb) => sb.isDefault.equals(true))..limit(1)).getSingleOrNull();
 
     // If no default, get the most recently used
     if (result == null) {
